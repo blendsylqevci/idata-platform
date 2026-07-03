@@ -1,0 +1,18 @@
+# Normalizim konsistent i fund-rreshtave për të gjithë ekipin
+* text=auto eol=lf
+
+# Skripta gjithmonë LF
+*.sh text eol=lf
+
+# Binarë — mos i diff/normalizo
+*.pdf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.xlsx  binary
+*.xls   binary
+*.docx  binary
+*.pptx  binary
+*.zip   binary

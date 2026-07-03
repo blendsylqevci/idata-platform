@@ -1,0 +1,65 @@
+# Raw intake — local only after canonical split
+00_raw/
+
+# Secrets & private — NEVER commit
+00_raw/private-sensitive/
+docs-private/
+*.secret.md
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+# Deps / build
+node_modules/
+dist/
+build/
+.next/
+.expo/
+coverage/
+# OS / editor
+.DS_Store
+*.log
+.idea/
+.vscode/
+# Private/local evidence — NEVER commit
+evidence-private-local/
+00_raw/evidence-private-local/
+00_raw/codex/evidence-private-local/
+00_raw/**/evidence-private-local/
+# Review-local evidence — HOLD until Claude review (NOT committed yet)
+00_raw/codex/evidence-sanitized/
+00_raw/**/evidence-sanitized/
+00_raw/codex/archive/
+00_raw/**/archive/
+# Confidential contracts — NEVER commit (legal review, pricing + client data)
+03_contracts/
+# Commercial/legal owner-only material — NEVER commit
+docs/archive/client-docs/
+docs/archive/client-docs-text/
+docs/archive/contracts/
+docs/archive/old-master/
+docs/archive/prompts/
+docs/CANONICAL_SPLIT_COPY_MANIFEST_*.csv
+# Intake audit manifests — local owner/PM only
+docs/evidence/intake-audits/
+
+# ================= HARDENED after confidentiality incident (2026-07-02) =================
+# Owner-only commercial/legal — NEVER commit, kudo që të jenë:
+**/Oferta*
+**/Ofert*
+**/Kontrat*
+**/Kontrata*
+**/Shtojca*
+**/Shtojc*
+**/Dokumenti_Master*
+**/*Certifikimit_SEF*
+**/Dosja_Certifikimit*
+**/*_v2_Draft*
+# PRO DATA evidence me numra realë GL/financiarë -> private-local, jashtë git
+docs/evidence/prodata/
+# Emra/PII klientësh dhe pricing s'duhen kurrë në docs teknike (mbahen jashtë repo-s)
+docs/evidence/finance/
+# Private accounting/vat reconciliation evidence with real values — local only
+docs/canonical/02-accounting/PLANET_VAT_Reconciliation_*.md
+docs/archive/prodata/

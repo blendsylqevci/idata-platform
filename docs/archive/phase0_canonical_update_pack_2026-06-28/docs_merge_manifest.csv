@@ -1,0 +1,9 @@
+file,doc_area,target,purpose
+PHASE0_Canonical_Update_Pack.md,overview,docs/canonical/ or review folder,Main handoff file
+SSOT_update_snippet.md,SSOT,merge into SSOT,Canonical project decision
+03_Accounting_Compatibility_Matrix_update.md,accounting,merge into accounting matrix,PLANET parity target
+04_Data_Model_Draft_update.md,data model,merge into data model,Entities and domain rules
+02_RBAC_Matrix_update.md,RBAC,merge into RBAC matrix,Permission/action/audit rules
+01_PoC_Specs_update.md,PoC,merge into PoC specs,Pass/fail criteria
+05_Decision_Gates_ADR_update.md,ADR,merge into ADR,Accepted decisions and open gates
+Feature_Status_Register_update.md,feature status,merge into feature register,Status cleanup

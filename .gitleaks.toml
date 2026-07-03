@@ -1,0 +1,37 @@
+# iData+ — gitleaks config (server-side secret/confidential scan në CI)
+title = "iData+ confidential guard"
+
+[extend]
+useDefault = true   # trashëgo të gjitha rregullat standarde për sekrete/çelësa/tokena
+
+[allowlist]
+paths = [
+  '''^\.gitleaks\.toml$'''
+]
+
+# --- Rregulla specifike të projektit (zero-tolerance) ---
+
+[[rules]]
+id = "idata-sef-identifiers"
+description = "12-digit regulated/test identifiers require private review"
+regex = '''\b[0-9]{12}\b'''
+
+[[rules]]
+id = "idata-owner-doc-names"
+description = "Emra dokumentesh owner-only"
+regex = '''(?i)(^|[_\-/ ])(ofert[aë]?|kontrat[aë]?|shtojc[aë]?|dokumenti[_ -]?master|dosja[_ -]?certifikimit)([_\-/ ]|$)'''
+
+[[rules]]
+id = "idata-absolute-paths"
+description = "Path absolut i makinës lokale (leak strukture disku)"
+regex = '''(/Users/[A-Za-z]|C:\\Users|/home/[a-z])'''
+
+[[rules]]
+id = "idata-client-real-financials"
+description = "Large real-looking financial amounts must stay private-local unless explicitly synthetic"
+regex = '''\b[0-9]{2,3}[.,][0-9]{3}[.,][0-9]{2}\b'''
+
+[[rules]]
+id = "idata-client-pii"
+description = "Email/phone-like PII in public docs requires private review"
+regex = '''(?i)([a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}|\+383[0-9 ]{6,}|0[0-9]{2}[ -]?[0-9]{3}[ -]?[0-9]{3})'''
