@@ -29,7 +29,7 @@
 - Pranim qumështi + rrugët (fermer / punëtor / Punki)
 - QC Pass/Fail (antibiotikë → bllokim) — siguri ushqimore minimum
 - Punki settlement (komision %/per-litër)
-- Shlyerje fermeri + formula USAID — `Req-factory` (tabela)
+- Shlyerje fermeri + formula USAID — `Phase0-evidence-validated` (Maj 2026 workbook; 46/46 active rows) + `Req-factory` final business sign-off
 - Tank pool + mesatare e ponderuar
 - Batch/LOT + FEFO + afat skadence
 - Recetura/BOM bazë + auto-zbritje stoku

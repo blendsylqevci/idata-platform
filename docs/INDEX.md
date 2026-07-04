@@ -56,3 +56,5 @@ Claude review should verify this split before first commit:
 2. No raw PRO DATA/PII/secret was promoted.
 3. The three phase0-pack minor pending items are either added later or tracked.
 4. Contracts remain confidential and outside git.
+
+- `canonical/03-kabi/USAID_Formula_Validation_Gate_2026-07-04.md` — sanitized Phase 0 evidence gate for KABI USAID milk settlement formula.
