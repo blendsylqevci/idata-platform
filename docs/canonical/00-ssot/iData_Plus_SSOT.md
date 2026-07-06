@@ -266,9 +266,9 @@
 - **Dokumentet (Q#4 RESOLVED):** kontabilisti i PLANET dërgoi muajin e deklaruar — librat (shitje/blerje) + deklarata TVSH — emrat e file-ve private-local.
 - **Rakordim (Claude ≡ Codex):** **INPUT VAT [67]=XX,XXX.XX** & **baza shitje 18% [12]=XX,XXX.XX = EKZAKT** (libra=deklaratë). **OUTPUT [30]: libri XX,XXX.XX vs deklaratë XX,XXX.XX → diff X.XXX** (jo ekzakt) → **tolerancë ±0.20** derisa kontabilisti konfirmon rregullin (shkak i mundshëm: çmime POS me TVSH të përfshirë → TVSH per receipt bruto×18/118 < bazë×18%).
 - **VAT credit carry-forward** u konfirmua me muaj të deklaruar; exact values ruhen jashtë git si private evidence.
-- **Engine tax-book = bucket-based** (18/8/import/investive/pa-TVSH/nota/reverse/fermerë[51]); shitje PLANET vetëm 18% (+[10] liruar-me-kredit 475.41 +[16] nota 195.76); blerje mixed; **fermerë [51]=0** (PLANET).
+- **Engine tax-book = bucket-based** (18/8/import/investive/pa-TVSH/nota/reverse/fermerë[51]); shitje PLANET vetëm 18% (+[10] liruar-me-kredit XXX.XX +[16] nota XXX.XX; vlerat reale private-local); blerje mixed; **fermerë [51]=0** (PLANET).
 - **Subjekti i deklaratës dhe librat PLANET2/RESORT** → lidhja juridike/operative duhet të konfirmohet me kontabilistin; identifikuesit ruhen jashtë git.
-- **Evidence** → `docs/evidence/accounting/planet/vat-2026-05/` (`PLANET_VAT_Reconciliation_Maj_2026`); numrat → **fixture test për `packages/accounting`** (strict për bazat, tolerancë e vogël për output VAT).
+- **Evidence** → `evidence-private-local/02-accounting/PLANET_VAT_Reconciliation_Maj_2026_2026-07-01.md` (jashtë git); numrat → **fixture test për `packages/accounting`** (strict për bazat, tolerancë e vogël për output VAT).
 - **KORRIGJIM:** leximi i parë i deklaratës ishte gabim; validimi i mëvonshëm konfirmoi carry-forward dhe la rounding-rule ende të hapur. Exact values ruhen jashtë git.
 
 ## 12. Pyetjet e hapura (pending)
