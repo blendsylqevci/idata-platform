@@ -81,7 +81,7 @@ Fillo me default të sigurt, mbaji të zëvendësueshme.
 - [ ] branch protection aktiv (PR + review); asnjë sekret në repo.
 
 ## 9. Çfarë NUK bëhet ende
-POS/KDS · KABI production logic (qumësht/fermerë/batch/van) · SEF full integration (vetëm studim i protokollit + PoC-5 më vonë) · UI finale · payroll/asete (Faza 2) · config i gateuar (TVSH mappings, COGS final, farmer rules) → prapa config-gates derisa të vijnë përgjigjet.
+POS/KDS · KABI production logic (qumësht/fermerë/batch/van) · SEF full integration (vetëm studim i protokollit + PoC-5 më vonë) · UI finale · asete (Faza 2); payroll = Faza 1 (KABI/kontabilist, jashtë walking skeleton) · config i gateuar (TVSH mappings, COGS final, farmer rules) → prapa config-gates derisa të vijnë përgjigjet.
 
 ---
 
