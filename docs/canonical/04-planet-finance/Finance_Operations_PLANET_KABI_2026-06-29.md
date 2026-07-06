@@ -1,9 +1,11 @@
 # Finance Operations — PLANET + KABI
 
 **Data:** 2026-06-29
-**Status:** canonical working document
+> ⚠️ **SUPERSEDED (2026-07-05)** — burimi canonical për SCOPE = [`../01-phase0/08_Finance_Operations_SCOPE_PLANET_KABI.md`](../01-phase0/08_Finance_Operations_SCOPE_PLANET_KABI.md). Ky doc mbahet si input/gjurmë; mos e përditëso.
+
+**Status:** superseded (input/evidence)
 **Burimi:** PRO DATA backup audit + DDL/DML cross-check + sanitized micro-extract
-**Qëllimi:** të ndajë qartë financat operative nga kontabiliteti zyrtar, që vajza e financave/menaxhmenti dhe kontabilisti të kenë workflow të pastër pa përzierje rolesh.
+**Qëllimi:** të ndajë qartë financat operative nga kontabiliteti zyrtar, që personi i financave/menaxhmenti dhe kontabilisti të kenë workflow të pastër pa përzierje rolesh.
 
 **Workflow spec:** `Finance_Operations_Workflow_Spec_2026-06-29.md`
 
@@ -175,13 +177,13 @@ Finance Operations duhet të përgatisë paketën ditore:
 - faturat/kuponët;
 - evidence të aprovimeve.
 
-Accounting e merr këtë paketë për postim/rakordim, por nuk e bën punën operative të vajzës së financave.
+Accounting e merr këtë paketë për postim/rakordim, por nuk e bën punën operative të personit të financave.
 
 ---
 
 ## 7. Çfarë mbetet për validim live me PLANET
 
-Këto nuk dalin 100% nga backup-i dhe duhet pyetur vajza e financave / Donati / menaxherët:
+Këto nuk dalin 100% nga backup-i dhe duhet pyetur personi i financave / Group Owner / menaxherët:
 
 1. Si hapet dita financiare dhe kush e hap?
 2. Kush ia jep saldon/float kamarierit/arkatarit?
@@ -193,7 +195,7 @@ Këto nuk dalin 100% nga backup-i dhe duhet pyetur vajza e financave / Donati / 
 8. Kush merr cash nga zyra dhe si dokumentohet arsyeja?
 9. Si trajtohen diferencat: mungesë cash, tepricë cash, pagesë gabim?
 10. A bëhet barazim për kamarier, për arkatar, për shank, për lokacion, apo për të gjitha?
-11. Cilat raporte i përdor vajza e financave çdo ditë?
+11. Cilat raporte i përdor personi i financave çdo ditë?
 12. Cilat raporte i dërgohen kontabilistit?
 13. Çfarë duhet të mos lejohet pa PIN/aprovim?
 14. A përdoret aktualisht ndonjë barazim në PRO DATA apo bëhet jashtë sistemit/manual?

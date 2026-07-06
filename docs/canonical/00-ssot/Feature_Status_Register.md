@@ -1,6 +1,6 @@
 # Feature Status Register (iData+)
 
-**Versioni:** 1.1 · **Data:** 28 Qershor 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.4
+**Versioni:** 1.2 · **Data:** 5 Korrik 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.16
 **Parim:** **MVP = bllokues për go-live.** KABI del live i pari → "KABI MVP" + "Shared MVP" janë bllokuese për KABI live. PLANET vjen pas → "PLANET MVP" s'bllokon KABI live. **AI/premium/advanced NUK janë MVP.**
 **Buckets:** Shared MVP · Accounting MVP · KABI MVP · KABI Advanced · PLANET MVP · PLANET Later · Roadmap · + tags (Req-accountant / Req-ATK / Req-factory).
 
@@ -29,7 +29,7 @@
 - Pranim qumështi + rrugët (fermer / punëtor / Punki)
 - QC Pass/Fail (antibiotikë → bllokim) — siguri ushqimore minimum
 - Punki settlement (komision %/per-litër)
-- Shlyerje fermeri + formula USAID — `Phase0-evidence-validated` (Maj 2026 workbook; 46/46 active rows) + `Req-factory` final business sign-off
+- Shlyerje fermeri + formula USAID — `Phase0-evidence-validated` (Maj 2026 workbook; all active rows) + `Req-factory` final business sign-off
 - Tank pool + mesatare e ponderuar
 - Batch/LOT + FEFO + afat skadence
 - Recetura/BOM bazë + auto-zbritje stoku
@@ -57,7 +57,7 @@
 - Zbritje me PIN / anulim me aprovim
 - Faturë + dërgim email
 - Ndërrim 00:00 + barazim puntori + ekran financash (saldo per kamarier)
-- **Finance Operations** (rol "vajza", i ndarë nga kontabiliteti): arka/cash control + cash handover/deposit
+- **Finance Operations** (rol Financë Operative, i ndarë nga kontabiliteti): arka/cash control + cash handover/deposit
 - **Finance Operations:** barazim kamarierë/shank (cash/card/bank + diferenca)
 - **Finance Operations:** shpenzime operative + pagesa furnitorësh (ops) + raporte menaxheriale ditore
 - KDS per-stacion (~10–12 ekrane) — `Req-factory` (floor-plan)
@@ -82,8 +82,9 @@
 - ARBK për biznese EU
 
 ## ⏸️ Later (Faza 2) — të vendosura
-- **Payroll + kontribute** (ADR-004)
 - **Asete fikse / amortizim**
+
+> **RISHIKIM (v2.17, 05.07):** **Payroll + kontribute** (ADR-004) u zhvendos në **Faza 1** — KABI/kontabilisti e kërkojnë të detyrueshëm në fazën e parë (rikthen vendimin v2.2). *Scope i saktë (payroll engine i plotë vs master-data punonjës + kontribute) për t'u sqaruar.*
 
 ---
 

@@ -380,7 +380,7 @@ Backup-i i PRO DATA-s është i mjaftueshëm për të projektuar **Finance Opera
 
 Ky audit është shtresë shtesë mbi **Evidence Closure Matrix** ku extraction/review gap për Priority A dhe B është tashmë `A=0`, `B=0`. Pra këtu nuk po kërkojmë “a mungon backup-i kryesor?”, por po ndajmë saktë çfarë është evidence reale, çfarë është schema-only, dhe çfarë është proces biznesi që duhet konfirmuar me PLANET.
 
-Por backup-i **nuk jep evidence reale 1:1 për barazimin operativ të PLANET-it**, sepse `tblDocPOSBarazimiMaster` dhe `tblDocPOSBarazimiDetalet` ekzistojnë në DDL/procedura por janë zero-row/schema-only në backup. Kjo nuk është gabim ekstraktimi; është sinjal që barazimi që duam në iData+ duhet të projektohet si proces modern dhe të validohet live me vajzën e financave / Donatin / menaxherët.
+Por backup-i **nuk jep evidence reale 1:1 për barazimin operativ të PLANET-it**, sepse `tblDocPOSBarazimiMaster` dhe `tblDocPOSBarazimiDetalet` ekzistojnë në DDL/procedura por janë zero-row/schema-only në backup. Kjo nuk është gabim ekstraktimi; është sinjal që barazimi që duam në iData+ duhet të projektohet si proces modern dhe të validohet live me vajzën e financave / Group Owner / menaxherët.
 
 Pra ndarja 10/10 është:
 
@@ -411,7 +411,7 @@ Finance Operations prodhon evidence të pastër; Accounting e konsumon, e poston
 ## Çfarë NUK duhet ta supozojmë nga backup-i
 
 - `tblDocPOSBarazimi*` nuk ka rreshta realë në backup. Nuk e përdorim si “kështu e bënte PLANET-i barazimin”. E përdorim vetëm si sinjal që PRO DATA kishte koncept të barazimit.
-- Workflow i vajzës së financave nuk del 100% nga backup-i: kush e hap ditën, kush merr cash, si bëhet saldo/float, si ndahet cash nga POS bank/card, si regjistrohen shpenzimet, si merret Donati cash nga zyra, kush korrigjon diferencat.
+- Workflow i vajzës së financave nuk del 100% nga backup-i: kush e hap ditën, kush merr cash, si bëhet saldo/float, si ndahet cash nga POS bank/card, si regjistrohen shpenzimet, si merret Group Owner cash nga zyra, kush korrigjon diferencat.
 - KABI finance operations nuk del nga PLANET backup-i: van-sales barazimi, fermerë/avans, gajbe, ambulant, cash-credit per shofer duhet të validohen me KABI.
 
 ## Gap register / review items
@@ -454,7 +454,7 @@ def build_scope_doc() -> None:
 
 ### Finance Operations
 
-Përdoret nga vajza/personi i financave, menaxheri, Donati/owner dhe rolet operative. Qëllimi është kontrolli i parasë dhe operacionit ditor:
+Përdoret nga vajza/personi i financave, menaxheri, Group Owner/owner dhe rolet operative. Qëllimi është kontrolli i parasë dhe operacionit ditor:
 
 - sa cash është në zyrë;
 - sa saldo/float iu dha secilit kamarier/arkatar;
@@ -559,7 +559,7 @@ Kontabilisti nuk duhet të ribëjë manualisht ditën. Ai/ajo kontrollon raporti
 6. A regjistrohen tips/bakshish? Nëse po, ku shkojnë?
 7. Cilat shpenzime paguhen nga arka dhe kush i aprovon?
 8. Kush mund të korrigjojë barazimin pas mbylljes?
-9. Çfarë raporti ditor e do Donati: cash, kartë, shpenzime, diferenca, tavolina, kamarierë?
+9. Çfarë raporti ditor e do Group Owner: cash, kartë, shpenzime, diferenca, tavolina, kamarierë?
 10. Si bëhet depozitimi i cash-it në bankë?
 11. Si lidhen pagesat me furnitorë: nga arka, banka apo borxh?
 12. A ka banak jashtë që aktivizohet/çaktivizohet sipas sezonit/eventit?

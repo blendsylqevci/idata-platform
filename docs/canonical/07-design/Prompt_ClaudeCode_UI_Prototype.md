@@ -58,7 +58,7 @@ Ndërto:
 4) App Shell: sidebar i errët #01040C (logo + nav: Paneli, Pranimi i qumështit, Prodhimi, Stoku,
    Fermerët, Shitjet, Blerjet, Kontabiliteti, Raportet, Administrimi) me item aktiv azure; topbar i
    bardhë (kërkim, subjekti aktiv, notifikime, avatar). Responsive (sidebar → drawer në mobile).
-5) /dashboard (REGJISTRI AJROR): hero me gradient azure ("Mirëmëngjes, Donat" + qumësht i pranuar sot),
+5) /dashboard (REGJISTRI AJROR): hero me gradient azure ("Mirëmëngjes, Pronari" + qumësht i pranuar sot),
    4 KPI cards (rounded-16, soft shadow, tabular-nums, trend ▲/▼), një grafik recharts (pranimi i
    qumështit 7 ditë, shtylla azure), dhe një kartë "Statuset fiskale" me badge (Fiskalizuar/Në pritje/
    Lëshuar offline/Korrigjuar).

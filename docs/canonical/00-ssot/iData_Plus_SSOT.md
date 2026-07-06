@@ -1,11 +1,11 @@
 # iData+ — Single Source of Truth (SSOT)
 
-**Versioni:** 2.15 · **Data:** 1 Korrik 2026 · **Statusi:** Draft pune për Fazën 0
+**Versioni:** 2.16 · **Data:** 5 Korrik 2026 · **Statusi:** Draft pune për Fazën 0
 **Pronar i dokumentit:** iCode L.L.C (Blend Sylqevci)
 **Rregull:** ky është **burimi i vetëm i vërtetë** për zhvillimin. Çdo vendim/feature i ri shkohet **vetëm këtu** (me datë te Decisions log). Dokumentet e aprovuara jashtë repo-s janë vetëm snapshot-e aprovimi të gjeneruara nga ky dokument. Faza aktuale: **dizajn + Faza 0**, pa kod prodhimi pa go-ahead.
 **v2.0:** integron raundin v2 të pyetjeve me Codex (Qershor 2026) — vendime të reja, pyetje të zgjidhura, dhe 2 konflikte të shënuara (paga, printera fiskalë). Sinkronizuar me numërimin e Codex (v2).
 **v2.1:** korrigjime nga rishikimi i Blendit — frazë neutrale për bërthamën e ripërdorshme, ndarje rolesh + break-glass, RBAC pa "Fshirje" për financiare, fazim i qartë i SEF, Libri i Shitjes/Blerjes baseline nga PRO DATA, COGS i finalizueshëm me kontabilistin, [51] paraprak, ARBK te Onboarding, KDS ~10–12.
-**v2.2:** VENDIM — **pagat/payroll = Faza 2** (jo v1), sipas rekomandimit të Codex, konfirmuar nga Blendi. Konflikti i mbyllur.
+**v2.2:** VENDIM — **pagat/payroll = Faza 2** (jo v1), sipas rekomandimit të Codex, konfirmuar nga Blendi. **(RISHIKUAR v2.17 → Faza 1 për KABI/kontabilist.)**
 **v2.3:** gati për Fazën 0 — paketa Faza 0 te `iData_Plus_Faza0/`; Node 24 LTS; +2 pyetje (floor-plan, inventar pajisjesh); decision gates shtesë; baseline sigurie; feature-status taxonomy.
 **v2.4:** 🟢 **SEF "Testim para Aplikimit" PRANUAR nga ATK (28.06.2026)** — test phase aktiv; protokolli zyrtar github.com/fiskalizimi (mandatory); ADR shtesë; data model shtesë (business_group/service_day/cost_layer); paketa Faza 0 → v1.1.
 **v2.5:** korrigjime teknike SEF (verifikuar nga pos-csharp + models.proto): **money scale PER-FIELD** (items €0.0001 / totals cents), **CouponType Sale=1/Cancel=2/Return=3**, **tax A/C/D/E** (TL→A); secrets në `docs-private`; paketa Faza 0 → v1.2.
@@ -19,6 +19,8 @@
 **v2.13:** VENDIM — hapi tjetër i implementimit = **repo assembly + walking skeleton + accounting library-first** (jo module/UI/KABI/SEF-full ende); runbook gati: `Repo_Assembly_Walking_Skeleton_Runbook_2026-06-30.md`.
 **v2.14:** **Përgjigjet e kontabilistit (30.06):** PLANET shitjet = **të gjitha 18%** (biznes lluksi); blerje **mixed-VAT per rresht** konfirmuar; librat **harmonizuar 1:1 me ATK**; qershori s'është deklaruar ende (afati 20.07) → parity me një muaj më të hershëm të deklaruar; KABI fermerë/produkte ende hapur.
 **v2.15:** **VALIDIM PARITY MAJ 2026 (ACC-010, Q#4 RESOLVED)** — libra+deklaratë zyrtare PLANET u krahasuan me engine-in; input VAT dhe baza 18% përputhen; output ka vetëm diferencë të vogël rounding/reporting; carry-forward u konfirmua; **engine tax-book = bucket-based**; exact values dhe deklarata zyrtare ruhen jashtë git si evidence-private-local. Rounding-rule ende i hapur.
+**v2.16:** **USAID Formula Validation Gate (04.07)** — formula-gate teknik i validuar + merge në `main` (PR #1); struktura në git, parametrat realë private-local (ACC-010 → closed). **Dedup Finance Ops:** SCOPE canonical = `01-phase0/08`, WORKFLOW canonical = `04-planet-finance/Finance_Operations_Workflow_Spec_2026-06-29.md` (mban FO-00..FO-13); të tjerët → superseded me pointer. **Data Model:** u shkrinë 3 entitete (`posting_run`, `vat_declaration_snapshot`, `partner_card_entry`) nga phase0-pack te `04_Data_Model_Draft`. **Audit consistency (05.07):** hequr emri real i pronarit (PII) → rol; metadata reale maskuar; tracker/registers freskuar (REPO-001/002/003 → closed); referenca private-local të shënuara; kontradikta të zgjidhura/loguara.
+**v2.17:** **KABI operational evidence + accountant confirmation (05.07)** (shih `03-kabi/KABI_Operational_Evidence_Update_2026-07-05.md` + `03-kabi/Accountant_Confirmation_TVSH_e_Sheshte_Fermere_KABI_2026-07-05.md`). Përgjigjet e KABI-t mbyllën **KABI-002/003/004/005** + **ACC-005/006**. **Formula USAID = bazë ZYRTARE e pagesës** (jo vetëm raportim). **PAGA/KONTRIBUTE → FAZA 1** (KABI/kontabilist detyrueshëm) — RIKTHEN vendimin v2.2. ⚠️ *Sqaro scope-in me Blend/Codex: payroll engine i plotë vs vetëm master-data punonjës + kontribute — ndikon kosto/scope.* **TVSH flat-rate 8% për fermerë** — bazë ligjore **UA 03/2015 neni 76**; autofaturë nga KABI + **NIF** + certifikatë **MBPZHR**; posting/libër-blerje pret sign-off kontabilist (ACC-006).
 
 ## Përmbajtja
 1. Pamje e përgjithshme & komerciale · 2. Arkitektura & teknologjia · 3. Plani Faza 0→Lansim · 4. Kontabiliteti · 5. KABI · 6. PLANET · 7. SEF/Fiskalizimi · 8. Migrimi & Cutover · 9. Siguria & RBAC · 10. Dizajni · 11. Decisions log · 12. Pyetjet e hapura · 13. Glosar & model i të dhënave
@@ -73,7 +75,7 @@
 - **Plan kontabël** (referencë PRO DATA: PLANET 142/145 llogari; KABI ndërton të vetin, i njëjti standard + dairy; **zgjerim në llogari kosto/Klasa 9** për lëndë të parë qumësht, ambalazh, gjysmë-produkte). Klasat: Aktive(1) · Detyrime/Kapital(2) · Të hyra(4) · Shpenzime(6/7) · Rezultat(8). Llogari kyçe: 10000 arka, 11000 blerës(AR), 12000 malli, 13000 TVSH-blerje, 21200 TVSH-doganë, 22000 TVSH-shitje, 40000 të hyra.
 - **Motori i postimit** (skema e kontimit): dokument → GL (debit=kredit) + libra + nën-libra. AR/AP, arkë/bankë, alokim pagesash, aging. **90–95% postim automatik nga dokumenti**; manual vetëm kur s'ka faturë standarde; **kontabilisti lejon journal manual për korrigjime**.
 - **TVSH:** kode **T0/T8/T18/TL** (T1=16% historik). **COGS:** default **mesatare e ponderuar**; KABI mban **batch costing/yield** për prodhim; **finalizohet me kontabilistin**.
-- **Pasqyrat financiare** (Ligji 06/L-032): bilanci, PASH, cash flow, ekuiteti. **Pagat/payroll = Faza 2** (VENDIM 27.06.2026 — sipas rekomandimit të Codex; v1 fokusohet te bërthama tregtare + kontabël bazë). **Asetet fikse/amortizimi = Faza 2.**
+- **Pasqyrat financiare** (Ligji 06/L-032): bilanci, PASH, cash flow, ekuiteti. **Pagat/payroll = Faza 1** (RISHIKUAR v2.17 — KABI/kontabilist detyrueshëm; dikur v2.2 = Faza 2). **Asetet fikse/amortizimi = Faza 2.**
 - **Librat e ATK:** Libri i Blerjes (format zyrtar i verifikuar + **harta e kutive të Deklaratës**: Bazë18→[43], TVSH18→[K1], Bazë8→[45], **Fermerë normë e sheshtë→[51]**, Totali→[67]) + Libri i Shitjes (**template zyrtar ATK i marrë 28.06 + baseline PRO DATA**; box-map shitje: [9]/[10a-c]/[10]/[11] të liruara, [12]→18%, [14]→8%, [K1]/[K2], Totali [30]) + **Deklarata e TVSH-së automatike** nga librat. Kartela analitike; librat online ATK; formulari i TVSH-së (tregon nëse je në **kreditim**).
 - **Fermerët:** skema e **normës së sheshtë** [51] (e vërejtur te Libri real i PLANET; **aplikimi për KABI = drejtim paraprak — konfirmohet me kontabilistin/ATK**); dokumenti = **akt-blerje me normë të sheshtë**.
 - **Banka/arka rakordohen brenda sistemit.** Dokumentet financiare **kurrë s'fshihen** — vetëm anulim/korrigjim/notë krediti (aprovuar 100%).
@@ -94,9 +96,9 @@
 ## 6. PLANET (vertikali i restorantit)
 **POS / Kamarieri (aplikacion native RN):** porosi per tavolinë; **dërgo të gjitha / një-nga-një / zgjedh cilat**; shto artikuj; komente + **notes (të gjithë shtojnë)**; **totali i fshehur** derisa shtypet "Shfaq faturën/Paguaj" → pastaj **bllokohet** (rihapje = aprovim menaxheri/pronari, përndryshe vetëm paguaj+mbyll); **transfer tavoline = menaxheri, në çdo orë**; ndrysho ushqim/pije + **anulim me arsye = aprovim**; ndarje fature; cash/kartë; **zbritje me PIN**; **paguaj të gjitha ose një-nga-një**; **faturë e rregullt + dërgim email**; **plan tavolinash si pamja reale**; **tavolina hot** (telefon+desktop); **3 stacione rezervë te banaku** (nëse bie mobi); **60–80 konkurrentë**.
 **Ndërrimi/barazimi:** mbyllje **automatike 00:00**; pas 00:00 ID e kamarierit hyn me **saldo të re**, porositë me datën e re; tavolinat e hapura **transferohen te kamarieri i ri** (ai ngarkohet, i larguari kreditohet); **pamja e barazimit të puntorit:** tavolinat = porositë që ka bërë, dhe brenda secilës tavolinë porositë e saj.
-**Financat — Finance Operations (MODUL/ROL I NDARË nga kontabiliteti — "vajza"; shih `08_Finance_Operations_SCOPE`):** ekran me cash në zyrë / saldo / **saldo per kamarier**; barazimi = **POS/banka + shpenzime → cash që duhet dorëzuar**; kur Donati merr cash → **dokumentohet kush e mori + arsyeja**; **identifikim banke/POS** (cili terminal); **shpenzime operative**; **pagesa furnitorësh (ops)**; **raporte menaxheriale ditore**. **Handoff:** kamarieri mbyll → finance barazim → accounting poston. Financa operative = para-GL; kontabiliteti = GL/ligjor (ekrane të ndara).
+**Financat — Finance Operations (MODUL/ROL I NDARË nga kontabiliteti — Financë Operative; shih `08_Finance_Operations_SCOPE`):** ekran me cash në zyrë / saldo / **saldo per kamarier**; barazimi = **POS/banka + shpenzime → cash që duhet dorëzuar**; kur Group Owner merr cash → **dokumentohet kush e mori + arsyeja**; **identifikim banke/POS** (cili terminal); **shpenzime operative**; **pagesa furnitorësh (ops)**; **raporte menaxheriale ditore**. **Handoff:** kamarieri mbyll → finance barazim → accounting poston. Financa operative = para-GL; kontabiliteti = GL/ligjor (ekrane të ndara).
 **KDS:** **~10–12 ekrane** (stacione: Grill, Pizza, Sushi, Sallata, Bar, Kuzhina + Expo + pizzeria 2-ekrane + backup; numri saktë **finalizohet pas floor-plan/vizitës**) — secili sheh vetëm vetveten; **route artikulli→ekran**; **pizzeria 2 ekrane** (pizzamen konfirmon → ekrani i kamarierit **blink**, **i kuq pas 2 min**); çdo porosi: kush, koha, tavolina, notes; status (e re/në punë/gati); timer; **Expo**; **backup në printer termik nëse ekrani s'konfirmon brenda ~30s**; **ekrani i shankut** me 3 statuse (Porositur→Në proces→Dorëzuar); **inspektori i kuzhinës** (porositë+tavolina+kamarieri+ora; njoftimi te kamarieri kur gati); **Kitchen Queue Monitor** (ngjyra sipas artikujve: jeshile 0–10/verdhë 11–20/portokalli 21–30/kuqe 31+); **rregull pizzerie:** >40 **tavolina** → e kuqe.
-**Stok (multi-depo/multi-shank):** **depo vs restorant veçmas**; **depo ngarkon shankun**; **2 shanka** (banaku i jashtëm: porosia→fatura te banaku i jashtëm; Donati e aktivizon/çaktivizon); recetura **zbresin stokun automatikisht** + kosto reale; transfer depo→kuzhinë/bar; min-stock alert; korrigjime me arsye.
+**Stok (multi-depo/multi-shank):** **depo vs restorant veçmas**; **depo ngarkon shankun**; **2 shanka** (banaku i jashtëm: porosia→fatura te banaku i jashtëm; Group Owner e aktivizon/çaktivizon); recetura **zbresin stokun automatikisht** + kosto reale; transfer depo→kuzhinë/bar; min-stock alert; korrigjime me arsye.
 **Printera/lokacione:** multi-printer; **lokacion→printer** routing; lokacionet sipas planit real; **të lidhura me tavolinat**.
 **Çmimet me TVSH** (PLANET: të gjitha shitjet **18%** — biznes lluksi, konfirmuar nga kontabilisti 30.06); kategori per produkt; modifiera (medium/well done/pa qepë/extra sos); njësi copë/kg/litër.
 **Raporte:** **filter datash + per produkt** (sa copë + vlera); sipas kamarierit/tavolinës/artikullit; top; anulime; zbritje; stok kritik; borxhe furnitorësh.
@@ -123,14 +125,14 @@
 - **Fabrika/klienti** jep + dokumenton saldot hapëse (stok/AR/AP/arka/banka/gajbe); persona përgjegjës.
 
 ## 9. Siguria & RBAC
-- **2FA i detyrueshëm** (admin Donati, kontabilist).
+- **2FA i detyrueshëm** (admin Group Owner, kontabilist).
 - **Ndarja e roleve të larta:**
   - **Platform Owner** (iCode): menaxhon **tenantët + konfigurimet teknike**; **JO të dhëna biznesi** në punë normale.
-  - **Group Owner / Admin** (Donati): sheh **raportet e konsoliduara të grupit** (KABI+PLANET); Company Switcher.
+  - **Group Owner / Admin**: sheh **raportet e konsoliduara të grupit** (KABI+PLANET); Company Switcher.
   - **Tenant-Admin** per biznes: qasje maksimale **brenda biznesit të vet**, s'sheh tjetrin.
-  - **iCode Support:** qasje në të dhëna **vetëm me break-glass** (aprovim i Donatit + arsye + kohë e kufizuar + **audit log**); **pa backdoor**.
-  - **Financë Operative ("vajza"):** rol operacional — cash/barazime/POS/shpenzime/pagesa-ops/raporte ditore; **JO GL/TVSH/mbyllje periudhe** (= Kontabilisti). Shih `08_Finance_Operations_SCOPE`.
-- **Rolet konfigurueshme** nga Donati; **matricë RBAC per-feature:** Lexim / Krijim / Modifikim / **Anulim-Korrigjim** / Shtypje / **Aprovim** (+ all-checks) — granular (p.sh. kamarier sheh vetëm tavolinat e veta vs tërë sallën). **"Fshirje" vetëm për objekte JO-financiare** (edhe aty zakonisht **deaktivizim**); dokumentet financiare **s'fshihen kurrë**.
+  - **iCode Support:** qasje në të dhëna **vetëm me break-glass** (aprovim i Group Owner + arsye + kohë e kufizuar + **audit log**); **pa backdoor**.
+  - **Financë Operative:** rol operacional — cash/barazime/POS/shpenzime/pagesa-ops/raporte ditore; **JO GL/TVSH/mbyllje periudhe** (= Kontabilisti). Shih `08_Finance_Operations_SCOPE`.
+- **Rolet konfigurueshme** nga Group Owner; **matricë RBAC per-feature:** Lexim / Krijim / Modifikim / **Anulim-Korrigjim** / Shtypje / **Aprovim** (+ all-checks) — granular (p.sh. kamarier sheh vetëm tavolinat e veta vs tërë sallën). **"Fshirje" vetëm për objekte JO-financiare** (edhe aty zakonisht **deaktivizim**); dokumentet financiare **s'fshihen kurrë**.
 - **Audit log** append-only për çdo veprim kritik; **matricë aprovimesh (default):** çmim/zbritje/anulim/kthim = **PIN menaxheri** (POS/terren); write-off/korrigjim stoku = **admin/kontabilist**; **hapje/mbyllje periudhe = vetëm kontabilisti kryesor**.
 - **Baseline sigurie (Faza 0):** GitHub org me **2FA + branch protection** (PR + review i detyrueshëm); **asnjë sekret në repo** (vault / `.env`, `.env.example`); **rezidencë EU + DPA** (Ligji 06/L-082); rotacion sekretesh; least-privilege.
 - Asnjë fshirje reale e dokumenteve financiare — vetëm reversal/korrigjim/notë krediti.
@@ -147,7 +149,7 @@
 **27.06.2026 — bazë:**
 - KABI live i pari; emër **iData+**; events jashtë v1; **bërthamë e ripërdorshme + emër neutral** (ripërdorimi sipas kushteve komerciale/IP).
 - Stack Fortified Hybrid; hosting EU + on-prem; offline-first seamless; 60–80 kamarierë konkurrentë.
-- Kontabiliteti një bërthamë ATK; **COGS default mesatare e ponderuar** (KABI batch costing/yield; finalizohet me kontabilistin); **pagat = Faza 2** (vendim v2.2); **asetet fikse = Faza 2**; auto-deklaratë TVSH; **Libri i Shitjes/Blerjes baseline nga PRO DATA** (file zyrtar = validim); **KABI zgjeron Klasa 9 kosto**.
+- Kontabiliteti një bërthamë ATK; **COGS default mesatare e ponderuar** (KABI batch costing/yield; finalizohet me kontabilistin); **pagat = Faza 1** (rishikuar v2.17; dikur v2.2 = Faza 2); **asetet fikse = Faza 2**; auto-deklaratë TVSH; **Libri i Shitjes/Blerjes baseline nga PRO DATA** (file zyrtar = validim); **KABI zgjeron Klasa 9 kosto**.
 - Fermerët: normë e sheshtë [51] (**drejtim paraprak — konfirmim kontabilist/ATK**), akt-blerje. **Punki:** KABI paguan Punkin (+komision %/fiks), Punki paguan fermerët, KABI mban kartelat.
 - KABI: tank i përzier (gjurmë tank/ditë); teknologu alokon (Urdhër Prodhimi); pasterizim = CCP gate; catch-weight i detyrueshëm.
 - PLANET: të gjitha specat e seksionit 6 (POS/KDS/financa/multi-shank/raporte/premium).
@@ -177,10 +179,10 @@
 - **Normë e sheshtë [51]** = drejtim paraprak (konfirmim kontabilist/ATK).
 - **ARBK auto-import → Onboarding/Master Data/Integrations** (jo Siguri).
 - **KDS = ~10–12 ekrane** (finalizohet pas floor-plan/vizitës).
-- **Paga = Faza 2** (u mbyll në v2.2, shih më poshtë).
+- **Paga = Faza 1** (rishikuar v2.17 — KABI/kontabilist; dikur v2.2 = Faza 2).
 
 **27.06.2026 — vendim v2.2:**
-- **Pagat/payroll = Faza 2** (jo v1) — konfirmuar nga Blendi sipas rekomandimit të Codex. v1 = bërthama tregtare + kontabël bazë (pa payroll); konflikti i mbyllur.
+- **Pagat/payroll = Faza 1** (RISHIKUAR v2.17 — KABI/kontabilist detyrueshëm; dikur v2.2 = Faza 2).
 
 **27.06.2026 — v2.3 (gati për Fazën 0):**
 - Pranuar vlerësimi i Codex për Fazën 0 (~85–90% gati); **paketa Faza 0 prodhohet te `iData_Plus_Faza0/`** (Execution Plan, 5 PoC specs, RBAC matrix, Accounting Compatibility Matrix, Data Model draft, Decision-Gates ADR, scaffold, SEF sandbox request, Feature Status Register).
@@ -224,10 +226,10 @@
 - **Backup = golden reference baseline deri në lansim** (1076 tabela / 223 non-zero); Codex prodhoi paketën e vet parity (CSV: evidence_index, phase_usage_matrix, parity_requirements) → rakordohet me `07_...` (canonical). **KABI dairy NUK inferohet nga PRO DATA** (vjen nga fabrika).
 
 **28.06.2026 — v2.9 (Finance Operations e ndarë nga Accounting):**
-- Te PLANET, **financa operative (vajza) ≠ kontabiliteti** → modul + rol i veçantë **Financë Operative**; ekrane të ndara (**handoff:** kamarieri mbyll → finance barazim → accounting poston). Doc: `08_Finance_Operations_SCOPE_PLANET_KABI.md`.
+- Te PLANET, **financa operative ≠ kontabiliteti** → modul + rol i veçantë **Financë Operative**; ekrane të ndara (**handoff:** kamarieri mbyll → finance barazim → accounting poston). Doc: `08_Finance_Operations_SCOPE_PLANET_KABI.md`.
 - Entitete të reja: **expense**, **cash_movement** (+ cash_shift/worker_settlement/manager_approval ekzistuese).
 - PRO DATA: pagesa/POS/banka ekzistojnë (`tblMenyraPagesa`/`tblBankat`/`tblDocPOSPagesat`/`tblDocPagesatMaster·Detalet`/`tblDocEkstrakti*`); POS-barazim = zero-row → net-new.
-- Të vendosura (00:00, saldo per kamarier, Donati merr cash+arsye, identifikim POS/bankë, anulim+PIN) ↔ të hapura (roli i vajzës, cash-handover, tips, terminale, korrigjim-vs-propozim, format raporti) → pyetja #13.
+- Të vendosura (00:00, saldo per kamarier, Group Owner merr cash+arsye, identifikim POS/bankë, anulim+PIN) ↔ të hapura (roli i Financës Operative, cash-handover, tips, terminale, korrigjim-vs-propozim, format raporti) → pyetja #13.
 
 **29.06.2026 — v2.10 (Finance Ops backup audit + bashkim canonical):**
 - **Finance backup audit (Codex):** 104 objekte finance (43 raw / 57 schema-only / 4 supplementary); **A/B gaps = 0 — s'ka mungesë kritike.** Të mbuluara: pagesa/ekstrakte bankare/POS payments/banka/mënyra pagese.
@@ -261,8 +263,8 @@
 - **Ende pa konfirmuar:** TL/exempt exact, llogaritë 22000/13000/21200, rounding, COGS, raportet mujore.
 
 **01.07.2026 — v2.15 (validim parity maj 2026 — ACC-010):**
-- **Dokumentet (Q#4 RESOLVED):** kontabilisti i PLANET dërgoi muajin e deklaruar — `LSH-PLANET2-5-2026` + `LB-PLANET2-5-2026` + `tvsh maj 2026.prnx` (deklaratë).
-- **Rakordim (Claude ≡ Codex):** **INPUT VAT [67]=XX,XXX.XX** & **baza shitje 18% [12]=XX,XXX.XX = EKZAKT** (libra=deklaratë). **OUTPUT [30]: libri XX,XXX.XX vs deklaratë XX,XXX.XX → diff 0.159** (jo ekzakt) → **tolerancë ±0.20** derisa kontabilisti konfirmon rregullin (shkak i mundshëm: çmime POS me TVSH të përfshirë → TVSH per receipt bruto×18/118 < bazë×18%).
+- **Dokumentet (Q#4 RESOLVED):** kontabilisti i PLANET dërgoi muajin e deklaruar — librat (shitje/blerje) + deklarata TVSH — emrat e file-ve private-local.
+- **Rakordim (Claude ≡ Codex):** **INPUT VAT [67]=XX,XXX.XX** & **baza shitje 18% [12]=XX,XXX.XX = EKZAKT** (libra=deklaratë). **OUTPUT [30]: libri XX,XXX.XX vs deklaratë XX,XXX.XX → diff X.XXX** (jo ekzakt) → **tolerancë ±0.20** derisa kontabilisti konfirmon rregullin (shkak i mundshëm: çmime POS me TVSH të përfshirë → TVSH per receipt bruto×18/118 < bazë×18%).
 - **VAT credit carry-forward** u konfirmua me muaj të deklaruar; exact values ruhen jashtë git si private evidence.
 - **Engine tax-book = bucket-based** (18/8/import/investive/pa-TVSH/nota/reverse/fermerë[51]); shitje PLANET vetëm 18% (+[10] liruar-me-kredit 475.41 +[16] nota 195.76); blerje mixed; **fermerë [51]=0** (PLANET).
 - **Subjekti i deklaratës dhe librat PLANET2/RESORT** → lidhja juridike/operative duhet të konfirmohet me kontabilistin; identifikuesit ruhen jashtë git.
@@ -276,7 +278,7 @@
 | 2 | Formula USAID — **tabela e saktë** (yndyrë/baktere → klasa → €/litër) | Fabrika | të mërkurën |
 | 3 | Numrat e fabrikës (fermerë/klientë/automjete/litra/ditë) | Fabrika | — |
 | 4 | ✅ **RESOLVED 01.07** — Muaj i deklaruar për parity: **maj 2026** (LSH+LB+deklaratë) → input & baza përputhen; output ka rounding/reporting nuance; exact values ruhen private-local | Kontabilisti | ✅ |
-| 4b | **Rregulli EKZAKT i rounding** (diferenca 0.159 te output [30]) — a nxirret TVSH per receipt nga çmimi me TVSH të përfshirë? | Kontabilisti | në vijim |
+| 4b | **Rregulli EKZAKT i rounding** (diferenca X.XXX te output [30]) — a nxirret TVSH per receipt nga çmimi me TVSH të përfshirë? | Kontabilisti | në vijim |
 | 4c | **PLANET2 / RESORT** — konfirmo lidhjen juridike/operative me kontabilistin; identifikuesit ruhen jashtë git | Kontabilisti | në vijim |
 | 5 | Rrjedha kontabël BLV→blerje→bartja te librat + raportimi bankar | Kontabilisti | të mërkurën |
 | 6 | Formati i saktë i raporteve/eksporteve për ATK | Kontabilisti | — |
@@ -286,9 +288,9 @@
 | 10 | **Floor-plan i saktë i PLANET-it** (për numrin e ekraneve KDS + lokacionet) | Klienti/Ti | — |
 | 11 | **Inventari i pajisjeve ekzistuese** (për ripërdorim hardware) | Klienti | — |
 | 12 | **"RESORT"** = DB reale e PRO DATA (`PRODATA_PLANET_RESORT`, POS aktiv ~429K pagesa) ≠ PLANET2 (back-office). Konfirmo: lokacion/njësi/subjekt + lidhja me `business_unit` | Ti | — |
-| 13 | **Finance Operations workflow** (roli i vajzës, cash-handover, tips, POS terminale, korrigjim-vs-propozim, format raporti ditor) → `08_Finance_Operations_SCOPE` | Klienti/Ti | — |
+| 13 | **Finance Operations workflow** (roli i Financës Operative, cash-handover, tips, POS terminale, korrigjim-vs-propozim, format raporti ditor) → `08_Finance_Operations_SCOPE` | Klienti/Ti | — |
 
-*Të zgjidhura (s'janë më hapur):* **pagat → Faza 2** (vendim v2.2); yndyra per dorëzim vs tank → **per dorëzim + tank mesatare e ponderuar**; gajbe → **stok ambalazhi te klienti + rakordim**; konsignacioni → **vendim: shitje me të drejtë kthimi** (mbetet vetëm njohja kontabël, #7); Libri i Shitjes → **baseline i nxjerrë nga PRO DATA** (mbetet validimi zyrtar, #4).
+*Të zgjidhura (s'janë më hapur):* **pagat → Faza 1** (rishikuar v2.17; dikur v2.2); yndyra per dorëzim vs tank → **per dorëzim + tank mesatare e ponderuar**; gajbe → **stok ambalazhi te klienti + rakordim**; konsignacioni → **vendim: shitje me të drejtë kthimi** (mbetet vetëm njohja kontabël, #7); Libri i Shitjes → **baseline i nxjerrë nga PRO DATA** (mbetet validimi zyrtar, #4).
 
 ## 13. Glosar & model i të dhënave (fillestar)
 **Glosar:** NUI (nr. unik identifikues) · NUIKF (kodi fiskal i kuponit) · LOT/batch · FEFO (first-expired-first-out) · catch-weight (peshë variabile per copë) · normativ/BOM (recepturë prodhimi) · skrap (% humbje) · CCP (pikë kritike kontrolli — pasterizim) · SNF (solids-not-fat) · MTS/MTO (make-to-stock / make-to-order) · break-glass (qasje emergjente e mbikëqyrur me audit) · saldo (gjendja e arkës/kamarierit) · fiscal outbox (radhë e kuponave për fiskalizim) · RLS (row-level security) · business_id (çelësi tenant) · Punki (grumbullues qumështi me %/tarifë).

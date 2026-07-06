@@ -1,13 +1,14 @@
 # Finance Operations — SCOPE (PLANET & KABI)
 
 **Versioni:** 2.0 (i bashkuar) · **Data:** 29 Qershor 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.10
-**Canonical:** ky doc bashkon `08` (v1.0) + **Codex `FINANCE_OPERATIONS_Scope_Separation_v1`** + **`FINANCE_OPERATIONS_Backup_Coverage_Audit`**. Codex docs = input/evidence; ky = burimi i vetëm canonical.
+**Canonical:** ky doc bashkon `08` (v1.0) + **Codex `FINANCE_OPERATIONS_Scope_Separation_v1`** + **`FINANCE_OPERATIONS_Backup_Coverage_Audit`**. Codex docs = input/evidence; ky = burimi i vetëm canonical **SCOPE**.
+**Çifti WORKFLOW canonical = [`../04-planet-finance/Finance_Operations_Workflow_Spec_2026-06-29.md`](../04-planet-finance/Finance_Operations_Workflow_Spec_2026-06-29.md).** Superseded (2026-07-05): `../04-planet-finance/Finance_Operations_PLANET_KABI_2026-06-29.md` (SCOPE i vjetër) + `09_Finance_Operations_Workflow_Spec.md` (WORKFLOW draft).
 **Pse ekziston:** te PLANET, **financa operative ≠ kontabiliteti** — dy role të ndara. Po t'i ngjeshim në një ekran, ngatërrohen rolet dhe UI/UX-i del gabim.
 
 ---
 
 ## 1. Dy role të ndara
-| Aspekti | **Financë Operative** (vajza/menaxhim/owner) | **Kontabiliteti** |
+| Aspekti | **Financë Operative** (menaxhim/owner) | **Kontabiliteti** |
 |---|---|---|
 | Fokusi | cash, POS/kartë, barazime, shpenzime, tavolina/kamarierë, furnitorë (pagesa), raporte ditore | GL, TVSH, Libri Shitjes/Blerjes, deklarata, mbyllje periudhe, pasqyra |
 | Koha | **në kohë reale / ditore** | periodike (mujore / mbyllje) |
@@ -19,8 +20,8 @@
 ## 2. Rolet
 | Rol | Sheh/bën | NUK bën |
 |---|---|---|
-| **Financë Operative / Vajza** | cash office, barazime, POS terminale, shpenzime, dorëzim cash, raporte ditore | s'hap/mbyll periudhë kontabël |
-| **Finance Manager / Owner (Donati)** | aprovon diferenca, raport grupi, merr para me arsye, audit | s'ndryshon dokumente fiskale pa correction workflow |
+| **Financë Operative** | cash office, barazime, POS terminale, shpenzime, dorëzim cash, raporte ditore | s'hap/mbyll periudhë kontabël |
+| **Finance Manager / Owner** | aprovon diferenca, raport grupi, merr para me arsye, audit | s'ndryshon dokumente fiskale pa correction workflow |
 | **Kamarier** | tavolinat/porositë e veta, pagesë/mbyllje sipas lejeve | s'bën zbritje/anulim/transfer pa aprovim |
 | **Arkatar / Shank** | pagesa, cash drawer, shank/banak, dorëzim | s'poston GL |
 | **Kontabilist** | GL, libra ATK, TVSH, AR/AP, mbyllje periudhe | s'bën barazim operativ pa evidence nga financa |
@@ -42,15 +43,15 @@ Kontabilisti **nuk ribën ditën manualisht** — kontrollon raportin, sheh dife
 ## 6. Evidence nga backup-i (Backup Coverage Audit, 29.06)
 **104 objekte finance të mapuara: 43 covered_raw_data · 57 schema-only/zero-row · 4 supplementary.** A/B gaps = **0** (s'ka mungesë kritike).
 - **Të mbuluara mirë (raw):** `tblDocPagesatMaster/Detalet` (PLANET2 ~218K), `tblDocEkstrakti*` (bankë/reconciliation), `tblMenyraPagesa`, `tblBankat`, `tblDocPOSPagesat` (**RESORT ~429,654**), `tblDocPOSShitjet*`, `tblDocBlerjet*`.
-- **⚠ Barazim = process-gap:** `tblDocPOSBarazimiMaster/Detalet` = **zero-row** → **mos e infero barazimin nga backup-i; dizajno modern + valido live me vajzën/Donatin.**
+- **⚠ Barazim = process-gap:** `tblDocPOSBarazimiMaster/Detalet` = **zero-row** → **mos e infero barazimin nga backup-i; dizajno modern + valido live me personin e financave/Group Owner.**
 - **RESORT:** `PRODATA_PLANET_RESORT` është DB reale (POS aktiv, ~429K pagesa) ≠ `PRODATA_PLANET2` (back-office/pagesa ~218K). → ndriçon SSOT pyetjen #12.
 - **3 micro-extract opsionale (jo bllokues, "zero doubt"):** `tblDocBlerjetShpenzimetTjera` (4 rreshta → `expense` parity), `tblDocPagesatAvanset` (1 → semantika e avanseve), `tblUserMenyratPagesa` (2102/4423 → leje user-payment-method; ose modelo RBAC fresh). **Bën Codex.**
 - Procedura referencë: bank reconciliation (`prc*Ekstrakti*`/`prc*Bankat*`), payments (`prc*Pagesa*`) — REF, jo kopjim.
 - **DDL/DML cross-check (29.06): 0 tabela me DDL të munguar; 3382 referenca (READ 3182/DELETE 256/INSERT 252/UPDATE 222); 4 micro-extract të nxjerra+sanitizuara → finance evidence i mbyllur pa dyshim.** Sinjale: pagesë→GL (ekstrakte bankare), **recycle-bin/restore**, `_DEL` audit. Flukse + pyetjet live → `09_Finance_Operations_Workflow_Spec`.
 
 ## 7. Vendime: të mbyllura vs të hapura
-**TASHMË E VENDOSUR (mos i rihap):** barazim auto **00:00**; ekran me **saldo per kamarier**; **Donati merr cash → dokumentohet kush+arsye**; **identifikim banke/POS**; **anulim/zbritje me PIN+audit**.
-**ENDE E HAPUR (→ SSOT pyetja #13, konfirmo me PLANET):** roli i saktë i vajzës; a hap arkën në mëngjes / jep saldo fillestare; kush e pranon cash-in (vajza vs menaxher); **tips/bakshish**; sa POS terminale e ku; finance **korrigjon vetë apo propozon**; barazim per-ndërrim brenda ditës apo vetëm 00:00; depozitim cash në bankë; format i raportit ditor i Donatit; banak i jashtëm aktivizim/çaktivizim.
+**TASHMË E VENDOSUR (mos i rihap):** barazim auto **00:00**; ekran me **saldo per kamarier**; **Group Owner merr cash → dokumentohet kush+arsye**; **identifikim banke/POS**; **anulim/zbritje me PIN+audit**.
+**ENDE E HAPUR (→ SSOT pyetja #13, konfirmo me PLANET):** roli i saktë i personit të financave; a hap arkën në mëngjes / jep saldo fillestare; kush e pranon cash-in (Financë Operative vs menaxher); **tips/bakshish**; sa POS terminale e ku; finance **korrigjon vetë apo propozon**; barazim per-ndërrim brenda ditës apo vetëm 00:00; depozitim cash në bankë; format i raportit ditor i Group Owner; banak i jashtëm aktivizim/çaktivizim.
 
 ## 8. Gatishmëria
 - PLANET finance operations: **65–70%**; evidence pagesa/POS/banka: **~75%**; barazim modern: **45–55%** (net-new); KABI finance ops: **55–60%**.

@@ -63,3 +63,9 @@ docs/evidence/finance/
 # Private accounting/vat reconciliation evidence with real values — local only
 docs/canonical/02-accounting/PLANET_VAT_Reconciliation_*.md
 docs/archive/prodata/
+
+# Skriptet e provenance mund të shkruajnë të dhëna reale këtu — kurrë në git
+outputs/
+
+# Claude Code / tooling artifacts — jashtë git
+.claude/
