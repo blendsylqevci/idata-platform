@@ -47,7 +47,7 @@ Nga librat e rindërtuar të PRO DATA-s për PLANET2, qershor 2026:
 
 | Metric | Value |
 | --- | ---: |
-| Libri i Shitjes — rows | 1,848 |
+| Libri i Shitjes — rows | X,XXX |
 | Sales net / pa TVSH | XX,XXX.XX |
 | Sales VAT / TVSH output | XX,XXX.XX |
 | Sales gross / me TVSH | XX,XXX.XX |

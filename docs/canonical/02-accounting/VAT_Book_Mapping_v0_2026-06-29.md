@@ -7,6 +7,8 @@
 
 Ky dokument përcakton si duhet iData+ ta ndërtojë Librin e Shitjes, Librin e Blerjes dhe VAT summary. Qëllimi nuk është të kopjojmë query-t e PRO DATA-s 1:1, por të ruajmë **funksionin kontabël dhe raportues** që kontabilisti pret.
 
+> **Fermerë KABI — flat-rate 8%:** trajtimi i blerjes së qumështit nga fermerët (autofaturë nga KABI, box në Librin e Blerjes, deklarim mujor, TVSH e zbritshme) ndiqet te `../03-kabi/Accountant_Confirmation_TVSH_e_Sheshte_Fermere_KABI_2026-07-05.md` (bazë: UA 03/2015 neni 76; pret sign-off kontabilisti — ACC-006).
+
 ---
 
 ## 1. Vendimi kryesor
@@ -31,7 +33,7 @@ Kjo është në përputhje me PRO DATA: GL krijohet nga `prcPosto...GL`, ndërsa
 | VAT summary | `outputs/prodata_gl_reconciliation_2026-06-28/data/tvsh_monthly_summary_planet2_2026_06.csv` | Output-input monthly VAT calculation from extracted books. |
 | Tax setup | `outputs/prodata_accounting_extract/05_tax_setup_PLANET_RESORT.json`, `06_tax_setup_PLANET2.json` | `T0`, `T8`, `T18`, `TL` and VAT accounts. |
 | Procedures | `prcRPTGRDLibriShitjetADM18`, `prcRPTGRDLibriBlerjetADM18` | Classification logic and relevant flags. |
-| Accountant sample | `LB-PLANET2-6-2026.xlsx` previously reviewed | Official-style purchase-book export target and mixed-rate support. |
+| Accountant sample | `‹mostra e kontabilistit — private-local›` previously reviewed | Official-style purchase-book export target and mixed-rate support. |
 
 Important: reconstructed VAT summary is useful evidence, but **not official tax truth** until compared with the accountant’s official VAT declaration.
 
@@ -311,7 +313,7 @@ June 2026 PLANET2 evidence:
 
 | Metric | Value |
 | --- | ---: |
-| Sales rows | 1,848 |
+| Sales rows | X,XXX |
 | Sales net | XX,XXX.XX |
 | Sales VAT | XX,XXX.XX |
 | Sales gross | XX,XXX.XX |

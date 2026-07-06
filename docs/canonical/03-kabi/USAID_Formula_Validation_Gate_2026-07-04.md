@@ -12,7 +12,7 @@ This is the gate before designing the real KABI module **Pranim + Shlyerje Ferme
 
 ## 2. Source hierarchy
 
-1. Private workbook `E Qumshti Maj 2026.xls` — evidence source, private-local only.
+1. Private workbook `‹workbook privat Maj 2026 — private-local›` — evidence source, private-local only.
 2. Formula cells in `Analizat Maj` — authoritative for what the May workbook calculates.
 3. KABI technologist / factory confirmation — required for official business rule.
 4. iData+ implementation — must be configurable and tested against fixtures.
@@ -36,7 +36,7 @@ The workbook contains multiple populations and they must not be mixed:
 
 Therefore, the validation statement is:
 
-> Technical validation passed for active May rows: gross and net matched the workbook for **46/46 active farmer rows**.
+> Technical validation passed for active May rows: gross and net matched the workbook for **all active farmer rows (count private-local)**.
 
 ## 5. Formula decoded from Excel
 
@@ -76,7 +76,7 @@ For Punki/collection routes, the expected safe rule is sample-per-farmer before 
 |---|---|
 | Decimal reference engine | Passed. |
 | Synthetic unit tests | Passed: 8/8. |
-| Private workbook validation | Passed for active rows: 46/46 gross and net. |
+| Private workbook validation | Passed for all active rows — gross and net (count private-local). |
 | No real farmer names in canonical docs | Required and satisfied for this document. |
 | No real monetary totals in canonical docs | Required and satisfied for this document. |
 | Raw workbook in git | Forbidden. Must remain private-local. |
