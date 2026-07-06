@@ -56,7 +56,7 @@ Përdoret për:
 - shpenzime operative;
 - payment-method permissions;
 - handover të financave drejt kontabilistit;
-- kufirin e saktë mes vajzës së financave/menaxhmentit dhe kontabilistit.
+- kufirin e saktë mes personit të financave/menaxhmentit dhe kontabilistit.
 
 Ky dokument mbështetet në backup coverage audit, DDL/DML cross-check dhe micro-extract të sanitizuar. Nëse PLANET konfirmon workflow të ri live, përditësohet këtu dhe pastaj reflektohet në master/SSOT.
 

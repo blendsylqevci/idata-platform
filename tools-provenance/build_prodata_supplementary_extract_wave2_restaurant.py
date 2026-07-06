@@ -686,7 +686,7 @@ def write_review(
         "- Floor-plan real: zona, tavolina, shanka, printera, KDS screens, dhe routing per lokacion.",
         "- Numri final dhe rolet e KDS screens: backup tregon modelin, jo planin final 10-12 screens.",
         "- Lista e pajisjeve ekzistuese: printera, POS terminals, monitors, tablets, network/UPS.",
-        "- Rregullat e sakta të barazimit të kamarierëve/arkës me Donatin/kontabilistin.",
+        "- Rregullat e sakta të barazimit të kamarierëve/arkës me Group Owner/kontabilistin.",
         "- A do hyjë AI Invoice Scanner në MVP apo Roadmap/Later; për momentin duhet mbajtur jashtë MVP pa vendim.",
         "",
         "## Implementation warning",

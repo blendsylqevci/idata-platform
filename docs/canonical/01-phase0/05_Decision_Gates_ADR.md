@@ -10,7 +10,7 @@
 | ADR-001 | **Stack = Fortified Hybrid** (NestJS+Next.js+RN+Postgres+Supabase) | 27.06 | §2 |
 | ADR-002 | **Mobile = native React Native/Expo; PWA e përjashtuar** | 27.06 | offline+BT+hub |
 | ADR-003 | **Migrim = fillim i pastër; cutover 1 Jan 2027** (vetëm saldo hapëse + master-data) | 27.06 | §8 |
-| ADR-004 | **Payroll = Faza 2** (jo v1) | 27.06 | §4 |
+| ADR-004 | **Payroll → Faza 1** (RISHIKUAR v2.17 — KABI/kontabilist detyrueshëm; dikur Faza 2, 27.06) | 05.07 | §4 |
 | ADR-005 | **COGS = default mesatare e ponderuar** + batch costing KABI (finalizim me kontabilistin) | 27.06 | §4 |
 | ADR-006 | **Node = 24 LTS**, fiksuar me `.nvmrc` | 27.06 | Active LTS→2028 |
 | ADR-007 | **RBAC pa "Fshirje" për financiare** → Anulim/Korrigjim + Aprovim | 27.06 | §9 |

@@ -4,6 +4,8 @@ Status: Draft diskutimi
 Data: 2026-06-24
 Qellimi: te kapet logjika reale e KABI para fillimit te zhvillimit. Ky dokument nuk eshte scope final implementimi derisa te aprovohet me klientin, kontabilistin dhe ekipin teknik.
 
+> **Shenim (05.07):** ky eshte **draft/referenca legacy** e logjikes fillestare. Per gjendjen e KONFIRMUAR operative (pas pergjigjeve te KABI-t) shih `KABI_Operational_Evidence_Update_2026-07-05.md`. Ne rast mospërputhjeje, Evidence Update ka perparesi.
+
 ## Vendime te aprovuara ne kete iterim
 
 Keto pika konsiderohen te vlefshme dhe duhet te mbahen ne modelin funksional/te dhenave te KABI:
@@ -714,7 +716,7 @@ Fiskalizimi offline duhet te konfirmohet me ATK/ofruesin fiskal para vendimit fi
 
 Kerkesa operative e KABI: faturimi ne terren duhet te funksionoje edhe offline.
 
-Hulumtimi fillestar ne dokumentacionin zyrtar te ATK/SEF tregon se kuponet mund te leshohen ne modalitet jashtë linje/offline kur ka nderprerje te lidhjes elektronike/internetit, por duhet te fiskalizohen/dorezohen ne ATK pas rikthimit te lidhjes dhe brenda afateve te percaktuara. Shih: `docs/ATK_SEF_Offline_Faturimi_Findings.md`.
+Hulumtimi fillestar ne dokumentacionin zyrtar te ATK/SEF tregon se kuponet mund te leshohen ne modalitet jashtë linje/offline kur ka nderprerje te lidhjes elektronike/internetit, por duhet te fiskalizohen/dorezohen ne ATK pas rikthimit te lidhjes dhe brenda afateve te percaktuara. Shih: `docs/canonical/05-sef-atk/ATK_SEF_Offline_Faturimi_Findings.md`.
 
 Vendimet arkitekturore paraprake per offline/online, stack, local hub, pajisje, sync engine dhe fiscal outbox jane dokumentuar ne: `docs/Arkitektura_Offline_Online_Stack_Draft.md`.
 

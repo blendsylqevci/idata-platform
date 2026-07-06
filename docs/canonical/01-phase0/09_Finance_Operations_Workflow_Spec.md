@@ -4,17 +4,19 @@
 **Statusi:** flukset janë specifikuar aty ku janë **të vendosura**; pjesët e procesit që presin PLANET janë shënuar **[LIVE-Q]** dhe mblidhen te §8 (paketa e pyetjeve). Ky doc bëhet final pas takimit me ekipin e financave të PLANET-it.
 **Parim:** Finance Operations = **para-GL** (evidence operative); handoff te Accounting përmes posting-queue. Asnjë fshirje — anulim/korrigjim me PIN + audit.
 
+> ⚠️ **SUPERSEDED (2026-07-05)** — WORKFLOW canonical = [`../04-planet-finance/Finance_Operations_Workflow_Spec_2026-06-29.md`](../04-planet-finance/Finance_Operations_Workflow_Spec_2026-06-29.md) (mban FO-00..FO-13 të harmonizuara). Ky draft mbahet si input/gjurmë; mos e përditëso.
+
 ---
 
 ## 1. Cash Office / Zyra e Parave
-**Fluksi:** hap ditën operative → regjistro float hyrës/dalës per arkë → kur merret cash (p.sh. Donati) regjistro **kush + shuma + arsye + aprovim** → pozicioni i cash-it në fund të ditës.
+**Fluksi:** hap ditën operative → regjistro float hyrës/dalës per arkë → kur merret cash (p.sh. Group Owner) regjistro **kush + shuma + arsye + aprovim** → pozicioni i cash-it në fund të ditës.
 **Fusha:** register, type(in/out), amount, by_user, reason, approval, at. **Statuset:** open → closed.
-**Vendosur:** Donati merr cash → **dokumentohet kush+arsye**. **[LIVE-Q]** kush e hap ditën; float fillestar per arkë.
+**Vendosur:** Group Owner merr cash → **dokumentohet kush+arsye**. **[LIVE-Q]** kush e hap ditën; float fillestar per arkë.
 
 ## 2. Waiter / Cashier Settlement (Barazimi)
 **Fluksi:** mbyllje **auto 00:00** → per kamarier/arkatar: **tavolinat → porositë → pagesat (cash/kartë/bankë) → zbritje/anulime → saldo/float → cash që duhet dorëzuar → shpenzime ndërrimi → diferenca** → krijon `worker_settlement` + handover.
 **Fusha:** waiter, service_day, tables[], orders[], cash, card, bank, discounts, voids, float, cash_due, expenses, diff. **Statuset:** open → reconciled → handed-over.
-**Vendosur:** auto 00:00; **saldo per kamarier**; tavolinat e hapura → kamarieri i ri. **[LIVE-Q]** barazim per-ndërrim brenda ditës apo vetëm 00:00; kush e pranon cash-in (vajza vs menaxher); finance **korrigjon vetë apo propozon**; tips/bakshish.
+**Vendosur:** auto 00:00; **saldo per kamarier**; tavolinat e hapura → kamarieri i ri. **[LIVE-Q]** barazim per-ndërrim brenda ditës apo vetëm 00:00; kush e pranon cash-in (Financë Operative vs menaxher); finance **korrigjon vetë apo propozon**; tips/bakshish.
 
 ## 3. POS Terminal Reconciliation
 **Fluksi:** pagesat me kartë grupohen sipas **terminalit/bankës** → përputhen me **batch/settlement** e bankës → flag për të pa-barazuara.
@@ -37,17 +39,17 @@
 
 **KABI variant:** Driver/Van Settlement (ngarkim→shitje→kthime→cash→kredi→mbetje→diferenca) · Farmer Advances (zbritje nga kartela mujore) · Cash Collection from Field · Mobile POS/Card recon (offline+fiscal) · Daily Factory Cash Office. **[LIVE-Q]** validohet me KABI.
 
-## 8. 🔴 PLANET Live-Questions Pack (për vajzën e financave / menaxherin / Donatin)
+## 8. 🔴 PLANET Live-Questions Pack (për personin e financave / menaxherin / Group Owner)
 *(Paketë e konsoliduar — SSOT #13 + Codex + 08 §7; merre në takim. Pa këto, spec-i s'mbyllet.)*
 1. Kush e **hap** dhe kush e **mbyll** ditën operative?
 2. A ka **saldo/float** për kamarierët? Sa dhe si regjistrohet?
-3. Kush e **pranon cash-in** nga kamarierët dhe kur (vajza apo menaxheri)?
+3. Kush e **pranon cash-in** nga kamarierët dhe kur (Financë Operative apo menaxheri)?
 4. Barazimi: vetëm **00:00** apo edhe **per-ndërrim** brenda ditës?
 5. Sa **POS terminale bankare** ka dhe cilit shank/lokacion/bankë i takojnë?
 6. **Tips/bakshish** — regjistrohen? Ku shkojnë?
 7. Cilat **shpenzime** paguhen nga arka dhe **kush i aprovon**?
-8. Kush mund të **korrigjojë barazimin** pas mbylljes — vajza vetë apo vetëm propozon?
-9. Çfarë **raporti ditor** e do Donati (cash/kartë/shpenzime/diferenca/tavolina/kamarierë)?
+8. Kush mund të **korrigjojë barazimin** pas mbylljes — Financë Operative vetë apo vetëm propozon?
+9. Çfarë **raporti ditor** e do Group Owner (cash/kartë/shpenzime/diferenca/tavolina/kamarierë)?
 10. Si bëhet **depozitimi i cash-it në bankë** (kush/ritmi)?
 11. Pagesat e furnitorëve: nga **arka, banka apo borxh**?
 12. A ka **banak të jashtëm** që aktivizohet/çaktivizohet sipas sezonit/eventit?

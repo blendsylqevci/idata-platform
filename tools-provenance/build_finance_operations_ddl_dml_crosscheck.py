@@ -376,7 +376,7 @@ Pikat që mbesin nuk janë “mungesë DDL”, por:
 - Tabelat me `covered_raw_data` përdoren për parity/evidence.
 - Tabelat `schema_only_*` përdoren për ide dizajni, jo për migrim real.
 - Tabelat `micro_extract_candidate` mund t'i nxjerrim me sanitization nëse duam zero-doubt.
-- `process_gap_confirm_with_planet` është detyrë biznesi: takim me vajzën e financave/menaxherin/Donatin, jo kërkim i pafund në backup.
+- `process_gap_confirm_with_planet` është detyrë biznesi: takim me vajzën e financave/menaxherin/Group Owner, jo kërkim i pafund në backup.
 
 ## Hapi i rekomanduar
 

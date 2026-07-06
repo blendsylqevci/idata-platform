@@ -1,8 +1,8 @@
 # Finance Operations Screen — Workflow Spec
 
 **Data:** 2026-06-29
-**Status:** canonical workflow spec / draft për validim live me PLANET
-**Lidhet me:** `Finance_Operations_PLANET_KABI_2026-06-29.md`
+**Status:** ✅ CANONICAL — Finance Operations WORKFLOW (mban FO-00..FO-13). Çifti SCOPE canonical = [`../01-phase0/08_Finance_Operations_SCOPE_PLANET_KABI.md`](../01-phase0/08_Finance_Operations_SCOPE_PLANET_KABI.md).
+**Merged inputs (superseded):** `../01-phase0/09_Finance_Operations_Workflow_Spec.md` (draft i mëparshëm).
 **Qëllimi:** të specifikojë ekranet, rrjedhat, rolet dhe rregullat për modulin **Finance Operations** në iData+.
 
 ---
@@ -22,12 +22,12 @@ Ky modul nuk është GL dhe nuk është deklarim TVSH. Ai është shtresa operat
 
 | Shtresa | Çfarë bën | Kush e përdor |
 | --- | --- | --- |
-| Finance Operations | Cash/card/bank daily control, saldo/float, worker settlement, expenses, POS terminal reconciliation, cash office, handover package | Vajza e financave, menaxheri, pronari |
+| Finance Operations | Cash/card/bank daily control, saldo/float, worker settlement, expenses, POS terminal reconciliation, cash office, handover package | Personi i financave, menaxheri, pronari |
 | Accounting | GL, TVSH, AR/AP, libra tatimorë, mbyllje periudhe, pasqyra, postim zyrtar | Kontabilisti / financa e autorizuar |
 
 Rregulli: **Finance Operations prodhon evidence; Accounting e poston dhe e mbyll.**
 
-Nuk duhet të ketë përzierje ku vajza e financave pa rol kontabilisti ndryshon GL, dhe kontabilisti nuk duhet të detyrohet të bëjë punën operative të barazimit ditor.
+Nuk duhet të ketë përzierje ku personi i financave pa rol kontabilisti ndryshon GL, dhe kontabilisti nuk duhet të detyrohet të bëjë punën operative të barazimit ditor.
 
 ---
 
@@ -53,7 +53,7 @@ Ekrani duhet të përgjigjet shpejt në këto pyetje:
 | --- | --- | --- |
 | Group Owner / Pronari | Sheh nivel grupi dhe raporte të konsoliduara kur ka permission | All read, approval high-risk, override |
 | Tenant Admin | Admin për PLANET ose KABI | Config, users, permissions, locations, payment methods |
-| Finance Operator | Vajza e financave / personi që kontrollon paranë | Daily finance dashboard, worker settlement, expenses, handover |
+| Finance Operator | Personi i financave / personi që kontrollon paranë | Daily finance dashboard, worker settlement, expenses, handover |
 | Manager | Menaxher salle/operacional | Approval për void/discount/transfer/difference; shikon shift/day |
 | Cashier / Arkatar | Nëse ka arkë të veçantë | Cash drawer, payments, own settlement |
 | Waiter / Kamarier | Nuk menaxhon financa; vetëm sheh detyrimet e veta nëse lejohet | Own tables/orders/payments summary |
@@ -414,7 +414,7 @@ Ky ekran tregon gjendjen e zyrës së parave.
 - cash paid out as expenses;
 - cash given as float;
 - cash returned as float;
-- cash taken by owner/Donat or authorized person;
+- cash taken by owner (Group Owner) or authorized person;
 - bank deposit prepared;
 - closing cash balance.
 
@@ -426,7 +426,7 @@ Ky ekran tregon gjendjen e zyrës së parave.
 | `float_return` | Kthim saldo | Jo/Po sipas diferencës |
 | `worker_cash_in` | Dorëzim cash nga kamarieri | Jo |
 | `expense_out` | Shpenzim ditor | Po sipas limitit |
-| `owner_withdrawal` | Donati merr cash nga zyra | Po + arsye |
+| `owner_withdrawal` | Group Owner merr cash nga zyra | Po + arsye |
 | `bank_deposit_out` | Cash dërgohet në bankë | Po |
 | `correction` | Korrigjim diference | Po, gjithmonë |
 
@@ -650,14 +650,14 @@ Moduli nuk quhet gati pa këto:
 
 Këto pyetje duhet t’i marrim para finalizimit të ekranit:
 
-1. Kush e bën sot barazimin real: vajza e financave, menaxheri, arkatar apo Donati?
+1. Kush e bën sot barazimin real: personi i financave, menaxheri, arkatar apo Group Owner?
 2. A barazohet secili kamarier veçmas?
 3. A barazohet secili shank/banak veçmas?
 4. A ka saldo fillestare fikse për punëtor?
-5. Si dokumentohet cash që Donati/person tjetër merr nga zyra?
+5. Si dokumentohet cash që Group Owner/person tjetër merr nga zyra?
 6. Sa POS terminale bankare janë dhe cilat banka?
 7. A ka pagesa të përziera në një tavolinë: cash + kartë?
-8. Çfarë raporti e përdor vajza e financave çdo ditë?
+8. Çfarë raporti e përdor personi i financave çdo ditë?
 9. Çfarë raporti i dërgohet kontabilistit?
 10. Çfarë ndodh me tavolinat e hapura pas mesnate?
 11. A ka shpenzime pa faturë/dokument dhe si trajtohen?

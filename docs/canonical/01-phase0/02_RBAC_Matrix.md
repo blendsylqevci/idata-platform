@@ -10,7 +10,7 @@
 | Kodi | Roli | Shënim |
 |---|---|---|
 | PO | Platform Owner (iCode) | tenant + config teknik; **JO të dhëna biznesi** në punë normale |
-| GO | Group Owner (Donati) | raporte të konsoliduara KABI+PLANET; Company Switcher |
+| GO | Group Owner | raporte të konsoliduara KABI+PLANET; Company Switcher |
 | TA | Tenant-Admin | qasje maksimale brenda një biznesi |
 | KO | Kontabilist | GL, libra, TVSH, banka/arka, periudha |
 | MN | Menaxher (sallë/njësi) | operim ditor + aprovime në pikë |
@@ -21,7 +21,7 @@
 | KU | Kuzhinier/KDS (PLANET) | bileta KDS |
 | BR | Bar/Shank (PLANET) | porosi pijesh |
 | AR | Arkatar (PLANET) | arka, pagesa, Z-raport |
-| FO | **Financë Operative** (PLANET, "vajza") | cash/barazime/POS/shpenzime/pagesa-ops/raporte ditore; **JO GL/TVSH/mbyllje** |
+| FO | **Financë Operative** (PLANET) | cash/barazime/POS/shpenzime/pagesa-ops/raporte ditore; **JO GL/TVSH/mbyllje** |
 | IS | iCode Support | **vetëm break-glass** (shih më poshtë) |
 
 ---
@@ -68,7 +68,7 @@
 
 ---
 
-## Financë Operative (FO / "vajza") — rol i veçantë nga Kontabilisti
+## Financë Operative (FO) — rol i veçantë nga Kontabilisti
 Vepron kryesisht në modulin **Finance Operations** (`08_Finance_Operations_SCOPE`): **R/C/U + Aprovim(ops)** mbi arka/cash, barazim kamarierë/shank, POS/banka, shpenzime (regjistrim), pagesa furnitorësh (ops), raporte menaxheriale, cash handover/deposit, audit(R). **JO** GL/journal, libra ATK, deklaratë TVSH, mbyllje periudhe, postim/reversal (= **KO**). Korrigjim barazimi: kryen-me-audit **ose** propozon (pyetja #13). Handoff: kamarieri mbyll → FO barazim → KO poston.
 
 ## Matrica e aprovimeve (default)
@@ -81,7 +81,7 @@ Vepron kryesisht në modulin **Finance Operations** (`08_Finance_Operations_SCOP
 | Ndryshim çmimi master (jo offline) | Vetëm nga cloud (TA/financa) |
 
 ## Break-glass (iCode Support)
-Qasja e iCode në të dhënat e biznesit **kërkon**: (1) aprovim i Donatit, (2) arsye e shkruar, (3) **kohë e kufizuar** (skadon vetë), (4) **audit log** i plotë. **Pa backdoor.** Default: IS s'ka asnjë qasje në të dhëna biznesi.
+Qasja e iCode në të dhënat e biznesit **kërkon**: (1) aprovim i Group Owner, (2) arsye e shkruar, (3) **kohë e kufizuar** (skadon vetë), (4) **audit log** i plotë. **Pa backdoor.** Default: IS s'ka asnjë qasje në të dhëna biznesi.
 
 ## Shënime zbatimi
 - Çdo qelizë është **default**; Tenant-Admin e rregullon per-feature (R/C/U/X/P/A).
