@@ -20,6 +20,7 @@ During implementation, code plus tests become the truth for system behavior.
 ## Folder map
 
 - `docs/canonical/` — current working source of truth for requirements, decisions, phase 0, accounting, KABI, PLANET finance, SEF/ATK, architecture, and design.
+- `docs/canonical/08-roadmap/` — delivery roadmap Fazat 1–10 + cutover/rollback runbook (detajon SSOT §3, s'e zëvendëson).
 - `docs/evidence/` — supporting proof, reconciliation, audit outputs, and intake audit material. Evidence supports canonical claims but is not itself the active spec unless referenced.
 - `docs/archive/` — old drafts, superseded packs, prompts, old client text, and provenance that must not compete with canonical.
 - `tools-provenance/` — extraction/audit scripts used to produce evidence. These are not app code.
@@ -47,6 +48,8 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/03-kabi/KABI_Logjika_Operacionale_Kontabiliteti_Draft.md`
 - `docs/canonical/04-planet-finance/Finance_Operations_Workflow_Spec_2026-06-29.md`
 - `docs/canonical/05-sef-atk/ATK_SEF_Offline_Faturimi_Findings.md`
+- `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
+- `docs/canonical/08-roadmap/Cutover_Rollback_Runbook.md`
 
 ## Next gate
 
