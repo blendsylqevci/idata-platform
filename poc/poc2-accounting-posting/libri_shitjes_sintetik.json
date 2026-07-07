@@ -1,0 +1,20 @@
+{
+  "rows": [
+    {
+      "doc_type": "SHV",
+      "declaration_box": "[12]",
+      "rate": "18",
+      "base": "100.00",
+      "vat": "18.00"
+    },
+    {
+      "doc_type": "SHV",
+      "declaration_box": "[12]",
+      "rate": "18",
+      "base": "100.00",
+      "vat": "18.00"
+    }
+  ],
+  "box12_base": "200.00",
+  "box30_total_vat": "36.00"
+}
