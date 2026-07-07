@@ -2,6 +2,12 @@
 
 Mandatory: read `PROJECT_RULES.md` and `docs/INDEX.md` before making changes.
 
+## Roles
+
+- **Builder** (Claude Code, terminal): implements inside approved increment scope.
+- **PM / Quality-Gate** (Codex): reviews every delivery using `docs/PM_REVIEW_PROTOCOL.md` — that protocol is mandatory for every review verdict; an APPROVE without its evidence rule is invalid.
+- **Blend**: human gate; approves increments, decisions, and anything touching SEF/GL/migration/security.
+
 ## Non-negotiable privacy rule
 
 GitHub is visible to collaborators. Do not commit owner-private, commercial, legal, client-private, SEF-secret, credential, or raw evidence material.
