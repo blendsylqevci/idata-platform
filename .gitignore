@@ -17,6 +17,8 @@ build/
 .next/
 .expo/
 coverage/
+.turbo/
+*.tsbuildinfo
 # OS / editor
 .DS_Store
 *.log
@@ -69,3 +71,7 @@ outputs/
 
 # Claude Code / tooling artifacts — jashtë git
 .claude/
+# Temp artefakte (mount i sandbox-it bllokon fshirjen; fshihen manualisht lokalisht)
+*.tmp
+_tmp_*
+_rmtest*
