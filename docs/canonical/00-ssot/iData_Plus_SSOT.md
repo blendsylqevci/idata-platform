@@ -1,6 +1,6 @@
 # iData+ — Single Source of Truth (SSOT)
 
-**Versioni:** 2.16 · **Data:** 5 Korrik 2026 · **Statusi:** Draft pune për Fazën 0
+**Versioni:** 2.19 · **Data:** 7 Korrik 2026 · **Statusi:** Draft pune për Fazën 0
 **Pronar i dokumentit:** iCode L.L.C (Blend Sylqevci)
 **Rregull:** ky është **burimi i vetëm i vërtetë** për zhvillimin. Çdo vendim/feature i ri shkohet **vetëm këtu** (me datë te Decisions log). Dokumentet e aprovuara jashtë repo-s janë vetëm snapshot-e aprovimi të gjeneruara nga ky dokument. Faza aktuale: **dizajn + Faza 0**, pa kod prodhimi pa go-ahead.
 **v2.0:** integron raundin v2 të pyetjeve me Codex (Qershor 2026) — vendime të reja, pyetje të zgjidhura, dhe 2 konflikte të shënuara (paga, printera fiskalë). Sinkronizuar me numërimin e Codex (v2).
@@ -271,9 +271,12 @@
 - **Evidence** → `evidence-private-local/02-accounting/PLANET_VAT_Reconciliation_Maj_2026_2026-07-01.md` (jashtë git); numrat → **fixture test për `packages/accounting`** (strict për bazat, tolerancë e vogël për output VAT).
 - **KORRIGJIM:** leximi i parë i deklaratës ishte gabim; validimi i mëvonshëm konfirmoi carry-forward dhe la rounding-rule ende të hapur. Exact values ruhen jashtë git.
 
-**07.07.2026 — Increment 1 (Walking Skeleton):**
+**07.07.2026 — v2.18 (Increment 1 — Walking Skeleton):**
 - **Increment 1 skeleton merged (PR #4, `5a87f1a`):** monorepo + `shared-types` + accounting library-first + PM protocol; gitleaks rule filename-scoped; CI në corepack (pa action third-party). **Hapi B nisur** (mbyllja e Runbook §8: `packages/database` + migrime data-model fillestar + `apps/api` + `apps/web` + ping web→api→db).
 - **Konventë modeli:** modeli logjik `user` → tabela fizike **`app_user`** (`user` = fjalë e rezervuar në Postgres). Auditimi group-level (audit_log pa `business_id`) = pikë e hapur për Fazën 1.
+
+**07.07.2026 — v2.19 (Project Delivery Roadmap Fazat 1–10):**
+- Project Delivery Roadmap Fazat 1–10 + Cutover/Rollback Runbook miratuar → `docs/canonical/08-roadmap/`; gates të reja **ENG-001..004 + SEC-DEP**; critical path me **★ KABI LIVE nëntor 2026**; **PLANET SEF i detyrueshëm për live**.
 
 ## 12. Pyetjet e hapura (pending)
 | # | Pyetja | Kush | Afati |
