@@ -18,8 +18,12 @@ regex = '''\b[0-9]{12}\b'''
 
 [[rules]]
 id = "idata-owner-doc-names"
-description = "Emra dokumentesh owner-only"
-regex = '''(?i)(^|[_\-/ ])(ofert[aë]?|kontrat[aë]?|shtojc[aë]?|dokumenti[_ -]?master|dosja[_ -]?certifikimit)([_\-/ ]|$)'''
+# Kap EMRA FILE-sh owner-only (Oferta_/Kontrata_/Shtojca_/Dokumenti_Master/Dosja_Certifikimit),
+# JO fjalë të zakonshme shqipe në prozë ("kontrata", "oferta"…). Kërkon kontekst filename:
+# vazhdim me underscore/hyphen ose prapashtesë skedari. Emrat realë të file-ve bllokohen
+# gjithashtu nga .gitignore + scripts/precommit_confidential_guard.sh (mbrojtje në thellësi).
+description = "Emra FILE-sh owner-only (filename-scoped; jo prozë)"
+regex = '''(?i)(?:^|[^A-Za-zë])(?:ofert[aë]?|kontrat[aë]?|shtojc[aë]?|dokumenti[_\- ]?master|dosja[_\- ]?certifikimit)(?:[_\-][A-Za-z0-9]|\.(?:pdf|docx?|xlsx?|pptx?|csv|zip|rar|7z|jpe?g|png|txt|md|pages|numbers|key))'''
 
 [[rules]]
 id = "idata-absolute-paths"
