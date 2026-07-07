@@ -71,8 +71,10 @@ export interface Sale18Opts {
   idempotencyKey: string;
   /** Default periudha e hapur; kalohet e mbyllura VETËM për testin e period-lock. */
   fiscalPeriodId?: string;
-  /** Failpoint VETËM për testin e reliability #5 (rollback në mes). */
+  /** Failpoint i HERSHËM — reliability #5 (ndërprerje pas journal_entry). */
   failAfterJournal?: boolean;
+  /** Failpoint i VONË — reliability #5 (ndërprerje pas TË GJITHA shkrimeve, PARA COMMIT). */
+  failBeforeCommit?: boolean;
 }
 
 /** (i) Varianti APP-LEVEL: faturë shitje 18% → GL + libër shitje + kartelë AR. */
@@ -143,6 +145,13 @@ export async function postSale18App(pool: Pool, o: Sale18Opts): Promise<PostResu
       biz,
       eventId,
     ]);
+
+    if (o.failBeforeCommit) {
+      // Pas journal_entry + journal_line + tax_book_entry + tax_book_bucket +
+      // partner_card_entry + update statusi — pika e fundit para COMMIT.
+      throw new Error("failpoint: ndërprerje e simuluar PARA COMMIT (reliability #5)");
+    }
+
     await cx.query("COMMIT");
     return { journalEntryId: entryId, replay: false };
   } catch (err) {

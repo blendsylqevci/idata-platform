@@ -101,17 +101,22 @@ describe("PoC-2 accounting posting — DB (kërkon Postgres)", () => {
     expect(buckets).toEqual([{ declaration_box: "[12]", rate: "18", base: "100.00", vat: "18.00" }]);
   });
 
-  it("FX-005 blerje MIXED: 2 buckets [43]=100/18 dhe [45]=50/4; AP gross 172.00", async () => {
+  it("FX-005 blerje MIXED: 2 buckets [43]=100/18 dhe [45]=50/4; GL i PIN-uar i plotë (split ekzakt)", async () => {
     const buckets = await bucketsOf(IDEM.purchaseMixed);
     expect(buckets).toEqual([
       { declaration_box: "[43]", rate: "18", base: "100.00", vat: "18.00" },
       { declaration_box: "[45]", rate: "8", base: "50.00", vat: "4.00" },
     ]);
+    // Array i PLOTË i rreshtave GL, i renditur deterministikisht (account_code, debit, credit):
+    // një split i gabuar i bazave (p.sh. 149.00+1.00) DËSHTON këtu.
     const lines = await linesOf(IDEM.purchaseMixed);
-    const ap = lines.find((l) => l.account_code === A.AP);
-    expect(ap?.credit).toBe("172.00");
-    const vatInputs = lines.filter((l) => l.account_code === A.VAT_INPUT).map((l) => l.debit);
-    expect(vatInputs.sort()).toEqual(["18.00", "4.00"].sort());
+    expect(lines).toEqual([
+      { account_code: A.AP, debit: "0.00", credit: "172.00" },
+      { account_code: A.VAT_INPUT, debit: "4.00", credit: "0.00" },
+      { account_code: A.VAT_INPUT, debit: "18.00", credit: "0.00" },
+      { account_code: A.EXPENSE, debit: "50.00", credit: "0.00" },
+      { account_code: A.EXPENSE, debit: "100.00", credit: "0.00" },
+    ]);
   });
 
   it("dual-variant (ADR-012 input): app-level dhe funksioni DB japin rezultat identik", async () => {
@@ -275,7 +280,59 @@ describe("PoC-2 accounting posting — DB (kërkon Postgres)", () => {
     expect(pce.rowCount).toBe(0);
   });
 
-  it("reliability #7 (DB unavailable): DSN i gabuar → gabim i pastër, asnjë shkrim", async () => {
+  it("reliability #5 (interrupted PARA COMMIT): pas TË GJITHA shkrimeve → rollback i plotë në TË 6 tabelat", async () => {
+    const idem = `poc2-fp-late-${randomUUID()}`;
+    const source = `shv-fp-late-${randomUUID()}`;
+    await expect(
+      postSale18App(getPool(), {
+        net: "88.00",
+        sourceId: source,
+        idempotencyKey: idem,
+        failBeforeCommit: true,
+      }),
+    ).rejects.toThrow(/PARA COMMIT/);
+
+    // ZERO gjurmë në TË GJASHTA tabelat — ose gjithçka, ose asgjë.
+    const pe = await getPool().query(
+      "SELECT 1 FROM posting_event WHERE business_id = $1 AND idempotency_key = $2",
+      [POC2_IDS.biz, idem],
+    );
+    expect(pe.rowCount).toBe(0);
+    const je = await getPool().query(
+      "SELECT 1 FROM journal_entry WHERE business_id = $1 AND source_doc = $2",
+      [POC2_IDS.biz, source],
+    );
+    expect(je.rowCount).toBe(0);
+    const jl = await getPool().query(
+      `SELECT 1 FROM journal_line jl
+        JOIN journal_entry je ON je.business_id = jl.business_id AND je.id = jl.journal_entry_id
+       WHERE jl.business_id = $1 AND je.source_doc = $2`,
+      [POC2_IDS.biz, source],
+    );
+    expect(jl.rowCount).toBe(0);
+    const tbe = await getPool().query(
+      `SELECT 1 FROM tax_book_entry t
+        JOIN posting_event pe ON pe.business_id = t.business_id AND pe.id = t.posting_event_id
+       WHERE t.business_id = $1 AND pe.idempotency_key = $2`,
+      [POC2_IDS.biz, idem],
+    );
+    expect(tbe.rowCount).toBe(0);
+    const tbb = await getPool().query(
+      `SELECT 1 FROM tax_book_bucket b
+        JOIN tax_book_entry t ON t.business_id = b.business_id AND t.id = b.tax_book_entry_id
+        JOIN posting_event pe ON pe.business_id = t.business_id AND pe.id = t.posting_event_id
+       WHERE b.business_id = $1 AND pe.idempotency_key = $2`,
+      [POC2_IDS.biz, idem],
+    );
+    expect(tbb.rowCount).toBe(0);
+    const pce = await getPool().query(
+      "SELECT 1 FROM partner_card_entry WHERE business_id = $1 AND doc_ref = $2",
+      [POC2_IDS.biz, source],
+    );
+    expect(pce.rowCount).toBe(0);
+  });
+
+  it("reliability #7 (DB unavailable): gabim SPECIFIK lidhjeje, asnjë shkrim (posting_event + journal_entry)", async () => {
     const badPool = new PgPool({
       host: "localhost",
       port: 59987, // port pa Postgres — simulim BRENDA test scope (container-i s'preket)
@@ -284,15 +341,36 @@ describe("PoC-2 accounting posting — DB (kërkon Postgres)", () => {
       connectionTimeoutMillis: 1200,
     });
     const idem = `poc2-dbdown-${randomUUID()}`;
-    await expect(
-      postSale18App(badPool, { net: "10.00", sourceId: "shv-dbdown", idempotencyKey: idem }),
-    ).rejects.toThrow();
-    await badPool.end();
-    const r = await getPool().query(
+    let caught: unknown;
+    try {
+      await postSale18App(badPool, { net: "10.00", sourceId: "shv-dbdown", idempotencyKey: idem });
+    } catch (e) {
+      caught = e;
+    } finally {
+      await badPool.end();
+    }
+    expect(caught).toBeDefined();
+    // Matcher SPECIFIK: gabim lidhjeje (refused/timeout/unreachable) — jo çfarëdo error-i.
+    // Node mund ta kthejë si AggregateError (IPv4+IPv6) me message bosh → kontrollo edhe codes.
+    const err = caught as NodeJS.ErrnoException & { errors?: NodeJS.ErrnoException[] };
+    const codes = [err.code, ...(err.errors?.map((x) => x.code) ?? [])].filter(Boolean) as string[];
+    const connCodes = ["ECONNREFUSED", "ECONNRESET", "EHOSTUNREACH", "ENETUNREACH", "ETIMEDOUT"];
+    const isConnectionError =
+      codes.some((c) => connCodes.includes(c)) ||
+      /ECONNREFUSED|timeout|unreachable|connect/i.test(String(err.message ?? ""));
+    expect(isConnectionError).toBe(true);
+
+    // Verifikim përmes pool-it të SHËNDOSHË: zero rows edhe në posting_event edhe në journal_entry.
+    const pe = await getPool().query(
       "SELECT 1 FROM posting_event WHERE business_id = $1 AND idempotency_key = $2",
       [POC2_IDS.biz, idem],
     );
-    expect(r.rowCount).toBe(0);
+    expect(pe.rowCount).toBe(0);
+    const je = await getPool().query(
+      "SELECT 1 FROM journal_entry WHERE business_id = $1 AND source_doc = 'shv-dbdown'",
+      [POC2_IDS.biz],
+    );
+    expect(je.rowCount).toBe(0);
   });
 
   it("journal_entry/journal_line janë APPEND-ONLY (UPDATE/DELETE refuzohen)", async () => {
