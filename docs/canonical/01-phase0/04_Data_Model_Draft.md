@@ -24,7 +24,7 @@
 - **business_group** — id, name, owner_user_id; lidh disa `business` për raportim të konsoliduar (Group Owner / Company Switcher).
 - **business** — id, name, nui, type(KABI/PLANET/…), legal_unit, **group_id**(FK→business_group), region, settings.
 - **business_unit** — id, business_id, name (p.sh. PLANET, PLANET2 = i njëjti business, dy units), location.
-- **user** — id, email, name, mfa_enabled, status.
+- **user** *(modeli logjik `user` → **tabela fizike `app_user`**; `user` është fjalë e rezervuar në Postgres)* — id, email, name, mfa_enabled, status.
 - **role** — id, business_id?, name (PO/GO/TA/KO/…), is_system.
 - **permission** — id, feature_key, action(R/C/U/X/P/A).
 - **role_permission** — role_id, permission_id.

@@ -1,5 +1,7 @@
 # Arkitektura Offline/Online, Stack dhe Pajisjet (Draft vendimesh)
 
+> **⚠️ SUPERSEDED (pjesët PWA) — 07.07.2026:** çdo propozim në këtë draft për **PWA / web-app si UI kryesore** (POS/KDS/kamarier) është **i tejkaluar** nga **ADR-002 (Accepted): mobile = native React Native/Expo; PWA e përjashtuar** — shih `docs/canonical/01-phase0/05_Decision_Gates_ADR.md` dhe `iData_Plus_SSOT.md` §2. Pjesët e tjera (hub lokal, offline-first, hardware) mbeten referencë historike. Në konflikt, **fiton ADR-002**.
+
 Status: Drejtim i aprovuar per dokumentim, me disa pika qe kerkojne verifikim teknik/ATK
 Data: 2026-06-24
 Qellimi: te definohet si duhet te funksionoje platforma KABI + PLANET para se te filloje dokumentimi baze dhe zhvillimi.
