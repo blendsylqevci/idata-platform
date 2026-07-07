@@ -1,0 +1,23 @@
+# Postgres lokal për zhvillim — Increment 1 (Walking Skeleton).
+# Auth = trust: VETËM për dev lokal (pa fjalëkalim) → asnjë sekret në git.
+# Kredencialet reale të prodhimit mbahen jashtë repo-s.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: idata-postgres-dev
+    environment:
+      POSTGRES_USER: idata
+      POSTGRES_DB: idata
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5433:5432"
+    volumes:
+      - idata_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U idata -d idata"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  idata_pg_data:
