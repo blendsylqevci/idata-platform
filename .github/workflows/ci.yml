@@ -15,6 +15,30 @@ concurrency:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+
+    # Postgres nga shërbimi native i GitHub Actions (jo action third-party).
+    # Auth = trust: vetëm brenda runner-it të CI, pa fjalëkalim → asnjë sekret.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: idata
+          POSTGRES_DB: idata
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U idata -d idata"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: idata
+      PGDATABASE: idata
+
     steps:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -24,20 +48,22 @@ jobs:
         with:
           node-version: 24
 
-      # pnpm vjen nga corepack (i brendshëm në Node) — pa action third-party,
-      # sepse politika e Actions lejon vetëm action-e github-owned. Versioni
-      # (9.15.0) merret nga `packageManager` te package.json.
+      # pnpm nga corepack (i brendshëm në Node) — pa action third-party,
+      # sepse politika e Actions lejon vetëm action-e github-owned.
       - name: Enable Corepack (pnpm)
         run: corepack enable
 
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
-      - name: Build
+      - name: Build (5 workspaces)
         run: pnpm build
 
-      - name: Typecheck
+      - name: Migrate database (nga zero në DB-në e pastër të CI-së)
+        run: pnpm --filter @idata/database migrate
+
+      - name: Typecheck (5 workspaces)
         run: pnpm typecheck
 
-      - name: Test
+      - name: Test (5 workspaces; api/web/database prekin Postgres)
         run: pnpm test
