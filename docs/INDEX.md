@@ -48,6 +48,7 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/03-kabi/KABI_Logjika_Operacionale_Kontabiliteti_Draft.md`
 - `docs/canonical/04-planet-finance/Finance_Operations_Workflow_Spec_2026-06-29.md`
 - `docs/canonical/05-sef-atk/ATK_SEF_Offline_Faturimi_Findings.md`
+- `docs/canonical/06-architecture/Reliability_Gate.md`
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
 - `docs/canonical/08-roadmap/Cutover_Rollback_Runbook.md`
 
