@@ -1,0 +1,29 @@
+{
+  "rows": [
+    {
+      "doc_type": "BLV",
+      "declaration_box": "[43]",
+      "rate": "18",
+      "base": "100.00",
+      "vat": "18.00"
+    },
+    {
+      "doc_type": "BLV",
+      "declaration_box": "[45]",
+      "rate": "8",
+      "base": "50.00",
+      "vat": "4.00"
+    },
+    {
+      "doc_type": "AKT_FERMER",
+      "declaration_box": "[51]",
+      "rate": "flat-8",
+      "base": "500.00",
+      "vat": "40.00"
+    }
+  ],
+  "box43_base": "100.00",
+  "box45_base": "50.00",
+  "box51_base": "500.00",
+  "box67_total_deductible_vat": "22.00"
+}
