@@ -113,6 +113,7 @@ Parallel run nuk është demo; është prova financiare/operative.
 - Hardware është testuar në vend.
 - User/role/2FA/RBAC janë gati.
 - UAT critical flows PASS.
+- Reliability scenarios kritike të testuara (matricat e moduleve live = PASS, sipas `Reliability_Gate.md` te `../06-architecture/`).
 - Parallel run minimalisht 1 muaj ose periudha e miratuar nuk ka bllokues.
 - Rollback owner dhe procedura janë të qarta.
 

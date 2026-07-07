@@ -31,6 +31,7 @@ Ky dokument është ura mes “kemi bazën” dhe “dimë çka ndërtojmë, në
 7. **PRO DATA = golden baseline deri në lansim.** Nuk bëjmë më extract të ri, por e përdorim për parity/UAT/cutover.
 8. **Nëse gate kalon afatin pa përgjigje, vendimi nuk shpiket.** Aktivizohet Plan-B ose shtyrje formale.
 9. **Dependabot nuk auto-merge-ohet.** Çdo security bump kalon CI + gitleaks + review; `pnpm.overrides` dhe Security tab kontrollohen javore.
+10. **Reliability Gate.** Çdo modul kritik ka failure matrix + teste për 8 skenarët standardë të dështimit para se të quhet gati (`../06-architecture/Reliability_Gate.md`); waiver vetëm me vendim të shkruar të pronarit me risk + afat.
 
 ---
 
@@ -161,6 +162,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Composite FK / business_id invariant provon që `role_permission` nuk mund të lidhë role të biznesit tjetër.
 - Group-level audit events janë ose të modeluara qartë, ose të bllokuara me vendim të dokumentuar.
 - Restore drill krijon DB test nga backup dhe verifikohet me checksum/test.
+- **Reliability Gate PASS** për modulet e fazës.
 
 **Evidence**
 
@@ -230,6 +232,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Farmer purchase document → correct flat-rate bucket vetëm pas ACC-006.
 - Period close bllokon backdated posting pa approval.
 - VAT summary përputhet me muajin e mbyllur të validuar, brenda rounding-rule të aprovuar.
+- **Reliability Gate PASS** për modulet e fazës.
 
 **Evidence**
 
@@ -291,6 +294,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - FEFO propozon LOT-in më të vjetër të vlefshëm.
 - Write-off kërkon arsye + approval.
 - Stock movement i aprovuar krijon posting/COGS kur aplikohet.
+- **Reliability Gate PASS** për modulet e fazës.
 
 **Evidence**
 
@@ -354,6 +358,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Settlement nuk krijon AP final pa approved/locked state.
 - Formula USAID llogarit sipas parametrave private-config, jo hardcode në UI.
 - Raporti i grumbullimit printohet me sasi/cilësi/financa pa humbur traceability.
+- **Reliability Gate PASS** për modulet e fazës.
 
 **Evidence**
 
@@ -418,6 +423,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Driver loading - sales - returns - remaining stock rakordohet.
 - Kthim/refuzim LOT krijon dokument korrekt dhe kartelë klienti të saktë.
 - KABI mund të operojë një ditë pune me sistemin e ri dhe të rakordohet me kontabilitetin.
+- **Reliability Gate PASS** për modulet e fazës.
 
 **Evidence**
 
@@ -519,6 +525,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Order basic zbrit stock sipas recetës.
 - Barazim kamarier/shank ka cash/card/bank breakdown.
 - Hub LAN PoC funksionon pa internet.
+- **Reliability Gate PASS** për modulet e fazës.
 
 **Risk / Plan-B**
 
@@ -564,6 +571,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Z-report/worker settlement rakordon me cash/card/bank.
 - Table lifecycle kuptohet nga kamarier/menaxher/finance.
 - PLANET mund të operojë një ditë pune dhe të rakordohet pa PRO DATA.
+- **Reliability Gate PASS** për modulet e fazës.
 
 **Risk / Plan-B**
 

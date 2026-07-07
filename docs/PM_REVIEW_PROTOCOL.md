@@ -1,6 +1,6 @@
 # PM Review Protocol — iData+ Quality Gate
 
-**Versioni:** 1.0 · **Data:** 2026-07-07 · **Pronari:** Blend (aprovon çdo ndryshim të këtij dokumenti)
+**Versioni:** 1.1 · **Data:** 2026-07-07 · **Pronari:** Blend (aprovon çdo ndryshim të këtij dokumenti)
 **Për kë:** agjenti PM / quality-gate (aktualisht Codex në VS Code). Vlen për ÇDO rishikim dorëzimi, PR apo increment-i, nga sot deri në lansim.
 **Rifreskimi:** në kufirin e çdo increment-i përditësohen VETËM §5 (scope) dhe lista e ndaluar; bërthama nuk ndryshon pa aprovimin e Blendit.
 
@@ -52,6 +52,10 @@ Skano diff-in për: emra realë personash (pronarët e bizneseve përmenden VET�
 - Pa dependency të reja të pa-aprovuara (kontrollo diff-in e `package.json`/`pnpm-lock.yaml`).
 - CI jeshile — verifikoje, mos e supozo.
 
+### 7. Reliability Gate (module kritike)
+- **PR që prek modul kritik pa failure matrix të përditësuar + teste përkatëse = REJECT** (përveç waiver-it të shkruar të Blendit me risk + afat).
+- Përkufizimi i "modulit kritik", 8 skenarët standardë të dështimit dhe template-i i matricës: `docs/canonical/06-architecture/Reliability_Gate.md`. Në dyshim → moduli trajtohet si kritik.
+
 ## Verdikti — gjithmonë në këtë format
 
 ```
@@ -80,4 +84,4 @@ Kur dyshon mes "të lëshoj" dhe "të ndaloj" — **NDALO dhe pyet**. Një ditë
 - **POS/KDS** *(kur nis)*: totali i fshehur→lock, anulim me arsye+aprovim, transferi vetëm menaxher, saldo per kamarier e rakordueshme.
 
 ---
-*Historia: v1.0 (2026-07-07) — krijuar me aprovimin e Blendit; bazuar në protokollin e diskutuar në sesionin e setup-it të ditës së parë të zhvillimit.*
+*Historia: v1.0 (2026-07-07) — krijuar me aprovimin e Blendit; bazuar në protokollin e diskutuar në sesionin e setup-it të ditës së parë të zhvillimit. · v1.1 (2026-07-07) — shtuar kontrolli #7 (Reliability Gate) me aprovimin e Blendit.*
