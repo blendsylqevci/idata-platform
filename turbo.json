@@ -1,9 +1,18 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": [
+    "PGHOST",
+    "PGPORT",
+    "PGUSER",
+    "PGDATABASE",
+    "PGPASSWORD",
+    "API_PORT",
+    "API_URL"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"]
     },
     "typecheck": {
       "dependsOn": ["^build"]

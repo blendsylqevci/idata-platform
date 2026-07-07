@@ -6,10 +6,10 @@
 **v2.0:** integron raundin v2 të pyetjeve me Codex (Qershor 2026) — vendime të reja, pyetje të zgjidhura, dhe 2 konflikte të shënuara (paga, printera fiskalë). Sinkronizuar me numërimin e Codex (v2).
 **v2.1:** korrigjime nga rishikimi i Blendit — frazë neutrale për bërthamën e ripërdorshme, ndarje rolesh + break-glass, RBAC pa "Fshirje" për financiare, fazim i qartë i SEF, Libri i Shitjes/Blerjes baseline nga PRO DATA, COGS i finalizueshëm me kontabilistin, [51] paraprak, ARBK te Onboarding, KDS ~10–12.
 **v2.2:** VENDIM — **pagat/payroll = Faza 2** (jo v1), sipas rekomandimit të Codex, konfirmuar nga Blendi. **(RISHIKUAR v2.17 → Faza 1 për KABI/kontabilist.)**
-**v2.3:** gati për Fazën 0 — paketa Faza 0 te `iData_Plus_Faza0/`; Node 24 LTS; +2 pyetje (floor-plan, inventar pajisjesh); decision gates shtesë; baseline sigurie; feature-status taxonomy.
+**v2.3:** gati për Fazën 0 — paketa Faza 0 te `docs/canonical/01-phase0/` (+ `00-ssot/`); Node 24 LTS; +2 pyetje (floor-plan, inventar pajisjesh); decision gates shtesë; baseline sigurie; feature-status taxonomy.
 **v2.4:** 🟢 **SEF "Testim para Aplikimit" PRANUAR nga ATK (28.06.2026)** — test phase aktiv; protokolli zyrtar github.com/fiskalizimi (mandatory); ADR shtesë; data model shtesë (business_group/service_day/cost_layer); paketa Faza 0 → v1.1.
 **v2.5:** korrigjime teknike SEF (verifikuar nga pos-csharp + models.proto): **money scale PER-FIELD** (items €0.0001 / totals cents), **CouponType Sale=1/Cancel=2/Return=3**, **tax A/C/D/E** (TL→A); secrets në `docs-private`; paketa Faza 0 → v1.2.
-**v2.6:** **template-et zyrtare ATK** (blerje+shitje) nga kontabilisti (28.06) → box-map i plotë për të dy librat; auto-deklaratë TVSH e mundshme; ruajtur te `iData_Plus_Faza0/reference_atk/`.
+**v2.6:** **template-et zyrtare ATK** (blerje+shitje) nga kontabilisti (28.06) → box-map i plotë për të dy librat; auto-deklaratë TVSH e mundshme; ruajtur te `docs/evidence/reference_atk/`.
 **v2.7:** PRO DATA **Wave 2 (PLANET POS/KDS)** review nga Codex → entitete të konfirmuara (table_session, kitchen_ticket, kds_station, cash_shift, worker_settlement, manager_approval); dizajni ynë i barazimit/anulimit konfirmohet net-new & më i rreptë.
 **v2.8:** PRO DATA **Wave 3 (audit/RBAC/config, sanitized)** krye → **nxjerrja nga backup-i E MBYLLUR** (gaps 0); evidence → `07_PRODATA_Evidence_Closure_Parity_Matrix.md`. Pa migrim passwords/PIN/MAC; audit append-only + break-glass + config typed.
 **v2.9:** **Finance Operations e ndarë nga Accounting** → modul/rol i veçantë (Financë Operative); doc `08_Finance_Operations_SCOPE`; entitete expense/cash_movement.
@@ -32,7 +32,7 @@
 - Bizneset: **KABI** (fabrikë qumështi + fermerë + prodhim + stok automjeti + distribuim) dhe **PLANET** (restorant + POS + KDS + stok + kontabilitet).
 - Gjuha e UI: **Shqip** (i18n për anglisht/serbisht më vonë, pa ndryshim kodi). **KABI hyn live i pari**, PLANET paralel pas tij. Events/banketet **jashtë v1**.
 - **Bërthamë e ripërdorshme + emërtim neutral:** platforma ndërtohet me core të ripërdorshëm dhe emër neutral; **çdo ripërdorim jashtë projektit trajtohet sipas kushteve komerciale/IP**. Çdo entitet tenant-scoped lidhet me `business_id`.
-- **Status për çdo feature:** **MVP / Later / Roadmap / Requires-accountant / Requires-ATK / Requires-factory** — regjistri: `iData_Plus_Faza0/Feature_Status_Register.md`.
+- **Status për çdo feature:** **MVP / Later / Roadmap / Requires-accountant / Requires-ATK / Requires-factory** — regjistri: `docs/canonical/00-ssot/Feature_Status_Register.md`.
 - **Komerciale:** jashtë repository-it teknik; ruhen vetëm në dokumente private të pronarit/iCode dhe në materialet ligjore konfidenciale.
 
 ## 2. Arkitektura & teknologjia
@@ -46,7 +46,7 @@
 - **Para:** `numeric` për GL (precizion i lartë); **SEF money scale PER-FIELD** (items `Price/Total`=€0.0001/×10000; coupon `Total`/payments/tax/totals=cents/×100, sipas pos-csharp); decimal në TS; **tabular-nums** në UI. Kurrë float.
 - **Hardware (klienti blen + zotëron; iCode specifikon + konfiguron):** **KABI** — PDA Android industriale me skaner (Sunmi/iData) + printer termik mobil (BT/Wi-Fi, rezistent); tableta **IP65** për laborator/pranim; peshore me integrim **RS232/LAN** (lexim automatik). **PLANET** — **~10–12 ekrane KDS** industriale (ose monitor + mini-PC; numri saktë finalizohet pas floor-plan), pajisje kamarieri (Sunmi M2/iData) + telefona personalë, printera termikë LAN/Wi-Fi (arka) + buzzer (kuzhinë backup), **Mini-PC/NUC hub + UPS**. Pajisjet ekzistuese ripërdoren nëse plotësojnë minimumet (8GB RAM, Win10/11 ose Linux, printera LAN/USB standardë); klienti jep inventarin, iCode inspekton.
 - **Onboarding / Master Data / Integrations:** **ARBK auto-import** — butoni "Kërko subjektin" → faqja ARBK → një klik importon të dhënat e subjektit; e njëjta logjikë për **biznese EU** (regjistrat EU). *(Feature onboarding-u/master-data — jo siguri.)*
-- **Decision gates (Faza 0):** Supabase hosted vs self-host EU; PowerSync vs custom-sync (pas PoC); sa GL-postim në Postgres functions vs NestJS; connection pooling; residenca/backup + **PITR/restore drill**; **DB e hub-it lokal: Postgres vs SQLite/embedded**; **strategjia e build-it RN/Expo (EAS vs bare)**; printera fiskalë vs SEF software (#8). *(RN vs PWA — MBYLLUR: native RN. Node = **24 LTS**, fiksuar me `.nvmrc`.)* → regjistri i plotë: `iData_Plus_Faza0/05_Decision_Gates_ADR.md`.
+- **Decision gates (Faza 0):** Supabase hosted vs self-host EU; PowerSync vs custom-sync (pas PoC); sa GL-postim në Postgres functions vs NestJS; connection pooling; residenca/backup + **PITR/restore drill**; **DB e hub-it lokal: Postgres vs SQLite/embedded**; **strategjia e build-it RN/Expo (EAS vs bare)**; printera fiskalë vs SEF software (#8). *(RN vs PWA — MBYLLUR: native RN. Node = **24 LTS**, fiksuar me `.nvmrc`.)* → regjistri i plotë: `docs/canonical/01-phase0/05_Decision_Gates_ADR.md`.
 
 ## 3. Plani Faza 0 → Lansim (me kritere pranimi)
 | Faza | Fokusi | Kriteri i pranimit (DoD) |
@@ -109,7 +109,7 @@
 
 ## 7. SEF / Fiskalizimi
 - **iCode aplikon** si ofrues i softuerit SEF (Software House — jo secili biznes); merr Certifikatë + Numër Identifikues i SEF-it. Secili NUI/POS/PKI regjistrohet sipas ATK. KABI/PLANET = shfrytëzues të softuerit të certifikuar.
-- **🟢 STATUS (28.06.2026): "Testim para Aplikimit" PRANUAR nga ATK** — test phase teknik AKTIV. **Referenca zyrtare e detyrueshme: github.com/fiskalizimi** (`models.proto`, ECDSA P-256, QR=`base64(proto)|base64(sig)`, tax **A/C/D/E** (A=exempt), **money per-field** (items €0.0001 / totals cents), **CouponType Sale=1/Cancel=2/Return=3** +ReferenceNo). Test server `fiskalizimi-test.atk-ks.org` (Swagger). Identifikuesit = intern: `iData_Plus_Faza0/06_SEF_Test_Phase_Active.md`. **PoC SEF s'nis pa analizë të GitHub-it.**
+- **🟢 STATUS (28.06.2026): "Testim para Aplikimit" PRANUAR nga ATK** — test phase teknik AKTIV. **Referenca zyrtare e detyrueshme: github.com/fiskalizimi** (`models.proto`, ECDSA P-256, QR=`base64(proto)|base64(sig)`, tax **A/C/D/E** (A=exempt), **money per-field** (items €0.0001 / totals cents), **CouponType Sale=1/Cancel=2/Return=3** +ReferenceNo). Test server `fiskalizimi-test.atk-ks.org` (Swagger). Identifikuesit = intern (GITIGNORED, private): `docs-private/sef/sef-test-identifiers.secret.md`. **PoC SEF s'nis pa analizë të GitHub-it.**
 - **Fazim:** Faza 0 = **test phase AKTIV + PoC** → Faza 1–2 = **fiscal flow minimal** → **pas testit teknik të suksesshëm** = aplikim formal (vendim ATK brenda **15 ditëve pune**) → **para KABI live** = certifikimi i kryer.
 - **Offline (Neni 44):** kupon offline + fiskalizim brenda **48h**; **fiscal outbox i ndarë** nga sync (radhë e izoluar — s'ndalet kurrë); retry/idempotencë; monitorim afati; raport ditor.
 - POS ID + **PKI per pajisje** (ECDSA P-256; onboarding `/ca/verify`→CSR→`/ca/signcsr`); printer mobil + QR; nënshkrim ECDSA P-256; Protobuf; dërgim `/pos/coupon`→`transaction_id`.
@@ -185,7 +185,7 @@
 - **Pagat/payroll = Faza 1** (RISHIKUAR v2.17 — KABI/kontabilist detyrueshëm; dikur v2.2 = Faza 2).
 
 **27.06.2026 — v2.3 (gati për Fazën 0):**
-- Pranuar vlerësimi i Codex për Fazën 0 (~85–90% gati); **paketa Faza 0 prodhohet te `iData_Plus_Faza0/`** (Execution Plan, 5 PoC specs, RBAC matrix, Accounting Compatibility Matrix, Data Model draft, Decision-Gates ADR, scaffold, SEF sandbox request, Feature Status Register).
+- Pranuar vlerësimi i Codex për Fazën 0 (~85–90% gati); **paketa Faza 0 prodhohet te `docs/canonical/01-phase0/`** (Execution Plan, 5 PoC specs, RBAC matrix, Accounting Compatibility Matrix, Data Model draft, Decision-Gates ADR, scaffold→rrënja e repo-s, SEF sandbox request, Feature Status Register).
 - **Node = 24 LTS** (verifikuar Active LTS deri 30 Prill 2028; më mirë se 22 që është në maintenance), fiksuar me `.nvmrc`.
 - Shtuar **2 pyetje të hapura:** floor-plan PLANET (#10), inventar pajisjesh (#11).
 - Shtuar **decision gates:** DB e hub-it lokal, build RN/Expo, PITR/restore drill.
@@ -207,7 +207,7 @@
 - **ADR-017:** konfirmo printer hardware-vs-software gjatë test phase aktive, para blerjes së pajisjeve.
 
 **28.06.2026 — v2.6 (template zyrtare ATK):**
-- Kontabilisti dërgoi **template-et zyrtare** të Librit të Blerjes (29 kolona — IDENTIK me formatin tonë, incl. fermerë [51]) dhe të **Librit të Shitjes (24 kolona — i ri)**; ruajtur te `iData_Plus_Faza0/reference_atk/`.
+- Kontabilisti dërgoi **template-et zyrtare** të Librit të Blerjes (29 kolona — IDENTIK me formatin tonë, incl. fermerë [51]) dhe të **Librit të Shitjes (24 kolona — i ri)**; ruajtur te `docs/evidence/reference_atk/`.
 - **Box-map i plotë për të dy librat** → auto-deklaratë TVSH (input + output). Shitje: të liruara [9]/[10]/[11], 18%→[12], 8%→[14], totali TVSH [30].
 - Mbetet vetëm **një muaj real i plotësuar** për validim end-to-end (pyetja #4).
 
@@ -240,7 +240,7 @@
 - Entitete finance shtesë: payment_method, payment_terminal, cash_count, settlement_line, supplier_payment.
 
 **29.06.2026 — v2.11 (Finance Ops evidence i mbyllur + workflow spec):**
-- **DDL/DML cross-check:** 0 tabela me DDL të munguar; **3382 referenca** (READ 3182/DELETE 256/INSERT 252/UPDATE 222); **4 micro-extract** (`tblUserMenyratPagesa` ×2, `tblDocBlerjetShpenzimetTjera`, `tblDocPagesatAvanset`) të nxjerra+sanitizuara → **finance evidence i mbyllur pa dyshim**. Të gjitha te `iData_Plus_Faza0/reference_atk/`.
+- **DDL/DML cross-check:** 0 tabela me DDL të munguar; **3382 referenca** (READ 3182/DELETE 256/INSERT 252/UPDATE 222); **4 micro-extract** (`tblUserMenyratPagesa` ×2, `tblDocBlerjetShpenzimetTjera`, `tblDocPagesatAvanset`) të nxjerra+sanitizuara → **finance evidence i mbyllur pa dyshim**. Të gjitha te `docs/evidence/reference_atk/`.
 - **`09_Finance_Operations_Workflow_Spec`** (draft): flukse per-ekran + fusha/statuse + **paketa e pyetjeve live për PLANET** (e vetmja gjë e mbetur = konfirmim barazimi live, jo backup).
 - Sinjale dizajni nga PRO DATA: pagesë→GL (ekstrakte bankare), recycle-bin/restore, `_DEL` audit → mbështesin reversal/audit + bank-reconciliation.
 
@@ -270,6 +270,10 @@
 - **Subjekti i deklaratës dhe librat PLANET2/RESORT** → lidhja juridike/operative duhet të konfirmohet me kontabilistin; identifikuesit ruhen jashtë git.
 - **Evidence** → `evidence-private-local/02-accounting/PLANET_VAT_Reconciliation_Maj_2026_2026-07-01.md` (jashtë git); numrat → **fixture test për `packages/accounting`** (strict për bazat, tolerancë e vogël për output VAT).
 - **KORRIGJIM:** leximi i parë i deklaratës ishte gabim; validimi i mëvonshëm konfirmoi carry-forward dhe la rounding-rule ende të hapur. Exact values ruhen jashtë git.
+
+**07.07.2026 — Increment 1 (Walking Skeleton):**
+- **Increment 1 skeleton merged (PR #4, `5a87f1a`):** monorepo + `shared-types` + accounting library-first + PM protocol; gitleaks rule filename-scoped; CI në corepack (pa action third-party). **Hapi B nisur** (mbyllja e Runbook §8: `packages/database` + migrime data-model fillestar + `apps/api` + `apps/web` + ping web→api→db).
+- **Konventë modeli:** modeli logjik `user` → tabela fizike **`app_user`** (`user` = fjalë e rezervuar në Postgres). Auditimi group-level (audit_log pa `business_id`) = pikë e hapur për Fazën 1.
 
 ## 12. Pyetjet e hapura (pending)
 | # | Pyetja | Kush | Afati |

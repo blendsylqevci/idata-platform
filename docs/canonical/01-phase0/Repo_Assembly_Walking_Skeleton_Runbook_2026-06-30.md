@@ -1,6 +1,6 @@
 # Repo Assembly + Walking Skeleton — Runbook
 
-**Data:** 30 Qershor 2026 · **Për:** Claude Code / Codex · **Burimi:** `iData_Plus_SSOT.md` + `iData_Plus_Faza0/`
+**Data:** 30 Qershor 2026 · **Për:** Claude Code / Codex · **Burimi:** `iData_Plus_SSOT.md` + `docs/canonical/`
 **Rregulli:** ripërdor scaffold-in ekzistues, **mos rishkruaj**. Asnjë modul i madh (POS/KDS/KABI/SEF-full/UI). Vetëm themeli + accounting library.
 
 ---
@@ -11,7 +11,7 @@
 - Branch protection në `main` (PR + review) — aktivizo sapo të jetë commit-i i parë.
 
 ## 2. Kopjo scaffold-in ekzistues (reuse, jo rewrite)
-Nga `iData_Plus_Faza0/scaffold/` → rrënja e repo-s:
+Scaffold-i (tashmë i vendosur në rrënjë të repo-s pas canonical-split) → rrënja e repo-s:
 ```
 README.md  AGENTS.md  CLAUDE.md  CONTRIBUTING.md  .gitignore  .nvmrc(=24)
 ```

@@ -376,6 +376,6 @@ Ky dokument duhet përdorur bashkë me:
 
 - `Accounting_Posting_Test_Fixtures_v0_2026-06-29.md`
 - `Accounting_10_10_Hardening_Checklist_2026-06-29.md`
-- `PRODATA_Evidence_Traceability_Matrix_2026-06-29.md`
+- `../01-phase0/07_PRODATA_Evidence_Closure_Parity_Matrix.md`
 
 Në development, hapi i parë nuk është “UI i kontabilitetit”; hapi i parë është një **posting simulator** që merr fixture document dhe kthen expected GL/tax-book/subledger lines.

@@ -1,7 +1,7 @@
 # Prompt — Finance Operations UI (wireframe / screen breakdown) për Claude Code Design / Figma
 
 > **Faza:** vetëm **UI/UX prototype / design exploration** — **mock data**, pa backend/DB/business-logic. Output: **hi-fi wireframe-ekrane + komponentë + mini style-guide**, **desktop-first** (financa punohet në PC), me variante responsive. **APLIKACION (in-product), JO website/landing.**
-> Burimi i specës: `iData_Plus_Faza0/08_Finance_Operations_SCOPE` + `09_Finance_Operations_Workflow_Spec`. Roli: **Financë Operative (Financë Operative)** — i ndarë nga kontabiliteti.
+> Burimi i specës: `docs/canonical/01-phase0/08_Finance_Operations_SCOPE_PLANET_KABI.md` + `docs/canonical/01-phase0/09_Finance_Operations_Workflow_Spec.md`. Roli: **Financë Operative (Financë Operative)** — i ndarë nga kontabiliteti.
 
 ## 1. Konteksti
 Moduli **Finance Operations** i platformës **iData+** (multi-company): kontrolli ditor i parasë për **PLANET** (restorant) dhe **KABI** (fabrikë). NUK është kontabilitet (GL/TVSH) — është shtresa operative para-GL: arka, barazime, POS/banka, shpenzime, pagesa furnitorësh, handover te kontabilisti. **Gjuha e UI: Shqip.**
