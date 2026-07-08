@@ -3,6 +3,9 @@
 # nga testet. Testet e PoC-4 menaxhojnë lifecycle-in VETËM të këtij containeri
 # (start / kill -9 / restart) — përjashtim i kontrolluar për skenarin #6.
 # Auth = trust: vetëm dev/test lokal — asnjë sekret në git.
+# `name: poc4` = project-name i FIKSUAR: harness-i ynë s'mund ta prekë kurrë
+# project-in e compose-it kryesor (5433) as me COMPOSE_REMOVE_ORPHANS.
+name: poc4
 services:
   hub:
     image: postgres:16-alpine

@@ -50,8 +50,10 @@ export interface HubStore {
   /** Porosi → routing artikull→stacion → tickets + outbox event, NË NJË transaksion. */
   createOrder(order: OrderInput): Promise<TicketRow[]>;
   confirmTicket(ticketId: string): Promise<void>;
-  /** Ticket të pa-konfirmuar më të vjetër se timeoutMs → fallback queue + flamur. */
-  sweepToFallback(timeoutMs: number): Promise<number>;
+  /** Ticket të pa-konfirmuar më të vjetër se timeoutMs → fallback queue + flamur.
+   *  `devicePrefixForTest` = filtër opsional (VETËM për izolim testesh të
+   *  ri-ekzekutueshme); sjellja default = business-wide. */
+  sweepToFallback(timeoutMs: number, devicePrefixForTest?: string): Promise<number>;
   pendingOutbox(): Promise<OutboxRow[]>;
   markSynced(eventUuid: string): Promise<void>;
 }
@@ -97,7 +99,7 @@ export class PgHubStore implements HubStore {
           "INSERT INTO poc4_order_item (id, business_id, order_id, article_code, qty) VALUES ($1, $2, $3, $4, $5::numeric)",
           [item.itemId, biz, order.orderId, item.articleCode, item.qty],
         );
-        const mapped = POC4_ROUTING[item.articleCode];
+        const mapped = POC4_ROUTING.get(item.articleCode);
         const stationCode = mapped ?? POC4_DEFAULT_STATION;
         const flagged = mapped === undefined; // i pa-mapuar → default + flamur (jo humbje, jo crash)
         const t = await cx.query<TicketRow>(
@@ -131,14 +133,20 @@ export class PgHubStore implements HubStore {
     );
   }
 
-  async sweepToFallback(timeoutMs: number): Promise<number> {
+  async sweepToFallback(timeoutMs: number, devicePrefixForTest?: string): Promise<number> {
     // SSOT §6 (~30s) → config i testueshëm. Ticket pa konfirmim brenda afatit →
     // fallback queue ("printeri" i simuluar) + flamurohet.
+    // Default = business-wide; $3 (device-prefix) përdoret VETËM nga testet
+    // për izolim ri-ekzekutimi mbi të njëjtin volume.
     const r = await this.pool.query(
       `WITH stale AS (
-         SELECT id FROM poc4_kds_ticket
-          WHERE business_id = $1 AND status <> 'konfirmuar'
-            AND created_at < now() - ($2::text || ' milliseconds')::interval
+         SELECT k.id FROM poc4_kds_ticket k
+          WHERE k.business_id = $1 AND k.status <> 'konfirmuar'
+            AND k.created_at < now() - ($2::text || ' milliseconds')::interval
+            AND ($3::text IS NULL OR EXISTS (
+              SELECT 1 FROM poc4_order_item i
+              JOIN poc4_order o ON o.id = i.order_id
+              WHERE i.id = k.order_item_id AND o.device_id LIKE $3::text || '%'))
        ), ins AS (
          INSERT INTO poc4_fallback_queue (business_id, ticket_id, reason)
          SELECT $1, id, 'stacioni s''konfirmoi brenda afatit' FROM stale
@@ -148,7 +156,7 @@ export class PgHubStore implements HubStore {
        UPDATE poc4_kds_ticket SET flagged = true
         WHERE id IN (SELECT ticket_id FROM ins)
        RETURNING id`,
-      [POC4_IDS.biz, String(timeoutMs)],
+      [POC4_IDS.biz, String(timeoutMs), devicePrefixForTest ?? null],
     );
     return r.rowCount ?? 0;
   }

@@ -60,7 +60,11 @@ export class ToggleCloudTransport {
   private sent = 0;
   constructor(
     private readonly cloud: CloudApply,
-    private readonly opts: { failAfterCount?: number } = {},
+    private readonly opts: {
+      failAfterCount?: number;
+      /** Prit lidhjen PAS aplikimit të eventit me këtë hub_seq (apliku, por pa ACK) — modeli #5b i PoC-3. */
+      applyThenFailOnSeq?: number;
+    } = {},
   ) {}
 
   async send(event: OutboxRow): Promise<CloudOutcome> {
@@ -74,6 +78,9 @@ export class ToggleCloudTransport {
     }
     const outcome = await this.cloud.apply(event);
     this.sent += 1;
+    if (this.opts.applyThenFailOnSeq !== undefined && Number(event.hub_seq) === this.opts.applyThenFailOnSeq) {
+      throw new Error("lidhja u pre PAS aplikimit, PARA ack (failpoint hub→cloud)");
+    }
     return outcome;
   }
 }

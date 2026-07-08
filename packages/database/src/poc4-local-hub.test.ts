@@ -123,7 +123,9 @@ describe("PoC-4a local hub SEMANTIKA (Docker; hardware = 4b) — kërkon Postgre
     await hp.query("UPDATE poc4_kds_ticket SET created_at = now() - interval '3 seconds' WHERE id = ANY($1::uuid[])", [
       [t1.id, t2.id],
     ]);
-    const moved = await store().sweepToFallback(2000);
+    // Filtri device-prefix = VETËM për izolim testesh të ri-ekzekutueshme mbi të
+    // njëjtin volume (default = business-wide).
+    const moved = await store().sweepToFallback(2000, DEVP);
     expect(moved).toBe(1); // vetëm i pa-konfirmuari
 
     const fb = await hp.query("SELECT 1 FROM poc4_fallback_queue WHERE ticket_id = $1", [t1.id]);
@@ -135,10 +137,13 @@ describe("PoC-4a local hub SEMANTIKA (Docker; hardware = 4b) — kërkon Postgre
   });
 
   it(
-    "#6 hub restart: docker kill -9 NË MES të punës → WAL recovery, zero humbje, radha e paprekur",
+    "#6 hub restart: docker kill -9 me radhë JO-bosh (lidhjet e mbyllura para kill — crash mbi WAL me porosi të pashkruara në cloud) → zero humbje",
     async () => {
       const before = await hubCounts();
-      expect(before.pending).toBeGreaterThan(0); // radhë JO-bosh në momentin e crash-it
+      // Guard i plotë: ka porosi + tickets + radhë JO-bosh në momentin e crash-it.
+      expect(before.orders).toBeGreaterThan(0);
+      expect(before.tickets).toBeGreaterThan(0);
+      expect(before.pending).toBeGreaterThan(0);
 
       await hp.end(); // mbyll lidhjet tona para kill (pool i vjetër s'vlen më)
       killHubMinus9(); // SIGKILL containerit poc4-hub (≈ crash procesi; rryma reale = 4b)
@@ -152,12 +157,14 @@ describe("PoC-4a local hub SEMANTIKA (Docker; hardware = 4b) — kërkon Postgre
   );
 
   it("rikthim interneti: sync hub→cloud → çdo porosi SAKTËSISHT një herë; replay i plotë → 0 dublime", async () => {
-    const pendingBefore = (await hubCounts()).pending; // 10 + unmapped(1) + fallback(2) = 13
+    const pendingBefore = (await hubCounts()).pending; // 10 + unmapped(1) + fallback(2) = 13 (scoped këtij run-i)
     const transport = new ToggleCloudTransport(new CloudApplyPg(getPool()));
     const res = await syncHubToCloud(store(), transport);
-    expect(res).toEqual({ applied: pendingBefore, replayed: 0 });
-    expect((await hubCounts()).pending).toBe(0);
-    expect(await cloudItemCount()).toBe(pendingBefore); // 1 artikull per porosi në këtë PoC
+    // Sync-u është business-wide: mund të drenojë edhe leftovers nga një run i
+    // NDËRPRERË më parë (vetë-shërim). Ekzaktësia matet mbi counts e SCOPED:
+    expect(res.applied + res.replayed).toBeGreaterThanOrEqual(pendingBefore);
+    expect((await hubCounts()).pending).toBe(0); // radha e këtij run-i u zbraz
+    expect(await cloudItemCount()).toBe(pendingBefore); // SAKTËSISHT një herë secili (scoped)
 
     // Replay i PLOTË i të gjitha eventeve (p.sh. hub-i humbi ack-t) → vetëm replay, 0 dublime.
     const all = await hp.query<{ hub_seq: string; event_uuid: string; payload: never }>(
@@ -188,6 +195,27 @@ describe("PoC-4a local hub SEMANTIKA (Docker; hardware = 4b) — kërkon Postgre
     const res = await syncHubToCloud(store(), new ToggleCloudTransport(new CloudApplyPg(getPool())));
     expect(res).toEqual({ applied: 2, replayed: 0 });
     expect(await cloudItemCount()).toBe(cloudBefore + 3); // 3 saktësisht një herë
+  });
+
+  it("#5b cut PAS aplikimit pa ACK (modeli PoC-3) → resume → replay skip, 0 dublime", async () => {
+    for (let i = 0; i < 2; i++) await store().createOrder(order(DEV("w2"), "art-demo-g1"));
+    const cloudBefore = await cloudItemCount();
+    const pending = await store().pendingOutbox();
+    expect(pending.length).toBe(2);
+    const firstSeq = Number(pending[0]!.hub_seq);
+
+    // Eventi i parë APLIKOHET në cloud por lidhja bie PARA ack → mbetet pending.
+    await expect(
+      syncHubToCloud(
+        store(),
+        new ToggleCloudTransport(new CloudApplyPg(getPool()), { applyThenFailOnSeq: firstSeq }),
+      ),
+    ).rejects.toThrow(/PAS aplikimit/);
+    expect((await hubCounts()).pending).toBe(2); // asnjë ack — të dyja ende pending
+
+    const res = await syncHubToCloud(store(), new ToggleCloudTransport(new CloudApplyPg(getPool())));
+    expect(res).toEqual({ applied: 1, replayed: 1 }); // i pari -> replay skip; i dyti -> applied
+    expect(await cloudItemCount()).toBe(cloudBefore + 2); // 0 dublime
   });
 
   it("#7 hub DB i paarritshëm nga API e pajisjes: gabim SPECIFIK lidhjeje; retry me hub të kthyer OK", async () => {
@@ -228,10 +256,13 @@ describe("PoC-4a local hub SEMANTIKA (Docker; hardware = 4b) — kërkon Postgre
     const capped = new PgHubStore(hp, { outboxCap: 2 });
     await capped.createOrder(order(DEV("w1"), "art-demo-b1"));
     await capped.createOrder(order(DEV("w1"), "art-demo-b1"));
+    const beforeReject = await hubCounts();
     await expect(capped.createOrder(order(DEV("w1"), "art-demo-b1"))).rejects.toThrow(
       /radha e hub-it plot \(cap 2\)/,
     );
-    expect((await hubCounts()).pending).toBe(2); // porosia e refuzuar s'la asnjë gjurmë (tx rollback)
+    // Porosia e refuzuar s'la ASNJË gjurmë: as outbox, as orders, as tickets (tx rollback).
+    expect(await hubCounts()).toEqual(beforeReject);
+    expect(beforeReject.pending).toBe(2);
 
     // Recovery: sync-i zbraz radhën → krijimi rifillon.
     await syncHubToCloud(capped, new ToggleCloudTransport(new CloudApplyPg(getPool())));

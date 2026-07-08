@@ -8,12 +8,13 @@ export const POC4_IDS = {
 
 export const POC4_HUB_ID = "hub-demo-01";
 
-/** Routing artikull→stacion (config i hub-it në PoC; tabela reale e routing = F7/F8). */
-export const POC4_ROUTING: Record<string, string> = {
-  "art-demo-g1": "demo-grill",
-  "art-demo-g2": "demo-grill",
-  "art-demo-b1": "demo-bar",
-};
+/** Routing artikull→stacion (config i hub-it në PoC; tabela reale e routing = F7/F8).
+ *  Map (jo objekt literal) — mbyll edge-in e prototype-key ("constructor" etj.). */
+export const POC4_ROUTING = new Map<string, string>([
+  ["art-demo-g1", "demo-grill"],
+  ["art-demo-g2", "demo-grill"],
+  ["art-demo-b1", "demo-bar"],
+]);
 /** Artikull i PA-mapuar → stacion default + flamurohet (sjellje e definuar). */
 export const POC4_DEFAULT_STATION = "demo-grill";
 
