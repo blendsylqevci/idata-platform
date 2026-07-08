@@ -23,8 +23,12 @@ export function generateEphemeralP256(): KeyPair {
  *  Node default = DER (ASN.1, ~70-72 byte); .NET (referenca pos-csharp) prodhon
  *  raw r||s = IEEE P1363 (EKZAKT 64 byte për P-256). Default praktik për PoC =
  *  'ieee-p1363'; DER mbahet për debug/krahasim. Konfirmimi FINAL kundër
- *  serverit real = Tier 2 (nëse kuponi i parë → FAILED VERIFICATION,
- *  dyshimi #1 = ky format — provo alternativën para çdo gjëje tjetër). */
+ *  serverit real = Tier 2. PLAYBOOK i debug-ut nëse kuponi i parë real →
+ *  FAILED VERIFICATION:
+ *    #1 formati i firmës (P1363 vs DER) — provo alternativën para çdo gjëje;
+ *    #2 ÇFARË nënshkruhet: SHA256(UTF8(base64Proto)) [rruga jonë, nga
+ *       pos-csharp] vs raw proto bytes — provo edhe këtë axis nëse
+ *       swap-i P1363↔DER s'e rregullon. */
 export type SigEncoding = "ieee-p1363" | "der";
 export const DEFAULT_SIG_ENCODING: SigEncoding = "ieee-p1363";
 

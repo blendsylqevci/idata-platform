@@ -83,7 +83,9 @@ Onboarding-u i plotë: gjenero çelës **ECDSA P-256** → `POST /ca/verify/{nui
 1. Serializo proto → bytes. 2. `base64Proto = Base64(bytes)`. 3. **Firma = ECDSA P-256 mbi SHA-256(UTF8(base64Proto))** → `base64Sig`. 4. **QR = `base64Proto|base64Sig`** (pipe). Për `/pos/coupon`: `details=base64Proto(PosCoupon)`, `signature=base64Sig` — i njëjti parim firme.
 
 **KODIMI I FIRMËS — EKSPLICIT (amendament pas review-t PM):** referenca `pos-csharp` = **.NET**, ku `ECDsa.SignData` prodhon **raw r||s = IEEE P1363** (EKZAKT **64 byte** për P-256); **Node default = DER** (ASN.1, ~70-72 byte) → pa `dsaEncoding` eksplicit firmat NUK përputhen. **Kodimi praktik për PoC = `ieee-p1363`** (default-i ynë eksplicit; DER mbahet për debug). Konfirmimi FINAL = kundër serverit real në Tier 2.
-> **Hapi i debug-ut në Tier 2:** nëse kuponi i parë real → *FAILED VERIFICATION*, **dyshimi #1 = formati i firmës (P1363 vs DER)** — provo alternativën PARA çdo gjëje tjetër.
+> **Playbook i debug-ut në Tier 2** (nëse kuponi i parë real → *FAILED VERIFICATION*):
+> **#1 = formati i firmës (P1363 vs DER)** — provo alternativën PARA çdo gjëje tjetër.
+> **#2 = ÇFARË nënshkruhet:** `SHA256(UTF8(base64Proto))` (rruga jonë, nga pos-csharp) vs **raw proto bytes** — provo edhe këtë axis nëse swap-i P1363↔DER s'e rregullon.
 
 ## 7. ZGJEDHJA E DEP-it PROTOBUF (saktësisht NJË)
 

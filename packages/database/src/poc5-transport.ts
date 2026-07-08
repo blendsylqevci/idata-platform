@@ -84,7 +84,9 @@ export class MockAtkServer implements AtkTransport {
   }
 }
 
-/** Opt-in i DYFISHTË (rregulli B): RUN_SEF_LIVE=1 ∧ SEF_ENV=test ∧ URL = test-serveri. */
+/** Opt-in i DYFISHTË (rregulli B): RUN_SEF_LIVE=1 ∧ SEF_ENV=test ∧ URL = test-serveri.
+ *  Kontrolli i URL-së = ORIGIN i saktë (jo startsWith — bllokon p.sh.
+ *  "fiskalizimi-test.atk-ks.org.evil.com"). */
 export function liveOptIn(): { enabled: boolean; reason: string; baseUrl: string } {
   const baseUrl = process.env.SEF_TEST_BASE_URL ?? "";
   if (process.env.RUN_SEF_LIVE !== "1") {
@@ -93,7 +95,13 @@ export function liveOptIn(): { enabled: boolean; reason: string; baseUrl: string
   if (process.env.SEF_ENV !== "test") {
     return { enabled: false, reason: "SEF_ENV≠test", baseUrl };
   }
-  if (!baseUrl.startsWith("https://fiskalizimi-test.atk-ks.org")) {
+  let origin: string;
+  try {
+    origin = new URL(baseUrl).origin;
+  } catch {
+    return { enabled: false, reason: "SEF_TEST_BASE_URL i pavlefshëm", baseUrl };
+  }
+  if (origin !== "https://fiskalizimi-test.atk-ks.org") {
     return { enabled: false, reason: "SEF_TEST_BASE_URL≠test-server (prodhimi i NDALUAR)", baseUrl };
   }
   return { enabled: true, reason: "opt-in i dyfishtë OK", baseUrl };

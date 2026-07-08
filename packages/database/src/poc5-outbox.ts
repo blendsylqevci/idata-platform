@@ -89,7 +89,7 @@ export class FiscalOutbox {
       signError = (e as Error).message;
     }
 
-    // deadline_at NUK shkruhet nga app-i: kolonë GENERATED në DB (created_at + 48h).
+    // deadline_at NUK shkruhet nga app-i: vendoset nga TRIGGER-i në DB (created_at + 48h).
     const ins = await this.pool.query<{ id: string; status: string }>(
       `INSERT INTO poc5_fiscal_outbox
          (business_id, coupon_uuid, coupon_type, payload_ref, status, next_retry_at, created_at)
