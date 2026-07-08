@@ -43,6 +43,8 @@ Këto janë absolute:
 
 Këto entitete duhet të ekzistojnë ose të projektohen si pjesë e accounting core:
 
+> **Shënim (emërtimi):** emrat e entiteteve = sipas `../01-phase0/04_Data_Model_Draft.md` (v2.2.1 = autoriteti i emrave). Harmonizuar pas PoC-2 (`partner_ledger_entry` → `partner_card_entry`).
+
 | Entity | Qëllimi |
 | --- | --- |
 | `posting_rule` | Header i rregullës: business/template, document type, effective date, status. |
@@ -51,7 +53,7 @@ Këto entitete duhet të ekzistojnë ose të projektohen si pjesë e accounting 
 | `journal_entry` | Header i GL entry. |
 | `journal_line` | Debit/kredit lines. |
 | `tax_book_entry` | Rreshti i Librit të Shitjes/Blerjes. |
-| `partner_ledger_entry` | AR/AP/customer/supplier card movement. |
+| `partner_card_entry` | AR/AP/customer/supplier card movement. |
 | `open_item` | Faturë/pagese e hapur për allocation. |
 | `payment_allocation` | Lidhja pagesë ↔ faturë. |
 | `inventory_ledger_entry` | Lëvizje sasie stoku. |
