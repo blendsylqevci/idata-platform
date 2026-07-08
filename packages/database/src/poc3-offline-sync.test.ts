@@ -289,6 +289,9 @@ describe("PoC-3 offline sync — outbox → sync pa humbje, pa dublim (kërkon P
       [POC3_IDS.biz, ART("c")],
     );
     expect(variance.rowCount).toBe(1);
+    // Pin direkt: saktësisht NJË sync_event per pajisje (asnjë dublim nën konkurrencë).
+    expect(await serverEventCount(DEV("conc-a"))).toBe(1);
+    expect(await serverEventCount(DEV("conc-b"))).toBe(1);
   });
 
   it("R2 çmim i ngrirë: serveri ndryshon çmimin gjatë offline → fatura me çmimin e ngrirë + poc3_price_variance", async () => {
@@ -352,6 +355,13 @@ describe("PoC-3 offline sync — outbox → sync pa humbje, pa dublim (kërkon P
       [POC3_IDS.biz, ART("k")],
     );
     expect(stock.rows[0]!.qty).toBe("89.00");
+    // Audit i pin-uar: TË TRIA eventet (seq 1,2,3) ekzistojnë në poc3_sync_event —
+    // edhe seq 2, i refuzuar si invoice, ka audit-event të aplikuar.
+    const evs = await getPool().query<{ device_seq: string }>(
+      "SELECT device_seq::text FROM poc3_sync_event WHERE business_id = $1 AND device_id = $2 ORDER BY device_seq",
+      [POC3_IDS.biz, DEV("credit")],
+    );
+    expect(evs.rows.map((r) => r.device_seq)).toEqual(["1", "2", "3"]);
   });
 
   it("retry me backoff: 2 dështime kalimtare → sukses në tentativën e tretë, vonesa eksponenciale", async () => {
@@ -435,6 +445,14 @@ describe("PoC-3 offline sync — outbox → sync pa humbje, pa dublim (kërkon P
     ).toThrow(/outbox plot \(cap 3\)/);
     expect(dev.outbox.length).toBe(3);
     expect(dev.outbox[0]!.eventUuid).toBe(firstUuid); // i pari ende aty — zero fshirje të heshtura
+
+    // Recovery (qeliza e matricës #8, e testuar): sync-i zbraz outbox-in → krijimi rifillon.
+    const res = await syncDevice(dev, new InProcessTransport(newServer()), { delayFn: noDelay });
+    expect(res).toEqual({ applied: 3, replayed: 0 });
+    expect(dev.outbox.length).toBe(0);
+    const e4 = dev.createInvoice({ articleCode: ART("a"), qty: "1.00", partnerCode: PRT("x"), payment: "cash" });
+    expect(e4.deviceSeq).toBe(4); // seq vazhdon monotonik pas zbrazjes
+    expect(dev.outbox.length).toBe(1);
   });
 });
 

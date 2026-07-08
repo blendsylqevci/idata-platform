@@ -1,8 +1,10 @@
 -- PoC-3 — Offline Sync: tabela VETËM poc3_ (emrat canonical invoice/article/stock/
 -- partner dizajnohen në F2/F3 — QËLLIMISHT të papërdorura këtu).
--- business_id NOT NULL DIREKT kudo. Idempotenca dhe rendi zbatohen NË DB:
+-- business_id NOT NULL DIREKT kudo. Idempotenca dhe ANTI-DUBLIMI zbatohen NË DB:
 --   UNIQUE (business_id, event_uuid)              -> "një event → një aplikim"
---   UNIQUE (business_id, device_id, device_seq)   -> rendi/anti-dublim per pajisje
+--   UNIQUE (business_id, device_id, device_seq)   -> anti-dublim i device_seq në DB
+-- Rendi AKTUAL zbatohet nga sync engine (sortim sipas device_seq); validimi
+-- server-side i rendit/gap-eve mbetet kërkesë për ADR-011.
 -- device_seq = monotonic per pajisje (rendi NUK varet nga ora e pajisjes;
 -- occurred_at është informativ). id bigserial = rendi real i aplikimit në server.
 

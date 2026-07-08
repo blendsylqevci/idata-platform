@@ -21,7 +21,7 @@ pnpm --filter @idata/database test                                            # 
 ## Çfarë u ndërtua
 
 **Migrimi `0004_poc3_offline_sync.sql`** — tabela vetëm `poc3_`, `business_id NOT NULL` direkt kudo:
-- `poc3_sync_event`: `device_seq bigint` monotonic per pajisje (**rendi NUK varet nga ora** — `occurred_at` informativ); `id bigserial` = rendi real i aplikimit; **UNIQUE (business_id, event_uuid)** = idempotencë; **UNIQUE (business_id, device_id, device_seq)** = rend/anti-dublim në DB; `replay boolean`.
+- `poc3_sync_event`: `device_seq bigint` monotonic per pajisje (**rendi NUK varet nga ora** — `occurred_at` informativ); `id bigserial` = rendi real i aplikimit; **UNIQUE (business_id, event_uuid)** = idempotencë; **UNIQUE (business_id, device_id, device_seq)** = **anti-dublim i `device_seq` në DB** — rendi aktual zbatohet nga **sync engine** (sortim sipas `device_seq`); **validimi server-side i rendit/gap-eve mbetet kërkesë për ADR-011**; `replay boolean`.
 - `poc3_stock` (qty NUMERIC — **negativi lejohet**, R1) · `poc3_invoice` (UUID PK nga pajisja; status accepted/rejected_blocked) · `poc3_partner` (credit_limit/balance/blocked) · `poc3_price_variance`.
 
 **Adapter-ët (ADR-011 input):** `LocalStore` (impl: `FileLocalStore` — JSON per pajisje në temp dir) · `SyncTransport` (impl: `InProcessTransport` me failpoints; `FlakyTransport` për retry) · `ServerApply` (impl: `ServerApplyPg`).
@@ -90,6 +90,7 @@ pnpm --filter @idata/database test                                            # 
 3. **Adapter-ët funksionuan:** `LocalStore`/`SyncTransport`/`ServerApply` ndajnë pastër pajisjen nga serveri — një vendor mund të futet si implementim i `SyncTransport`/`LocalStore` **pa prekur** rregullat e konfliktit server-side (ato mbeten tonat në çdo skenar).
 4. **Rendi:** `device_seq` monotonic + `UNIQUE (device, seq)` në server e bëri rendin të pavarur nga ora e pajisjes — kusht që duhet t'i imponohet edhe një vendor-i.
 5. **R3 transaksionale** kërkoi `FOR UPDATE` mbi partner — logjika e konflikteve me semantikë financiare **duhet të jetojë në server** (jo në shtresën sync), pavarësisht vendimit të ADR-011.
+6. **Poison-seq nga backup i vjetër i pajisjes:** nëse pajisja rikthehet nga backup i vjetër dhe **ripërdor një `device_seq`** me UUID të ri → `UNIQUE (device_id, device_seq)` violation → **outbox-i bllokohet me zë** (asgjë s'aplikohet në heshtje — sjellje e sigurt, por bllokuese). **Procedura e recovery-t (re-numërim / kthim seq nga serveri / re-regjistrim pajisjeje) duhet të vendoset në ADR-011.**
 
 ## PASS kundër kritereve
 
@@ -107,6 +108,7 @@ pnpm --filter @idata/database test                                            # 
 ## Kufizime të njohura
 
 - DB lokale reale (SQLite/Realm) + RN/Expo → **ADR-016**; ky simulator provon vetëm semantikën outbox/seq/persistencë.
+- **`FileLocalStore.save` përdor `writeFileSync` — JO shkrim atomik** (crash në mes të shkrimit mund të korruptojë JSON-in e store-it); zgjidhja reale (tmp+rename+fsync ose SQLite transaksionale) mbetet **ADR-016**.
 - Vendor sync (PowerSync) vs custom → **ADR-011 (open, 31.07)**; ky PoC = evidenca.
 - Fiscal outbox (SEF, 48h) = **PoC-5**, radhë e izoluar — e paprekur këtu (SSOT §7).
 - Server→pajisje sync (çmime të reja, katalog) = jashtë PoC (vetëm outbox pajisje→server); katalogu i çmimeve të serverit në PoC = config i adapterit (tabela canonical e çmimeve = F2/F3).
