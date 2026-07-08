@@ -10,6 +10,10 @@ docs-private/
 .env
 .env.*
 !.env.example
+# SEF (PoC-5): sekretet vetëm lokalisht — kurrë në git
+!.env.sef.example
+.env.sef.local
+.sef-local/
 # Deps / build
 node_modules/
 dist/
