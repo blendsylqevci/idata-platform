@@ -1,0 +1,25 @@
+# PoC-4a — HUB LOKAL i simuluar: Postgres i DYTË në container të veçantë.
+# I NDARË plotësisht nga compose-i kryesor (5433 "cloud") — ai NUK preket kurrë
+# nga testet. Testet e PoC-4 menaxhojnë lifecycle-in VETËM të këtij containeri
+# (start / kill -9 / restart) — përjashtim i kontrolluar për skenarin #6.
+# Auth = trust: vetëm dev/test lokal — asnjë sekret në git.
+services:
+  hub:
+    image: postgres:16-alpine
+    container_name: poc4-hub
+    environment:
+      POSTGRES_USER: idata
+      POSTGRES_DB: idata
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5434:5432"
+    volumes:
+      - poc4_hub_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U idata -d idata"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  poc4_hub_data:
