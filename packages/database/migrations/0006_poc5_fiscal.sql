@@ -15,11 +15,27 @@ CREATE TABLE poc5_fiscal_outbox (
   attempts       integer NOT NULL DEFAULT 0,
   next_retry_at  timestamptz NOT NULL DEFAULT now(),
   created_at     timestamptz NOT NULL DEFAULT now(),
-  deadline_at    timestamptz NOT NULL, -- created + 48h (afati ligjor i Nenit 44)
+  -- Afati i Nenit 44 GARANTOHET NË DB (jo në app-kod). GENERATED s'lejohet
+  -- (timestamptz+interval s'është IMMUTABLE) → TRIGGER-i më poshtë e IMPONON
+  -- created_at+48h në çdo INSERT/UPDATE — app-i s'mund ta shkruajë gabim as ta harrojë.
+  deadline_at    timestamptz NOT NULL,
   transaction_id bigint,
   fiscalized_at  timestamptz,
   UNIQUE (business_id, coupon_uuid) -- idempotencë: një kupon → një rresht radhe
 );
+
+-- Zbatuesi i afatit 48h në DB: mbishkruan ÇDO vlerë të dhënë nga app-i.
+CREATE FUNCTION poc5_set_deadline() RETURNS trigger
+  LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.deadline_at := NEW.created_at + interval '48 hours';
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER poc5_outbox_deadline
+  BEFORE INSERT OR UPDATE ON poc5_fiscal_outbox
+  FOR EACH ROW EXECUTE FUNCTION poc5_set_deadline();
 
 CREATE TABLE poc5_fiscal_alert (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),

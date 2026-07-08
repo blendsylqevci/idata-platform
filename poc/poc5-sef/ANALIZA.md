@@ -61,6 +61,8 @@ Onboarding-u i plotë: gjenero çelës **ECDSA P-256** → `POST /ca/verify/{nui
 
 **Rregulli i kufirit (PoC-2 ↔ PoC-5):** kontabiliteti mbetet **NUMERIC** (PoC-2, i paprekur); konvertimi ×10000/×100 ndodh **VETËM në kufirin SEF** (`poc5-money.ts`), me teste shteruese në të dy drejtimet + teste që përzierja e shkallëve **dështon**.
 
+**Rrumbullakosja e TaxGroup-eve (vëzhgim nga shembulli zyrtar — lidhet me Q#4b):** vlerat e grupit **E** (TotalForTax=889, TotalTax=161) dalin nga rrumbullakosja **PER-RRESHT** dhe pastaj mbledhje — jo per-grup: sendviq €6.00 gross → bazë 5.08 + TVSH 0.92; machiato €4.50 → 3.81 + 0.69; Σ = **8.89 + 1.61** ✓. Llogaritja per-GRUP (10.50/1.18 → 8.90 + 1.60/1.61) **s'e jep** dot çiftin 889/161. Pra shembulli zyrtar tregon **rounding per-rresht** → kjo ushqen rregullin e hapur Q#4b/ACC-003.
+
 ## 4. CouponType + rregulli ReferenceNo
 
 - `Sale=1` — `ReferenceNo=0`.
@@ -79,6 +81,9 @@ Onboarding-u i plotë: gjenero çelës **ECDSA P-256** → `POST /ca/verify/{nui
 ## 6. Nënshkrimi + QR (nga pos-csharp `Signer.cs`/README)
 
 1. Serializo proto → bytes. 2. `base64Proto = Base64(bytes)`. 3. **Firma = ECDSA P-256 mbi SHA-256(UTF8(base64Proto))** → `base64Sig`. 4. **QR = `base64Proto|base64Sig`** (pipe). Për `/pos/coupon`: `details=base64Proto(PosCoupon)`, `signature=base64Sig` — i njëjti parim firme.
+
+**KODIMI I FIRMËS — EKSPLICIT (amendament pas review-t PM):** referenca `pos-csharp` = **.NET**, ku `ECDsa.SignData` prodhon **raw r||s = IEEE P1363** (EKZAKT **64 byte** për P-256); **Node default = DER** (ASN.1, ~70-72 byte) → pa `dsaEncoding` eksplicit firmat NUK përputhen. **Kodimi praktik për PoC = `ieee-p1363`** (default-i ynë eksplicit; DER mbahet për debug). Konfirmimi FINAL = kundër serverit real në Tier 2.
+> **Hapi i debug-ut në Tier 2:** nëse kuponi i parë real → *FAILED VERIFICATION*, **dyshimi #1 = formati i firmës (P1363 vs DER)** — provo alternativën PARA çdo gjëje tjetër.
 
 ## 7. ZGJEDHJA E DEP-it PROTOBUF (saktësisht NJË)
 

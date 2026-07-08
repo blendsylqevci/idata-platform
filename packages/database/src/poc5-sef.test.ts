@@ -26,8 +26,9 @@ import { DeviceSimulator, FileLocalStore } from "./poc3-device.js";
 import { ServerApplyPg } from "./poc3-server.js";
 import { syncDevice, InProcessTransport } from "./poc3-sync.js";
 
-// Checksum i PIN-uar i models.proto të vendor-uar (byte-identik me
-// fiskalizimi/pos-csharp @ a4060ef08838) — drift-check në çdo CI run.
+// Checksum i PIN-uar i models.proto të vendor-uar — drift-check në çdo CI run.
+// PROVENANCE (i gjurmueshëm): https://github.com/fiskalizimi/pos-csharp
+//   file: models.proto · commit: a4060ef08838 (2026-06-11) · marrë: 2026-07-08
 const VENDORED_PROTO_SHA256 = "fc42f76e353d23b575c989d186b05671a340f5845fc8304306bdfac05cf68efb";
 
 // Kuponi sintetik i ndërtuar me VLERAT E SHEMBULLIT PUBLIK ZYRTAR të README-së
@@ -141,6 +142,21 @@ describe("PoC-5 SEF — Tier 1 CI-safe (mock + çelësa efemeralë; kërkon Post
     expect(String(citizen.TotalTax)).toBe(String(d.TotalTax));
     expect(String(citizen.TotalNoTax)).toBe(String(d.TotalNoTax));
     expect(String(citizen.CouponId)).toBe(String(d.CouponId));
+  });
+
+  it("firma P1363 (raw r||s) = EKZAKT 64 byte për P-256; DER dallohet dhe s'ngatërrohet", async () => {
+    const bytes = await encodePosCoupon(officialExampleCoupon({ couponId: "150" }));
+    // P1363 (default-i ynë eksplicit): gjithmonë 64 byte (r 32 + s 32).
+    const p1363 = signProtoBytes(bytes, keys.privateKey, "ieee-p1363");
+    expect(Buffer.from(p1363.signatureB64, "base64").length).toBe(64);
+    expect(verifyDetails(p1363.detailsB64, p1363.signatureB64, keys.publicKey, "ieee-p1363")).toBe(true);
+    // DER (default i Node-it — prandaj dsaEncoding EKSPLICIT): ≠64 byte.
+    const der = signProtoBytes(bytes, keys.privateKey, "der");
+    expect(Buffer.from(der.signatureB64, "base64").length).not.toBe(64);
+    expect(verifyDetails(der.detailsB64, der.signatureB64, keys.publicKey, "der")).toBe(true);
+    // Kryqëzimi i formateve dështon të verifikohet — dallim i qartë P1363 vs DER.
+    expect(verifyDetails(der.detailsB64, der.signatureB64, keys.publicKey, "ieee-p1363")).toBe(false);
+    expect(verifyDetails(p1363.detailsB64, p1363.signatureB64, keys.publicKey, "der")).toBe(false);
   });
 
   it("sign/verify P-256 + formati QR = base64(proto)|base64(sig)", async () => {
@@ -295,6 +311,22 @@ describe("PoC-5 SEF — Tier 1 CI-safe (mock + çelësa efemeralë; kërkon Post
     const bytes = await encodePosCoupon(officialExampleCoupon({ couponId: "601" }));
     const enq = await outbox.enqueue({ couponUuid, couponType: "Sale", protoBytes: bytes, privateKey: keys.privateKey, createdAt: t0 });
 
+    // GARANCIA NË DB: deadline_at = created_at + 48h EKZAKT (vendosur nga trigger-i)…
+    const dl = await getPool().query<{ ok: boolean }>(
+      "SELECT deadline_at = created_at + interval '48 hours' AS ok FROM poc5_fiscal_outbox WHERE id = $1",
+      [enq.outboxId],
+    );
+    expect(dl.rows[0]!.ok).toBe(true);
+    // …dhe as UPDATE i qëllimshëm s'e ndryshon dot (trigger-i e rillogarit).
+    await getPool().query("UPDATE poc5_fiscal_outbox SET deadline_at = now() + interval '10 years' WHERE id = $1", [
+      enq.outboxId,
+    ]);
+    const dl2 = await getPool().query<{ ok: boolean }>(
+      "SELECT deadline_at = created_at + interval '48 hours' AS ok FROM poc5_fiscal_outbox WHERE id = $1",
+      [enq.outboxId],
+    );
+    expect(dl2.rows[0]!.ok).toBe(true);
+
     fakeNow = new Date(t0.getTime() + 39 * 3600 * 1000); // 39h: ende pa warning
     await outbox.checkDeadlines();
     const w0 = await getPool().query(
@@ -411,6 +443,105 @@ describe("PoC-5 SEF — Tier 1 CI-safe (mock + çelësa efemeralë; kërkon Post
       [stuck.outboxId],
     );
     expect(healed.rows[0]!.status).toBe("fiskalizuar");
+  });
+
+  it("#5 crash PAS send, PARA ACK: ri-dërgimi s'krijon dublim lokal; mock idempotent (supozim — realja=Tier 2)", async () => {
+    const outbox = new FiscalOutbox(getPool(), { backoffMs: 10, now: () => new Date(Date.now() + 120_000) });
+    const inner = new MockAtkServer({ publicKey: keys.publicKey });
+    const couponUuid = randomUUID();
+    const bytes = await encodePosCoupon(officialExampleCoupon({ couponId: "901" }));
+    await outbox.enqueue({ couponUuid, couponType: "Sale", protoBytes: bytes, privateKey: keys.privateKey });
+
+    // Transporti: serveri E PRANON, por lidhja bie PARA ACK-ut tonë → rreshti mbetet për retry.
+    let crashOnce = true;
+    const crashAfterSend = {
+      async sendPosCoupon(req: { details: string; signature: string }) {
+        const res = await inner.sendPosCoupon(req);
+        if (crashOnce) {
+          crashOnce = false;
+          const err = new Error("lidhja u pre PAS send, PARA ACK") as NodeJS.ErrnoException;
+          err.code = "ECONNRESET";
+          throw err;
+        }
+        return res;
+      },
+    };
+    await outbox.drain(crashAfterSend);
+    const mid = await getPool().query<{ status: string; attempts: number }>(
+      "SELECT status, attempts FROM poc5_fiscal_outbox WHERE business_id = $1 AND coupon_uuid = $2",
+      [POC5_IDS.biz, couponUuid],
+    );
+    expect(mid.rows[0]).toMatchObject({ status: "ne_pritje", attempts: 1 });
+
+    // Resume: ri-dërgim i të njëjtit kupon → mock-u (si server idempotent) i njëjti tx.
+    await new FiscalOutbox(getPool(), { backoffMs: 10, now: () => new Date(Date.now() + 300_000) }).drain(crashAfterSend);
+    const done = await getPool().query<{ status: string }>(
+      "SELECT status FROM poc5_fiscal_outbox WHERE business_id = $1 AND coupon_uuid = $2",
+      [POC5_IDS.biz, couponUuid],
+    );
+    expect(done.rows[0]!.status).toBe("fiskalizuar");
+    expect(inner.duplicateSends).toBe(1); // dublimi u pa NGA SERVERI — jo rresht i dytë lokal
+    const rows = await getPool().query(
+      "SELECT 1 FROM poc5_fiscal_outbox WHERE business_id = $1 AND coupon_uuid = $2",
+      [POC5_IDS.biz, couponUuid],
+    );
+    expect(rows.rowCount).toBe(1); // një rresht i vetëm — zero dublim lokal
+  });
+
+  it("#6 restart me outbox jo-bosh: instancë e RE drain-on radhën e persistuar → resume", async () => {
+    const couponUuid = randomUUID();
+    const bytes = await encodePosCoupon(officialExampleCoupon({ couponId: "902" }));
+    // "Procesi A" fut në radhë dhe VDES (instanca humbet).
+    await new FiscalOutbox(getPool(), { backoffMs: 10 }).enqueue({
+      couponUuid,
+      couponType: "Sale",
+      protoBytes: bytes,
+      privateKey: keys.privateKey,
+    });
+    // "Procesi B" (restart): instancë krejt e re — radha vjen NGA DB, jo nga memoria.
+    const fresh = new FiscalOutbox(getPool(), { backoffMs: 10, now: () => new Date(Date.now() + 60_000) });
+    await fresh.drain(new MockAtkServer({ publicKey: keys.publicKey }));
+    const st = await getPool().query<{ status: string }>(
+      "SELECT status FROM poc5_fiscal_outbox WHERE business_id = $1 AND coupon_uuid = $2",
+      [POC5_IDS.biz, couponUuid],
+    );
+    expect(st.rows[0]!.status).toBe("fiskalizuar");
+  });
+
+  it("#7 DB e outbox-it e paarritshme: gabim SPECIFIK lidhjeje; zero shkrime të pjesshme", async () => {
+    const pgMod = await import("pg");
+    const badPool = new pgMod.default.Pool({
+      host: "localhost",
+      port: 59985, // port pa Postgres — brenda test scope
+      user: "idata",
+      database: "idata",
+      connectionTimeoutMillis: 1200,
+    });
+    const badOutbox = new FiscalOutbox(badPool, { backoffMs: 10 });
+    const couponUuid = randomUUID();
+    const bytes = await encodePosCoupon(officialExampleCoupon({ couponId: "903" }));
+    let caught: unknown;
+    try {
+      await badOutbox.enqueue({ couponUuid, couponType: "Sale", protoBytes: bytes, privateKey: keys.privateKey });
+    } catch (e) {
+      caught = e;
+    } finally {
+      await badPool.end();
+    }
+    expect(caught).toBeDefined();
+    const err = caught as NodeJS.ErrnoException & { errors?: NodeJS.ErrnoException[] };
+    const codes = [err.code, ...(err.errors?.map((x) => x.code) ?? [])].filter(Boolean) as string[];
+    const connCodes = ["ECONNREFUSED", "ECONNRESET", "EHOSTUNREACH", "ENETUNREACH", "ETIMEDOUT"];
+    expect(
+      codes.some((c) => connCodes.includes(c)) ||
+        /ECONNREFUSED|timeout|unreachable|connect/i.test(String(err.message ?? "")),
+    ).toBe(true);
+    // Verifikim me pool-in e SHËNDOSHË: asnjë gjurmë e kuponit.
+    const r = await getPool().query(
+      "SELECT 1 FROM poc5_fiscal_outbox WHERE business_id = $1 AND coupon_uuid = $2",
+      [POC5_IDS.biz, couponUuid],
+    );
+    expect(r.rowCount).toBe(0);
   });
 
   it("Tier 2 LIVE gating (rregulli B): opt-in i dyfishtë i çaktivizuar në CI — skip me arsye të qartë", () => {

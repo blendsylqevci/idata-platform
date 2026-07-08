@@ -11,7 +11,6 @@ import { AtkRejectionError, type AtkTransport } from "./poc5-transport.js";
  * Ora INJEKTOHET (fake clock në teste — alarmi 48h/40h pa timer real).
  */
 
-const H48 = 48 * 3600 * 1000;
 const WARNING_BEFORE_MS = 8 * 3600 * 1000; // warning kur kanë mbetur ≤8h (pra në ~40h)
 
 export interface FiscalOutboxOpts {
@@ -58,9 +57,13 @@ export class FiscalOutbox {
   async enqueue(input: EnqueueInput): Promise<{ outboxId: string; replay: boolean; status: string }> {
     const biz = POC5_IDS.biz;
     const created = input.createdAt ?? this.now();
-    const deadline = new Date(created.getTime() + H48);
 
     if (this.cap !== undefined) {
+      // Cap-i numëron VETËM radhën e RIDËRGUESHME (leshuar_offline + ne_pritje):
+      // deshtuar/kerkon_nderhyrje dalin nga cikli i dërgimit dhe ndiqen nga
+      // ALARMET + ndërhyrja njerëzore — jo nga cap-i i radhës (vendim i
+      // dokumentuar; alternativa "gjithçka ≠ fiskalizuar" u refuzua se do
+      // bllokonte pajisjen nga gabime që s'i zgjidh dot vetë).
       const pending = await this.pool.query<{ n: string }>(
         `SELECT count(*)::text AS n FROM poc5_fiscal_outbox
           WHERE business_id = $1 AND status IN ('leshuar_offline','ne_pritje')`,
@@ -86,13 +89,14 @@ export class FiscalOutbox {
       signError = (e as Error).message;
     }
 
+    // deadline_at NUK shkruhet nga app-i: kolonë GENERATED në DB (created_at + 48h).
     const ins = await this.pool.query<{ id: string; status: string }>(
       `INSERT INTO poc5_fiscal_outbox
-         (business_id, coupon_uuid, coupon_type, payload_ref, status, next_retry_at, created_at, deadline_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $6, $7)
+         (business_id, coupon_uuid, coupon_type, payload_ref, status, next_retry_at, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $6)
        ON CONFLICT (business_id, coupon_uuid) DO NOTHING
        RETURNING id, status`,
-      [biz, input.couponUuid, input.couponType, payloadRef, status, created, deadline],
+      [biz, input.couponUuid, input.couponType, payloadRef, status, created],
     );
     if (ins.rowCount === 0) {
       const existing = await this.pool.query<{ id: string; status: string }>(
@@ -159,14 +163,16 @@ export class FiscalOutbox {
     return result;
   }
 
-  /** Alarmi i afatit 48h: warning kur mbeten ≤8h (~40h); missed kur kalon afati pa fiskalizim. */
+  /** Alarmi i afatit 48h: warning kur mbeten ≤8h (~40h); missed kur kalon afati pa
+   *  fiskalizim. Përfshin EDHE 'deshtuar' — refuzimi i serverit s'e shuan detyrimin
+   *  ligjor 48h; kuponi i deshtuar pa u rifiskalizuar brenda afatit = missed. */
   async checkDeadlines(): Promise<{ warnings: number; missed: number }> {
     const biz = POC5_IDS.biz;
     const now = this.now();
     const warnBefore = new Date(now.getTime() + WARNING_BEFORE_MS);
     const rows = await this.pool.query<{ id: string; deadline_at: Date }>(
       `SELECT id, deadline_at FROM poc5_fiscal_outbox
-        WHERE business_id = $1 AND status IN ('leshuar_offline','ne_pritje','kerkon_nderhyrje')`,
+        WHERE business_id = $1 AND status IN ('leshuar_offline','ne_pritje','kerkon_nderhyrje','deshtuar')`,
       [biz],
     );
     let warnings = 0;

@@ -42,7 +42,9 @@ export interface MockAtkOpts {
 export class MockAtkServer implements AtkTransport {
   private txCounter = 0;
   private networkFailuresLeft: number;
-  readonly seenCouponIds = new Map<string, string>(); // CouponId → transactionId (vëzhgim dublimi)
+  readonly seenCouponIds = new Map<string, string>(); // CouponId → transactionId
+  /** Sa herë u ri-dërgua një CouponId tashmë i pranuar (skenari #5 crash-pas-send). */
+  duplicateSends = 0;
 
   constructor(private readonly opts: MockAtkOpts) {
     this.networkFailuresLeft = opts.failNetworkTimes ?? 0;
@@ -61,6 +63,15 @@ export class MockAtkServer implements AtkTransport {
     }
     // 2) Rregullat e kuponit (ANALIZA §4).
     const coupon = await decodePosCoupon(Buffer.from(req.details, "base64"));
+    const cid = String(coupon.CouponId);
+    // Ri-dërgim i të njëjtit kupon (crash pas send, para ACK) → mock-u sillet si
+    // server IDEMPOTENT (i njëjti transaction_id). ⚠️ SUPOZIM i flamuruar:
+    // sjellja REALE e serverit ndaj dublimit dokumentohet empirikisht në Tier 2.
+    const seen = this.seenCouponIds.get(cid);
+    if (seen !== undefined) {
+      this.duplicateSends += 1;
+      return { transactionId: seen };
+    }
     const type = Number(coupon.Type ?? 0);
     const refNo = String(coupon.ReferenceNo ?? "0");
     if ((type === COUPON_TYPE.Cancel || type === COUPON_TYPE.Return) && refNo === "0") {
@@ -68,7 +79,7 @@ export class MockAtkServer implements AtkTransport {
     }
     this.txCounter += 1;
     const txId = String(1000 + this.txCounter);
-    this.seenCouponIds.set(String(coupon.CouponId), txId);
+    this.seenCouponIds.set(cid, txId);
     return { transactionId: txId };
   }
 }
