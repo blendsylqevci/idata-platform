@@ -72,6 +72,8 @@ Rregull: tax code nuk mjafton vetë. Tax-book bucket varet edhe nga document typ
 
 Ruajtja duhet të jetë normalizuar. Eksporti mund të dalë në format ATK/Excel.
 
+> **Shënim (emërtimi):** emrat e entiteteve = sipas `../01-phase0/04_Data_Model_Draft.md` (v2.2.1 = autoriteti i emrave). Harmonizuar pas PoC-2: emri i mëparshëm `tax_book_entry_bucket` → `tax_book_bucket`.
+
 ### 4.1 `tax_book_entry`
 
 | Field | Purpose |
@@ -94,7 +96,7 @@ Ruajtja duhet të jetë normalizuar. Eksporti mund të dalë në format ATK/Exce
 | `created_from_posting_event_id` | trace to posting |
 | `status` | draft/posted/reversed/corrected/exported |
 
-### 4.2 `tax_book_entry_bucket`
+### 4.2 `tax_book_bucket`
 
 One document can create many buckets. This is required for mixed VAT invoices.
 
@@ -286,7 +288,7 @@ Example from real PLANET purchase book:
 Implementation rule:
 
 ```text
-One document -> one tax_book_entry header -> many tax_book_entry_bucket rows.
+One document -> one tax_book_entry header -> many tax_book_bucket rows.
 ```
 
 Never assume one document = one VAT rate.
