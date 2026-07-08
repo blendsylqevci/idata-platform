@@ -41,10 +41,10 @@ Këto janë datat më të vona të pranueshme që ruajnë shansin real për cuto
 
 | ID / Gate | Status aktual | Çka duhet konfirmuar | Owner | Bllokon | Data më e vonë | Nëse vonohet |
 |---|---|---|---:|---|---:|---|
-| SSOT-VERSION | Open | Header-i i SSOT të përputhet me Decisions Log aktual para PR roadmap | Codex/PM | PR roadmap | 2026-07-08 | PR roadmap nuk hapet pa bump/version consistency |
+| SSOT-VERSION | Closed (PR #11, 07.07) | Header-i i SSOT të përputhet me Decisions Log aktual para PR roadmap | Codex/PM | PR roadmap | 2026-07-08 | PR roadmap nuk hapet pa bump/version consistency |
 | ENG-001 | Open | Boundary NestJS service/repository; controller-i nuk duhet të mbetet varësi direkte për Accounting Core | Tech + Codex | Faza 2 | 2026-07-24 | accounting endpoints mbeten thin/prototype; nuk ngrihet API contract final |
 | ENG-002 | Open | Custom migration runner vs tool standard për migrime production-grade | Tech + Codex | Faza 2 / Faza 9 | 2026-07-24 | custom runner lejohet vetëm për skeleton/PoC; jo për prod migration freeze |
-| ENG-003 | Open | Composite FK cross-tenant, p.sh. `role_permission (business_id, role_id) REFERENCES role (business_id, id)` | Tech | PoC-1 / Faza 1 | 2026-07-18 | PoC-1 nuk kalon PASS; tenant isolation mbetet e paprovuar në DB |
+| ENG-003 | Closed (PR #10, 07.07) | Composite FK cross-tenant, p.sh. `role_permission (business_id, role_id) REFERENCES role (business_id, id)` | Tech | PoC-1 / Faza 1 | 2026-07-18 | PoC-1 nuk kalon PASS; tenant isolation mbetet e paprovuar në DB |
 | ENG-004 | Open | `audit_log` group-level events vs `business_id NOT NULL` skeleton | Blend + Tech | Faza 1 audit model | 2026-07-20 | vazhdohet vetëm me business-scoped audit; group-level events shtyhen si model i veçantë |
 | SEC-DEP | Active / recurring | Dependabot governance: no auto-merge, CI/gitleaks/review, weekly Security tab + `pnpm.overrides` review | Blend + Tech | Security process | Weekly | security alerts nuk mbyllen si “done” pa review; override i vjetër hiqet kur upstream e mbulon |
 | ADR-010 | Open | Hosted vs self-host EU për cloud DB/services | Blend + Tech | Faza 1/PoC infra | 2026-07-15 | përdor Postgres lokal/neutral deri në vendim; s'kyçet cloud vendor në kod |
@@ -103,6 +103,14 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 | PoC-3 Offline Sync | Mobile/Sync Lead | 3 | outbox, retry, idempotency, conflict handling | ADR-011, ADR-016 | 5 dokumente offline sync-ohen pa humbje/dublim; konflikt kontrollohet me audit |
 | PoC-4 Local Hub | Infra/Hub Lead | 4 | LAN hub, printer fallback, local queue | ADR-013, HW-001 | web/mobile → hub → printer/test queue punon pa internet; recovery pas restart |
 | PoC-5 SEF TEST | iCode SEF Lead | 5 | fiskalizim test me protokollin zyrtar | ATK-002, ADR-017 | kupon test nënshkruhet/dërgohet në server test; QR/transaction id ruhen; retry i dështimit kontrollohet |
+
+**Statusi real (jo vetëm plan):**
+
+- **PoC-1 Tenant Isolation — PASS / merged PR #10**
+- **PoC-2 Accounting Posting — PASS / merged PR #12**
+- PoC-3 Offline Sync — next
+- PoC-4 Local Hub — pending
+- PoC-5 SEF TEST — pending
 
 **Rregull:** PoC-të nuk janë demo UI. Janë prova teknike me test/evidencë. Nëse një PoC dështon, faza që varet prej tij nuk kalon në implementim të plotë.
 
@@ -215,12 +223,14 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - ADR-012: GL posting architecture.
 - ENG-001: service/repository boundary për NestJS para se Accounting Core API të ngrijë.
 - ENG-002: vendim migration runner custom vs tool standard para migrimeve production-grade.
+- **Dizajn concurrency-safe për `partner_card_entry.running_balance`** (lock ose llogaritje në lexim, jo read-modify-write i pambrojtur) — gjetje e PoC-2.
 
 **Deliverables**
 
 - Accounting package + API endpoints minimale.
 - Posting simulator i lidhur me DB.
 - VAT book export i normalizuar.
+- **ATK VAT Excel Export Compliance Pack** — eksporti 1:1 me template-t zyrtare Excel të ATK-së (të marra nga kontabilisti), i validuar me sign-off (lidhet me ACC-011).
 - Period close workflow.
 - Opening balance import template.
 

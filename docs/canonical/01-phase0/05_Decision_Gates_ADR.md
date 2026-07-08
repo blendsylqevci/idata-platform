@@ -31,6 +31,7 @@
 
 ### ADR-012 · GL posting: Postgres functions vs NestJS
 **Konteksti:** atomicitet i postimit (debit=kredit). **Opsione:** (a) postim kritik në Postgres functions (atomik), orkestrim NestJS; (b) gjithçka NestJS me transaksione. **Rekomandim:** hibrid (a). **Pronari:** Codex+Claude Code. **Afati:** Faza 0 → provë në PoC-2.
+**Rider (input nga PoC-2):** Vendimi final përfshin migrimin **DROP/supersede** të funksionit PoC `poc2_post_sale18` dhe konsolidimin e kodeve të llogarive në **NJË burim config** (sot 3 kopje të qëllimshme: `packages/accounting/src/accounts.ts`, `packages/database/src/poc2-fixtures.ts`, plpgsql) — pas ACC-003 kalohen në parametra bind. *(Kusht i vendimit të ardhshëm, jo vendim vetë; ADR-012 mbetet Open.)*
 
 ### ADR-013 · DB e hub-it lokal: Postgres vs SQLite/embedded
 **Konteksti:** hub PLANET/KABI offline. **Opsione:** Postgres lokal (Docker) vs SQLite/embedded për disa role. **Rekomandim:** Postgres në hub; SQLite në mobile. **Pronari:** Claude Code. **Afati:** pas PoC-4.

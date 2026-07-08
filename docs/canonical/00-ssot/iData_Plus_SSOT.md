@@ -1,6 +1,6 @@
 # iData+ — Single Source of Truth (SSOT)
 
-**Versioni:** 2.20 · **Data:** 7 Korrik 2026 · **Statusi:** Draft pune për Fazën 0
+**Versioni:** 2.21 · **Data:** 8 Korrik 2026 · **Statusi:** Draft pune për Fazën 0
 **Pronar i dokumentit:** iCode L.L.C (Blend Sylqevci)
 **Rregull:** ky është **burimi i vetëm i vërtetë** për zhvillimin. Çdo vendim/feature i ri shkohet **vetëm këtu** (me datë te Decisions log). Dokumentet e aprovuara jashtë repo-s janë vetëm snapshot-e aprovimi të gjeneruara nga ky dokument. Faza aktuale: **dizajn + Faza 0**, pa kod prodhimi pa go-ahead.
 **v2.0:** integron raundin v2 të pyetjeve me Codex (Qershor 2026) — vendime të reja, pyetje të zgjidhura, dhe 2 konflikte të shënuara (paga, printera fiskalë). Sinkronizuar me numërimin e Codex (v2).
@@ -280,6 +280,11 @@
 
 **07.07.2026 — v2.20 (Reliability Gate):**
 - **Reliability Gate miratuar** (`06-architecture/Reliability_Gate.md`): çdo modul kritik kërkon **failure matrix + teste për 8 skenarët standardë të dështimit** para se të quhet gati; **waiver vetëm me vendim të shkruar të pronarit** me risk + afat. Zbatimi: PM_REVIEW_PROTOCOL kontrolli #7 · roadmap acceptance criteria (F1–F5, F7, F8) · Cutover Go/No-Go.
+
+**08.07.2026 — v2.21 (PoC-1 + PoC-2 PASS):**
+- **PoC-1 Tenant Isolation PASS** (PR #10) + **PoC-2 Accounting Posting PASS** (PR #12, +hardening 6-tabelësh reliability): izolimi 3-nivelësh (API deny-by-default / composite FK / RLS), motori i postimit me **debit=kredit të verifikuar në COMMIT**, **FX-005 mixed**, **[51] pending** (ACC-006), **dual-variant si input ADR-012**. **2/5 PoC të mbyllura.**
+- **ADR-012, ACC-003 dhe ACC-006 MBETEN gates të hapura** — PoC-2 jep vetëm evidence/input teknik dhe kontabël, **nuk i mbyll**.
+- **Gjetje për F1/F2:** rol aplikacioni jo-superuser (RLS); concurrency e `partner_card_entry.running_balance`; **TRUNCATE hardening** për tabelat append-only (edhe `audit_log`).
 
 ## 12. Pyetjet e hapura (pending)
 | # | Pyetja | Kush | Afati |

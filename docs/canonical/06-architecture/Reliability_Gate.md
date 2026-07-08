@@ -1,6 +1,6 @@
 # Reliability Gate — iData+
 
-**Versioni:** 1.0 · **Data:** 2026-07-07 · **Pronari:** Blend (aprovon çdo ndryshim të këtij dokumenti)
+**Versioni:** 1.1 · **Data:** 2026-07-08 · **Pronari:** Blend (aprovon çdo ndryshim të këtij dokumenti)
 **Statusi:** canonical pas merge · **Zbatimi:** çdo modul kritik, nga sot deri në lansim (dhe pas tij)
 **Lidhje:** `../00-ssot/iData_Plus_SSOT.md` §2 (offline-first) · §7 (SEF offline 48h) · `../01-phase0/05_Decision_Gates_ADR.md` (ADR-023 backup/PITR/restore — Accepted) · `../../PM_REVIEW_PROTOCOL.md` (kontrolli #7) · `../08-roadmap/` (acceptance criteria per fazë + Go/No-Go)
 
@@ -69,6 +69,15 @@ Një modul kritik pa sjellje të përcaktuar, të testuar dhe të dokumentuar p�
 - Vlen për **çdo PR** që prek modul kritik: matrica përditësohet **bashkë me kodin**, jo "më vonë".
 - Fazat kritike të roadmap-it (F1–F5, F7, F8) kanë "**Reliability Gate PASS për modulet e fazës**" në acceptance criteria; Go/No-Go i cutover-it e kërkon si kusht Go.
 
+### 5.1 Aplikueshmëria e skenarëve (amendament v1.1)
+
+Një skenar i matricës standarde mund të shënohet **N/A** për një modul VETËM nëse plotësohen të dyja:
+
+1. **Justifikim i shkruar** që tregon **cili modul/shtresë tjetër e mbulon** atë skenar (p.sh. "internet down → shtresa sync/outbox, PoC-3; jo motori i postimit").
+2. **Pranim eksplicit** i N/A-së në review-n PM (kontrolli #7).
+
+**N/A pa justifikim, ose pa pranim në review = kolonë bosh = REJECT.** Një skenar s'lejohet të "zhduket" nga matrica pa e emërtuar se ku mbulohet.
+
 ## 6. Waiver (rruga E VETME e anashkalimit)
 
 - VETËM me **vendim të shkruar të Blendit**, me:
@@ -95,3 +104,4 @@ Kur një numër provohet me test të riprodhueshëm, promovohet në SSOT/ADR si 
 ## Historia
 
 - v1.0 (2026-07-07) — krijuar me aprovimin e Blendit; formalizon rregullin e qëndrueshmërisë: çdo modul kritik kërkon failure matrix (8 skenarë standardë) + teste + evidencë para se të quhet gati; waiver vetëm me vendim të shkruar të pronarit.
+- v1.1 (2026-07-08) — shtuar §5.1 "Aplikueshmëria e skenarëve": N/A vetëm me justifikim të shkruar (cili modul/shtresë e mbulon) + pranim eksplicit në review PM #7. *Pse:* precedenti nga PoC-2, ku #1-4/#8 u shënuan N/A me justifikim — rregulli e bën këtë të detyrueshëm, jo opsional.
