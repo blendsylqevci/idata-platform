@@ -111,4 +111,4 @@ Kur një numër provohet me test të riprodhueshëm, promovohet në SSOT/ADR si 
 
 - v1.0 (2026-07-07) — krijuar me aprovimin e Blendit; formalizon rregullin e qëndrueshmërisë: çdo modul kritik kërkon failure matrix (8 skenarë standardë) + teste + evidencë para se të quhet gati; waiver vetëm me vendim të shkruar të pronarit.
 - v1.1 (2026-07-08) — shtuar §5.1 "Aplikueshmëria e skenarëve": N/A vetëm me justifikim të shkruar (cili modul/shtresë e mbulon) + pranim eksplicit në review PM #7. *Pse:* precedenti nga PoC-2, ku #1-4/#8 u shënuan N/A me justifikim — rregulli e bën këtë të detyrueshëm, jo opsional.
-- v1.2 (2026-07-09) — shtuar §5.2 kritere specifike për fiscal outbox (append-only KT N25.5.1a · fiscal_attempt_log · technical_event KT N25.15), nga auditimi ATK/SEF nen-për-nen (PR "ATK compliance hardening", me aprovimin e Blendit).
+- v1.2 (2026-07-09) — shtuar §5.2 kritere specifike për fiscal outbox (payload/identitet/timestamps immutable + controlled status transitions + append-only attempt/status-event logs — KT N25.5.1a · technical_event KT N25.15), nga auditimi ATK/SEF nen-për-nen (PR "ATK compliance hardening", me aprovimin e Blendit).

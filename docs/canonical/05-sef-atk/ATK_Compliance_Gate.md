@@ -36,7 +36,7 @@
 | UA N7.2 (2.1–2.20) | Përmbajtja e plotë e detyrueshme e kuponit | SPECIFIKUAR (ky PR — spec kanonik) | F5/F7 kod | **[C]** |
 | UA N7.2.7 + KT Shtojca F | Zbritja per-artikull **me shenjën minus**; ulja në total me NËNTOTAL/ULJE/rillogaritje TVSH | MUNGON (madje bllokohet nga guard-i i negativëve në kufirin e parasë) | F5 (spec ky PR; përfaqësimi në proto = pyetje Tier 2) | **[C]** |
 | KT N25.18 par.2-3 | **1 origjinal**; çdo rishtypje **"KOPJE E KUPONIT"** + audit | MUNGON | F5/F7 | **[C]** |
-| KT N25.18 par.1 | Printim **ose dërgim elektronik**; **Print Preview me QR të skanueshëm** pa shtypje | PJESËRISHT | F5/F7 | **[C]** |
+| KT N25.18 par.1 | Printimi/dorëzimi fizik = rruga bazë; **dërgim elektronik VETËM në rastet e lejuara nga UA/ATK** (me **pëlqimin/kushtet** përkatëse — UA N39; shih `Kupon_Print_Spec.md` §3); për rastet e tjera **printimi mbetet gate**; scope e-kupon = **vendim OPEN** (Blend). **Print Preview me QR të skanueshëm** pa shtypje | PJESËRISHT | F5/F7 | **[C]** |
 | KT Shtojca SEF | Tekst+grafikë; **logo fiskale 15x8–20x10 mm**; logo RKS (UA N7.2.18) | MUNGON | F7 (+ verifikim fizik në printer test, ADR-017) | **[C]** |
 | UA N6.1 | Kuponi **në momentin e pagesës** — "pagesa s'mbyllet pa kupon" | PJESËRISHT (pipeline fiskal po; POS flow = F8) | **F8 hard gate në POS** | **[G]** |
 | UA N6.2 | Kupon **edhe për parapagesat** (në arkëtim; lidhja parapagesë→faturë finale pa tatim të dyfishtë) | MUNGON | F5/F8 | **[G]** |
