@@ -42,7 +42,9 @@ Kuponi duhet të jetë **i lexueshëm** (KT N25.18.4a).
 
 ## 2. Momenti i lëshimit (UA N5–N6) — rregulla biznesi
 
-- **UA N6.1 — HARD GATE (POS, F8):** printimi + dhënia e kuponit është **e detyrueshme në momentin e pagesës** — *asnjë pagesë s'mbyllet pa u gjeneruar kuponi dhe pa hyrë në fiscal outbox*.
+- **UA N6.1 — HARD GATE (POS, F8) — semantika e saktë:** printimi + dhënia e kuponit është **e detyrueshme në momentin e pagesës**. Para mbylljes së pagesës:
+  - **ONLINE (rruga normale):** ATK e ka **pranuar** kuponin + `transaction_id` i **persistuar** + kuponi i **dorëzuar/i printueshëm**;
+  - **OFFLINE (vetëm përjashtim, Neni 44):** payload-i fiskal **durable në fiscal outbox** + kuponi me mbishkrimin **"OFFLINE"** + retry/deadline(48h)/alert **aktive**.
 - **UA N6.2 — Parapagesat:** kupon fiskal **edhe për çdo pagesë para furnizimit**; modeli duhet të lidhë parapagesën me faturën finale **pa tatim të dyfishtë**.
 - **UA N6.3 — Pagesa me afat:** kur furnizimi ndodh e pagesa vjen më vonë, kuponi lëshohet **në momentin e furnizimit**.
 - **UA N5.2 — Furnizimet FALAS:** kupon i detyrueshëm edhe për furnizime falas (total 0) — verifikim Tier 2 që serveri e pranon.
@@ -51,8 +53,9 @@ Kuponi duhet të jetë **i lexueshëm** (KT N25.18.4a).
 ## 3. QR + rendi i transmetimit
 
 - **UA N39.4:** QR = **element përbërës i ÇDO kuponi** — print, PDF, apo elektronik. Test i detyrueshëm (F5+): *asnjë kupon s'del pa QR*.
-- **Rendi ONLINE-first (KT N26.5a):** transmeto → merr `transaction_id` → **PASTAJ shtyp**. Offline = **vetëm përjashtim** (Neni 44, 48h) — shih §7.
-- **Print Preview (KT N25.18 par.1):** para shtypjes ofrohet preview me **QR të skanueshëm pa shtypje**; dërgimi **elektronik (e-kupon)** = alternativë e barasvlershme me printimin.
+- **Rendi ONLINE-first (KT N26.5a):** transmeto → ATK pranon → `transaction_id` **persistohet** → **PASTAJ shtyp/dorëzo**. Offline = **vetëm përjashtim** (Neni 44, 48h; kushtet e hard gate-it te §2) — shih §7.
+- **Print Preview (KT N25.18 par.1):** para shtypjes ofrohet preview me **QR të skanueshëm pa shtypje**.
+- **Dërgimi elektronik (e-kupon) — i KUFIZUAR, jo alternativë universale:** lejohet **vetëm** për furnizime elektronike/në distancë dhe rastet që i lejon ATK, me **pëlqimin/kushtet përkatëse** të konsumatorit; për të gjitha rastet e tjera **printimi/dorëzimi fizik mbetet gate**. **Scope-i i "shitjes në distancë / e-kupon" = vendim OPEN** (SSOT v2.22, pronari: Blend).
 
 ## 4. Elementet grafike (KT Shtojca SEF)
 

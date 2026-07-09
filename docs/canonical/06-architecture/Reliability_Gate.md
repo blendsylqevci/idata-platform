@@ -82,8 +82,8 @@ Një skenar i matricës standarde mund të shënohet **N/A** për një modul VET
 
 Përveç matricës 8-skenarëshe, moduli i fiscal outbox-it (SEF) ka këto kritere të DETYRUESHME para se të quhet gati (burimi: `../05-sef-atk/ATK_Compliance_Gate.md`):
 
-1. **Append-only / immutable (KT N25.5.1a):** rreshtat e outbox-it fiskal **s'lejojnë UPDATE/DELETE** (trigger si `journal_entry`); `created_at` immutable — afati 48h s'zhvendoset dot. (F1)
-2. **`fiscal_attempt_log` append-only per TENTIM dërgimi**: kush/kur/rezultat/gabim i pastruar — jo vetëm statusi agregat i rreshtit. (F1–F5)
+1. **Pandryshueshmëria (KT N25.5.1a) — modeli i saktë:** **fiscal payload/identiteti/`created_at`/`deadline_at` = IMMUTABLE** (trigger) dhe **DELETE i ndaluar**; **tranzicionet e statusit lejohen VETËM përmes funksionit/procedurës së kontrolluar** (jo UPDATE i lirë; jo "pa UPDATE fare" — statusi duhet të lëvizë leshuar_offline→…→fiskalizuar). Afati 48h s'zhvendoset dot. (F1)
+2. **`fiscal_attempt_log`** (per TENTIM dërgimi: kush/kur/rezultat/gabim i pastruar) + **`fiscal_status_event`** (per TRANZICION statusi) — të dyja **append-only**; historia e plotë rindërtohet nga logjet, jo nga rreshti agregat. (F1–F5)
 3. **`technical_event` — regjistri i ndërprerjeve (KT N25.15):** fillimi/fundi i ndërprerjes, shkaku, kohëzgjatja, kuponët e prekur; ushqen raportimin ditor. (F1–F5)
 
 - VETËM me **vendim të shkruar të Blendit**, me:

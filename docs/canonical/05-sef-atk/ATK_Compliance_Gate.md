@@ -15,15 +15,15 @@
 
 ## 1. TETË KRITIKËT (bllokues — të gjithë me fazë të caktuar)
 
-| # | Ref (nen · faqe) | Kërkesa | Statusi sot | Faza | Gate |
+| # | Ref (nen) | Kërkesa | Statusi sot | Faza | Gate |
 |---|---|---|---|---|---|
 | 1 | **UA N7.2.2** | **`vat_number` i tatimpaguesit në kupon** kur është i regjistruar për TVSH (fushë e kushtëzuar — pa vlera reale në repo; config per tenant "në TVSH: po/jo") | **MUNGON** — proto zyrtar s'e ka; asnjë fushë në modelin tonë; print layer s'ekziston | **F1–F2** (entiteti business + `Kupon_Print_Spec.md` header) | **[C]** |
 | 2 | **KT N26.10** | **NUIKF**: alfanumerik, **≤16 karaktere**, unik, **i gjeneruar automatikisht + i validuar** | **PJESËRISHT** — `VerificationNo` ekziston si fushë proto; zero gjenerim/validim; burimi i vlerës = pyetje Tier 2 | **F5** (pas sqarimit Tier 2) | **[C]** |
-| 3 | **KT N26.4c** | **Enkriptim at-rest** i të dhënave fiskale me standard konkret (**AES-256**; pajisje: SQLCipher/keystore; server: disk/pgcrypto) | **PJESËRISHT** — vetëm 1 rresht draft-i, pa standard/fazë | **F1** (spec §9 SSOT — bërë në këtë PR) → kod F1/F5 | **[C]** |
+| 3 | **KT N26.4c** | **Enkriptim at-rest** i të dhënave fiskale me **"standarde të avancuara"** (formulimi i KT-së — KT s'e emërton algoritmin). **AES-256 = standardi i brendshëm/kandidati i iData+** (vendim arkitekturor — mbyllet në ADR; pajisje: SQLCipher/keystore; server: disk/pgcrypto) | **PJESËRISHT** — vetëm 1 rresht draft-i, pa standard/fazë | **F1** (spec §9 SSOT — bërë në këtë PR) → ADR + kod F1/F5 | **[C]** |
 | 4 | **KT N26.5(a) f.48** | **Rendi ONLINE-first**: të dhënat **transmetohen në ATK PARA shtypjes** (merr `transaction_id` → shtyp); **offline = vetëm përjashtim** (Neni 44/48h) | **MUNGON si rend** — rrjedha e dokumentuar deri sot ishte offline-first | **SSOT §7 (ky PR)** → kod F1/PoC-4b/F5 | **[C]** |
 | 5 | **KT N26.12(b) + N28.6** | Kuponët offline mbajnë **mbishkrimin "OFFLINE"** në kuponin e shtypur + kronologji | **PJESËRISHT** — kronologjia po (device_seq/outbox); mbishkrimi = s'ka print layer | **F5/F7** (`Kupon_Print_Spec.md` — bërë në këtë PR si spec) | **[C]** |
 | 6 | **UA N39.4** | **QR element përbërës i ÇDO kuponi** — letër, PDF apo elektronik | **PJESËRISHT** — përmbajtja e QR e zbatuar+testuar; renderimi në kupon = s'ka print layer | **F1–F2** (modul kuponi me QR të detyrueshëm në çdo output + test "asnjë kupon pa QR") | **[C]** |
-| 7 | **KT N25.5.1(a)** | Regjistrim **unik, write-once** i çdo kuponi (ID, datë/orë, artikuj, çmim, zbritje, operator) | **PJESËRISHT** — fushat + uniciteti po; **write-once JO** (rreshtat e fiscal outbox lejojnë UPDATE; `created_at` i ndryshueshëm) | **F1**: append-only/immutable me **trigger si `journal_entry`** | **[C]** |
+| 7 | **KT N25.5.1(a)** | Regjistrim **unik, write-once** i çdo kuponi (ID, datë/orë, artikuj, çmim, zbritje, operator) | **PJESËRISHT** — fushat + uniciteti po; **write-once JO** (`created_at` i ndryshueshëm; statusi i pambrojtur) | **F1 — modeli i saktë i pandryshueshmërisë:** **fiscal payload/identiteti/`created_at`/`deadline_at` = IMMUTABLE** (trigger); **DELETE i ndaluar**; **tranzicionet e statusit VETËM përmes funksionit/procedurës së kontrolluar**; çdo tentim/tranzicion → **append-only** në `fiscal_attempt_log`/`fiscal_status_event` (jo "pa UPDATE fare" — statusi DUHET të lëvizë) | **[C]** |
 | 8 | **KT N26.15 + UA N35.8** | **Kodi Unik i SEF-it + NUI i zhvilluesit** të integruar në softuer, të identifikueshëm në çdo dërgim | **PJESËRISHT** — `ApplicationId`/`PosId`/`VerificationNo` në çdo PosCoupon (sintetikë në teste); mapimi eksplicit "Kodi Unik SEF ↔ fushë proto" i pakonfirmuar | **Tier 2** (konfirmim në onboarding real) + ANALIZA §11 | **[C]** |
 
 ## 2. Regjistri tematik i kërkesave të tjera me gate (përzgjedhja aktive)
@@ -48,8 +48,8 @@
 |---|---|---|---|---|
 | UA N7.2.15 | **Numërim ditor + rendor kronologjik per POS** (sekuencë DB, reset ditor) | PJESËRISHT (CouponId nga thirrësi) | F5 | **[C]** |
 | UA N7.2.14 + KT N25.18.4a | **ID e përbërë [Nr. Njësisë ARBK]-[NUI]-[PosId]** në krye të kuponit | PJESËRISHT | F5 | **[C]** |
-| KT f.86 | **Tabela e 31 njësive matëse** — vendor-im + validim `Unit ∈ tabelës` + hartë UoM→kod SEF | MUNGON (Unit sot string i lirë) | F1/F5 (follow-up kodi) | **[C]** |
-| KT f.87–88 | **Tabela e 53 kategorive** — vendor-im + kategori SEF per artikull + sqarim lidhjes me `CouponItem.Type` | MUNGON (vetëm 'TT' me semantikë të padokumentuar) | F1/F5 + Tier 2 | **[C]** |
+| KT f.86 | **Tabela e 31 njësive matëse** — **katalog i KONTROLLUAR**: i seed-uar me 31 vlerat zyrtare, **i zgjerueshëm** sipas vetë KT-së ("mund të ketë edhe njësi tjera… SEF duhet të mundësojë konfigurimin") — **jo free-text arbitrar**; validim brenda **namespace-it të vet** + hartë UoM→kod SEF | MUNGON (Unit sot string i lirë) | F1/F5 (follow-up kodi) | **[C]** |
+| KT f.87–88 | **Tabela e 53 kategorive** — **katalog i KONTROLLUAR** (seed 53 zyrtaret, i zgjerueshëm sipas KT; jo free-text) + kategori SEF per artikull + sqarim lidhjes me `CouponItem.Type`; kodet validohen **per-namespace** (mbivendosja ndër-tabelore, p.sh. PAL, LEJOHET) | MUNGON (vetëm 'TT' me semantikë të padokumentuar) | F1/F5 + Tier 2 | **[C]** |
 
 ### 2c. Siguria, integriteti, LMDhP
 | Ref | Kërkesa | Statusi | Faza | Gate |
@@ -67,7 +67,7 @@
 | UA N45.6 | **Regjistrimi i kuponëve të bllokut** pas ndërprerjes së plotë: brenda **5 ditësh** pas 48h, dërgim automatik | PJESËRISHT (parimi i dokumentuar; moduli mungon) | **F5 para KABI live** | **[G]** |
 | KT N25.2/N25.13/N25.17 | Raportim real-time i strukturuar përmes HTTPS | PJESËRISHT (pipeline me mock; lidhja me shitjen reale F5+) | Tier 2 + F5 | **[C]** |
 | UA N35.10 | **Tatimpaguesi njofton ATK-në** për zgjidhjen/zhvilluesin/mirëmbajtësin PARA kuponit të parë | MUNGON | F5/F9 (Cutover Runbook parakusht) | **[G]** |
-| UA N34.3 / KT N31.4 | Regjistrimi i çdo instance SEF/POS + certifikatë digjitale per instalim | SPECIFIKUAR | F5/F7 (**verifikim ATK pas ÇDO instalimi** — roadmap, ky PR) | **[G]** |
+| UA N34.3 / KT N31.4 | **Regjistrim + certifikatë digjitale PER INSTALIM** (çdo instancë SEF/POS); **ATK ka të drejtë të verifikojë** — sistemi duhet të jetë **gati për verifikim** në çdo kohë | SPECIFIKUAR | F5/F7 (roadmap, ky PR) | **[G]** |
 | UA N36.1 | Tërheqja e certifikatës (probleme serioze/shkelje) — procedurë reagimi | MUNGON | F9 (runbook) | **[H]** |
 | KT N25.8 + N31.8 | **Mirëmbajtja e SEF**: monitorim i specifikave, zbatim brenda afateve, ri-testim/ri-certifikim | PJESËRISHT (snapshot+checksum po; procesi me SLA mungon) | shih §3 (Recertification Gate) | **[C]** |
 
@@ -84,13 +84,13 @@ Procesi i mirëmbajtjes (pronari: iCode/Tech; frekuenca: **javore** gjatë test 
 
 *Ky PR është docs-only. Kërkesat e mëposhtme kërkojnë KOD dhe regjistrohen si follow-up me fazë:*
 
-1. **Vendor-imi i tabelave zyrtare** (31 njësi + 53 kategori) me **checksum** si `models.proto` + **validim `Unit`/`Type`** në kufirin SEF + hartë artikull→kod SEF. (F1/F5)
-2. **Append-only trigger** për `fiscal outbox` (si `journal_entry`): pa UPDATE/DELETE; `created_at` immutable. (F1)
+1. **Katalogët e kontrolluar** të tabelave zyrtare (31 njësi + 53 kategori): seed me vlerat zyrtare (checksum si `models.proto`), **të zgjerueshëm sipas KT** (jo free-text arbitrar); validim **per-namespace** (PAL ndër-tabelor lejohet) + hartë artikull→kod SEF. (F1/F5)
+2. **Pandryshueshmëria e fiscal outbox** (modeli i saktë): payload/identiteti/`created_at`/`deadline_at` **immutable** (trigger) + **DELETE i ndaluar** + **tranzicionet e statusit vetëm përmes funksionit/procedurës së kontrolluar** + çdo tentim/tranzicion **append-only** në `fiscal_attempt_log`/`fiscal_status_event`. (F1)
 3. **Gjeneratorët**: numërim ditor + rendor kronologjik per POS (sekuencë DB me reset ditor + test dublimi/rendi); **gjenerim+validim NUIKF** (alfanumerik ≤16, unik — pas sqarimit Tier 2); **formatter i ID-së** `[Njësia]-[NUI]-[PosId]`. (F5)
-4. **`fiscal_attempt_log`** append-only per tentim dërgimi (kush/kur/rezultat/gabim i pastruar). (F1–F5)
+4. **`fiscal_attempt_log`** (per tentim dërgimi: kush/kur/rezultat/gabim i pastruar) + **`fiscal_status_event`** (per tranzicion statusi) — të dyja **append-only**. (F1–F5)
 5. **`technical_event`** log i ndërprerjeve (fillim/fund/shkak/kohëzgjatje/kuponë të prekur — KT N25.15). (F1–F5)
 6. **Drain scheduler automatik** (daemon/cron; sot thirrje manuale) me monitorim. (F5)
-7. **Rregulli POS**: "asnjë shitje/pagesë s'mbyllet pa hyrë kuponi në fiscal outbox" — hard gate + test end-to-end. (F8; parimi edhe në F5 KABI terren)
+7. **Hard gate POS (semantika e saktë):** **ONLINE** = ATK accepted + `transaction_id` i **persistuar** + kuponi i **dorëzueshëm/printueshëm** PARA mbylljes së pagesës; **OFFLINE (vetëm përjashtim)** = payload fiskal **durable në outbox** + kupon me mbishkrimin "OFFLINE" + retry/deadline/alert **aktive** PARA mbylljes — test end-to-end. (F8; parimi edhe në F5 KABI terren)
 8. **Moduli "regjistrimi i bllokut"** pas 48h: hyrje manuale e kuponëve të bllokut → outbox (burim=bllok) → dërgim automatik + **afati 5-ditësh me alarm** (UA N45.6). (F5)
 
 ## 5. Lidhjet

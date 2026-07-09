@@ -118,7 +118,9 @@ Migrimi **0006** vetëm `poc5_`: `poc5_fiscal_outbox` (business_id NOT NULL; `co
 
 ## 11. Pyetje për test-serverin (Tier 2) — nga auditimi ATK nen-për-nen (v2.22)
 
-**HAPI I RI I PLAYBOOK-ut — PREFLIGHT:** para ÇDO dërgimi kuponi real, ekzekuto **VETËM `POST /ca/verify/{nui}`** me env-in real (`.env.sef.local`) — konfirmon lidhjen, identifikuesit dhe statusin e regjistrimit **pa prodhuar asnjë kupon**. Vetëm pas PREFLIGHT OK vazhdohet me CSR/signcsr dhe `/pos/coupon`.
+**HAPI I RI I PLAYBOOK-ut — PREFLIGHT:** para ÇDO dërgimi kuponi real, ekzekuto **VETËM `POST /ca/verify/{nui}`** me env-in real — konfirmon lidhjen, identifikuesit dhe statusin e regjistrimit **pa prodhuar asnjë kupon**. Vetëm pas PREFLIGHT OK vazhdohet me CSR/signcsr dhe `/pos/coupon`.
+
+**PRIVATËSIA E PREFLIGHT-it (e detyrueshme):** ekzekutohet përmes një **wrapper-i lokal** që e lexon `.env.sef.local` **pa echo** (asnjë `cat`/`printenv`/interpolim në komandë). **Asnjë NUI/ID/URL e plotë** nuk shfaqet në output komande, shell history, PR, CI apo evidencë — output-i i lejuar është vetëm **`SET`/`MISSING` per variabël + vlera të maskuara** (p.sh. 2 karakteret e para + "…"). Përgjigja raw e serverit → **vetëm** `evidence-private-local/`/`.sef-local/`. **Tier 2 mbetet i NDALUAR** deri në aprovimin e veçantë të Blendit — PREFLIGHT-i vetë bën pjesë në Tier 2 dhe s'ekzekutohet para atij aprovimi.
 
 Pyetjet (burimi: `docs/canonical/05-sef-atk/Kupon_Print_Spec.md` §9 + Tracker `ATK-005`):
 1. **NUIKF** — burimi/formati (kush e gjeneron; lidhja me `VerificationNo`).

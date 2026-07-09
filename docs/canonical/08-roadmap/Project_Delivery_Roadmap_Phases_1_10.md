@@ -434,8 +434,8 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Kthim/refuzim LOT krijon dokument korrekt dhe kartelë klienti të saktë.
 - KABI mund të operojë një ditë pune me sistemin e ri dhe të rakordohet me kontabilitetin.
 - **Paketa e certifikimit ATK** e plotë: manual përdoruesi, deklarata e pajtueshmërisë, përshkrimi i zgjidhjes + lista e teknologjive (`ATK_Compliance_Gate.md`).
-- **Verifikim ATK pas ÇDO instalimi** (regjistrimi i instancës/POS + certifikata — UA N34.3/KT N31.4) në go-live checklist.
-- **Drain scheduler automatik** i fiscal outbox (jo thirrje manuale) + **hard gate**: asnjë shitje terreni s'mbyllet pa hyrë kuponi në fiscal outbox.
+- **Regjistrim + certifikatë PER INSTALIM** (çdo instancë SEF/POS — UA N34.3/KT N31.4); ATK ka të drejtë verifikimi — sistemi **gati për verifikim** (go-live checklist).
+- **Drain scheduler automatik** i fiscal outbox (jo thirrje manuale) + **hard gate para mbylljes së pagesës**: ONLINE = ATK accepted + `transaction_id` i persistuar + kupon i dorëzueshëm; OFFLINE (përjashtim) = payload durable në outbox + kupon "OFFLINE" + retry/deadline/alert aktive.
 - **Reliability Gate PASS** për modulet e fazës.
 
 **Evidence**
@@ -538,7 +538,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Order basic zbrit stock sipas recetës.
 - Barazim kamarier/shank ka cash/card/bank breakdown.
 - Hub LAN PoC funksionon pa internet.
-- **Verifikim ATK pas ÇDO instalimi** të instancave PLANET (go-live checklist — UA N34.3/KT N31.4).
+- **Regjistrim + certifikatë PER INSTALIM** i instancave PLANET (UA N34.3/KT N31.4); sistemi **gati për verifikim** nga ATK (go-live checklist).
 - **Reliability Gate PASS** për modulet e fazës.
 
 **Risk / Plan-B**
@@ -585,7 +585,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Z-report/worker settlement rakordon me cash/card/bank.
 - Table lifecycle kuptohet nga kamarier/menaxher/finance.
 - PLANET mund të operojë një ditë pune dhe të rakordohet pa PRO DATA.
-- **Hard gate POS→outbox (UA N6.1):** asnjë pagesë s'mbyllet pa u gjeneruar kuponi dhe pa hyrë në fiscal outbox — test end-to-end.
+- **Hard gate POS→kupon (UA N6.1) — semantika e saktë, test end-to-end:** para mbylljes së pagesës — ONLINE = ATK accepted + `transaction_id` i persistuar + kupon i dorëzueshëm/printueshëm; OFFLINE (vetëm përjashtim) = payload durable në fiscal outbox + kupon "OFFLINE" + retry/deadline/alert aktive.
 - **Drain scheduler automatik** aktiv edhe në PLANET.
 - **Reliability Gate PASS** për modulet e fazës.
 

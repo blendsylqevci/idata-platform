@@ -81,8 +81,8 @@ Kur dyshon mes "të lëshoj" dhe "të ndaloj" — **NDALO dhe pyet**. Një ditë
 
 - **SEF/Fiskalizimi** *(AKTIVE — PoC-5+)*: money scale PER-FIELD (items ×10000, totals cents), CouponType Sale=1/Cancel=2/Return=3 (+ReferenceNo), tax codes A/C/D/E, ECDSA P-256, asnjë identifikues SEF në git. **+ (v1.2, nga auditimi ATK):**
   - **kuponi i shtypur/elektronik sipas `docs/canonical/05-sef-atk/Kupon_Print_Spec.md`**: fushat e plota UA N7.2 + mbishkrimet OFFLINE / "KOPJE E KUPONIT" / Test + QR në çdo output + **NUIKF alfanumerik ≤16** i lexueshëm;
-  - **tabelat zyrtare 31 njësi / 53 kategori** të validuara **në kufirin SEF** (Unit/Type ∈ tabelës; jo string i lirë);
-  - **fiscal outbox append-only** (pa UPDATE/DELETE; `created_at` immutable) — `Reliability_Gate.md` §5.2;
+  - **katalogët 31 njësi / 53 kategori të KONTROLLUAR** (seed zyrtar + të zgjerueshëm sipas KT; validim per-namespace — PAL ndër-tabelor lejohet; jo free-text arbitrar);
+  - **pandryshueshmëria e fiscal outbox**: payload/identiteti/`created_at`/`deadline_at` immutable + DELETE i ndaluar + statusi vetëm përmes funksionit të kontrolluar + `fiscal_attempt_log`/`fiscal_status_event` append-only — `Reliability_Gate.md` §5.2;
   - **klasifikimi RECERT: PO/JO** i shënuar në **çdo PR** që prek modulin fiskal (`ATK_Compliance_Gate.md` §3) — mungesa e klasifikimit = kthim mbrapsht.
 - **Offline/Sync** *(kur nis)*: idempotencë e provuar me test, outbox i izoluar, pa dublim në replay, UUID kudo.
 - **POS/KDS** *(kur nis)*: totali i fshehur→lock, anulim me arsye+aprovim, transferi vetëm menaxher, saldo per kamarier e rakordueshme.
