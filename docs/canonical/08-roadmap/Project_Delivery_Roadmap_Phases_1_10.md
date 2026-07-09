@@ -433,6 +433,9 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Driver loading - sales - returns - remaining stock rakordohet.
 - Kthim/refuzim LOT krijon dokument korrekt dhe kartelë klienti të saktë.
 - KABI mund të operojë një ditë pune me sistemin e ri dhe të rakordohet me kontabilitetin.
+- **Paketa e certifikimit ATK** e plotë: manual përdoruesi, deklarata e pajtueshmërisë, përshkrimi i zgjidhjes + lista e teknologjive (`ATK_Compliance_Gate.md`).
+- **Verifikim ATK pas ÇDO instalimi** (regjistrimi i instancës/POS + certifikata — UA N34.3/KT N31.4) në go-live checklist.
+- **Drain scheduler automatik** i fiscal outbox (jo thirrje manuale) + **hard gate**: asnjë shitje terreni s'mbyllet pa hyrë kuponi në fiscal outbox.
 - **Reliability Gate PASS** për modulet e fazës.
 
 **Evidence**
@@ -535,6 +538,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Order basic zbrit stock sipas recetës.
 - Barazim kamarier/shank ka cash/card/bank breakdown.
 - Hub LAN PoC funksionon pa internet.
+- **Verifikim ATK pas ÇDO instalimi** të instancave PLANET (go-live checklist — UA N34.3/KT N31.4).
 - **Reliability Gate PASS** për modulet e fazës.
 
 **Risk / Plan-B**
@@ -581,6 +585,8 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Z-report/worker settlement rakordon me cash/card/bank.
 - Table lifecycle kuptohet nga kamarier/menaxher/finance.
 - PLANET mund të operojë një ditë pune dhe të rakordohet pa PRO DATA.
+- **Hard gate POS→outbox (UA N6.1):** asnjë pagesë s'mbyllet pa u gjeneruar kuponi dhe pa hyrë në fiscal outbox — test end-to-end.
+- **Drain scheduler automatik** aktiv edhe në PLANET.
 - **Reliability Gate PASS** për modulet e fazës.
 
 **Risk / Plan-B**
@@ -626,6 +632,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Opening balances rakordohen me dokumente të nënshkruara.
 - UAT critical flows PASS.
 - Training completed.
+- **Paketa e certifikimit ATK e dorëzuar/aprovuar**: manual përdoruesi, deklarata e pajtueshmërisë, përshkrimi i zgjidhjes + lista e teknologjive; klienti ka njoftuar ATK-në për zgjidhjen/zhvilluesin/mirëmbajtësin (UA N35.10).
 - Go/No-Go board miraton cutover.
 
 **Risk / Plan-B**

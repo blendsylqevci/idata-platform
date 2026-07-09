@@ -1,6 +1,6 @@
 # PM Review Protocol — iData+ Quality Gate
 
-**Versioni:** 1.1 · **Data:** 2026-07-07 · **Pronari:** Blend (aprovon çdo ndryshim të këtij dokumenti)
+**Versioni:** 1.2 · **Data:** 2026-07-09 · **Pronari:** Blend (aprovon çdo ndryshim të këtij dokumenti)
 **Për kë:** agjenti PM / quality-gate (aktualisht Codex në VS Code). Vlen për ÇDO rishikim dorëzimi, PR apo increment-i, nga sot deri në lansim.
 **Rifreskimi:** në kufirin e çdo increment-i përditësohen VETËM §5 (scope) dhe lista e ndaluar; bërthama nuk ndryshon pa aprovimin e Blendit.
 
@@ -79,9 +79,13 @@ Kur dyshon mes "të lëshoj" dhe "të ndaloj" — **NDALO dhe pyet**. Një ditë
 
 ## Checklist-a shtesë sipas domenit (aktivizohen kur hyn domeni në zhvillim)
 
-- **SEF/Fiskalizimi** *(kur nis PoC SEF)*: money scale PER-FIELD (items ×10000, totals cents), CouponType Sale=1/Cancel=2/Return=3 (+ReferenceNo), tax codes A/C/D/E, ECDSA P-256, asnjë identifikues SEF në git.
+- **SEF/Fiskalizimi** *(AKTIVE — PoC-5+)*: money scale PER-FIELD (items ×10000, totals cents), CouponType Sale=1/Cancel=2/Return=3 (+ReferenceNo), tax codes A/C/D/E, ECDSA P-256, asnjë identifikues SEF në git. **+ (v1.2, nga auditimi ATK):**
+  - **kuponi i shtypur/elektronik sipas `docs/canonical/05-sef-atk/Kupon_Print_Spec.md`**: fushat e plota UA N7.2 + mbishkrimet OFFLINE / "KOPJE E KUPONIT" / Test + QR në çdo output + **NUIKF alfanumerik ≤16** i lexueshëm;
+  - **tabelat zyrtare 31 njësi / 53 kategori** të validuara **në kufirin SEF** (Unit/Type ∈ tabelës; jo string i lirë);
+  - **fiscal outbox append-only** (pa UPDATE/DELETE; `created_at` immutable) — `Reliability_Gate.md` §5.2;
+  - **klasifikimi RECERT: PO/JO** i shënuar në **çdo PR** që prek modulin fiskal (`ATK_Compliance_Gate.md` §3) — mungesa e klasifikimit = kthim mbrapsht.
 - **Offline/Sync** *(kur nis)*: idempotencë e provuar me test, outbox i izoluar, pa dublim në replay, UUID kudo.
 - **POS/KDS** *(kur nis)*: totali i fshehur→lock, anulim me arsye+aprovim, transferi vetëm menaxher, saldo per kamarier e rakordueshme.
 
 ---
-*Historia: v1.0 (2026-07-07) — krijuar me aprovimin e Blendit; bazuar në protokollin e diskutuar në sesionin e setup-it të ditës së parë të zhvillimit. · v1.1 (2026-07-07) — shtuar kontrolli #7 (Reliability Gate) me aprovimin e Blendit.*
+*Historia: v1.0 (2026-07-07) — krijuar me aprovimin e Blendit; bazuar në protokollin e diskutuar në sesionin e setup-it të ditës së parë të zhvillimit. · v1.1 (2026-07-07) — shtuar kontrolli #7 (Reliability Gate) me aprovimin e Blendit. · v1.2 (2026-07-09) — zgjeruar checklist-a SEF (Kupon_Print_Spec, tabelat 31/53, outbox append-only, klasifikimi RECERT PO/JO) me aprovimin e Blendit (PR review = aprovimi).*
