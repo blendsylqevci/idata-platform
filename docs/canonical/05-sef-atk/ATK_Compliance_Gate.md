@@ -1,11 +1,15 @@
 # ATK Compliance Gate — regjistri i kërkesave KT/UA me gate
 
-**Versioni:** 1.0 · **Data:** 2026-07-09 · **Pronari:** Blend · **Statusi:** canonical pas merge
-**Burimet normative (PUBLIKE):**
-- **KT** — *Kërkesat Specifike Teknike dhe Funksionale për PEF/SF/SEF* (Maj 2026, 88 f.): `https://apps.atk-ks.org/sefaplikimi/uploads/documents/150ab6cc-084f-490d-b5fc-d8639d0287dc.pdf`
-- **UA** — *Udhëzimi Administrativ MF Nr. 01/2026* (52 nene, 40 f.): `https://apps.atk-ks.org/sefaplikimi/uploads/documents/87a43adf-6ee2-42e5-a5af-043c031f514f.pdf`
+**Versioni:** 1.1 · **Data:** 2026-07-10 · **Pronari:** Blend · **Statusi:** canonical pas merge
+**Burimet normative (PUBLIKE — URL/sha256/datat e plota: `ATK_Source_Register.md`):**
+- **KT** — *Kërkesat Specifike Teknike dhe Funksionale për PEF/SF/SEF* (Dok. Nr. 01-06-1967, miratuar 29.05.2026, 88 f.) **SIÇ AMENDOHET** nga:
+- **Ndryshim-Plotësimi i KT-së** (Nr. Prot. 01-06-2194) — **NË FUQI nga 22.06.2026** (data e nënshkrimit; protokolluar 24.06.2026): amendon **Nenin 25** (Instalimi i SEF) + **Nenin 26 par. 4** (Ruajtja e të Dhënave); citimet besnike → `ATK_Source_Register.md` §3.
+- **UA** — *Udhëzimi Administrativ MF Nr. 01/2026* (52 nene, 40 f.)
+- **Kushtet dhe procedurat për aplikimin, certifikimin dhe mirëmbajtjen e SEF** — nënshkruar + **NË FUQI 03.07.2026** (Neni 9).
+- **LAPT** — *Ligji Nr. 08/L-257 "Për Administrimin e Procedurave Tatimore"* (GZ Nr. 5/2024, 12.01.2024) — ligji ku referojnë **sanksionet e UA N49**; harta nen-për-nen = **`ATK-011`** (mungon sot).
 
 **Metoda:** auditim nen-për-nen i të dy dokumenteve (322 kërkesa të nxjerra → **278 unike**; 38 PEF-hardware-only = N/A në bllok; 240 të mapuara kundër repo-s me evidencë; verifikim aversarial me spot-checks). *Input pune: private local ATK compliance matrix, not committed.* **Nota aktuale e pajtueshmërisë (vlerësim i pavarur): 7/10 për fazën PoC.**
+**Shënim (10.07.2026):** amendamenti 22.06 e ndryshon bazën normative (N25 + N26.4) — rreshtat përkatës këtu janë rifreskuar; regjistri i plotë 278-rreshtor private-local rifreskohet në auditin e radhës kundrejt `ATK_Source_Register.md`.
 
 **Statuset:** `ZBATUAR` (kod+test) · `SPECIFIKUAR` (doc kanonik, pa kod) · `PJESËRISHT` · `MUNGON` · `N/A` (me arsyetim).
 **Gate-t:** **[C]** = bllokues certifikimi · **[G]** = bllokues go-live · **[H]** = hardening (pas live).
@@ -19,7 +23,7 @@
 |---|---|---|---|---|---|
 | 1 | **UA N7.2.2** | **`vat_number` i tatimpaguesit në kupon** kur është i regjistruar për TVSH (fushë e kushtëzuar — pa vlera reale në repo; config per tenant "në TVSH: po/jo") | **MUNGON** — proto zyrtar s'e ka; asnjë fushë në modelin tonë; print layer s'ekziston | **F1–F2** (entiteti business + `Kupon_Print_Spec.md` header) | **[C]** |
 | 2 | **KT N26.10** | **NUIKF**: alfanumerik, **≤16 karaktere**, unik, **i gjeneruar automatikisht + i validuar** | **PJESËRISHT** — `VerificationNo` ekziston si fushë proto; zero gjenerim/validim; burimi i vlerës = pyetje Tier 2 | **F5** (pas sqarimit Tier 2) | **[C]** |
-| 3 | **KT N26.4c** | **Enkriptim at-rest** i të dhënave fiskale me **"standarde të avancuara"** (formulimi i KT-së — KT s'e emërton algoritmin). **AES-256 = standardi i brendshëm/kandidati i iData+** (vendim arkitekturor — mbyllet në ADR; pajisje: SQLCipher/keystore; server: disk/pgcrypto) | **PJESËRISHT** — vetëm 1 rresht draft-i, pa standard/fazë | **F1** (spec §9 SSOT — bërë në këtë PR) → ADR + kod F1/F5 | **[C]** |
+| 3 | **KT N26.4 (i amenduar — në fuqi 22.06.2026)** | **Ruajtja e të Dhënave — teksti i RI** (amendamenti e ZËVENDËSOI N26.4 e vjetër; citimi besnik → `ATK_Source_Register.md` §3): **(i)** ruajtje **e mbrojtur me garanci integriteti** të të dhënave në rast defekti/ndërprerjeje të papritur; **(ii)** **dërgim automatik** sapo rikthehet lidhja; **(iii)** **eksport CSV/PDF** i të patransmetuarave **VETËM me kërkesë** të ATK-së/autoritetit shtetëror (rresht më vete §2c). **Enkriptimi at-rest NUK është më kërkesë eksplicite e KT-së** → **STANDARD I BRENDSHËM** sigurie/LMDhP (**AES-256 = kandidati**; vendim arkitekturor — mbyllet në **ADR**; pajisje: SQLCipher/keystore; server: disk/pgcrypto) | **PJESËRISHT** — (i) payload durable po; modeli i plotë i integritetit/pandryshueshmërisë = follow-up §4.2; (ii) retry/drain i provuar (PoC-5 Tier 1); (iii) eksporti **MUNGON** | **F1** (integriteti §4.2) + **F1/F5** (eksporti) + **ADR** (enkriptimi si standard i brendshëm) | **[C]** |
 | 4 | **KT N26.5(a) f.48** | **Rendi ONLINE-first**: të dhënat **transmetohen në ATK PARA shtypjes** (merr `transaction_id` → shtyp); **offline = vetëm përjashtim** (Neni 44/48h) | **MUNGON si rend** — rrjedha e dokumentuar deri sot ishte offline-first | **SSOT §7 (ky PR)** → kod F1/PoC-4b/F5 | **[C]** |
 | 5 | **KT N26.12(b) + N28.6** | Kuponët offline mbajnë **mbishkrimin "OFFLINE"** në kuponin e shtypur + kronologji | **PJESËRISHT** — kronologjia po (device_seq/outbox); mbishkrimi = s'ka print layer | **F5/F7** (`Kupon_Print_Spec.md` — bërë në këtë PR si spec) | **[C]** |
 | 6 | **UA N39.4** | **QR element përbërës i ÇDO kuponi** — letër, PDF apo elektronik | **PJESËRISHT** — përmbajtja e QR e zbatuar+testuar; renderimi në kupon = s'ka print layer | **F1–F2** (modul kuponi me QR të detyrueshëm në çdo output + test "asnjë kupon pa QR") | **[C]** |
@@ -58,7 +62,7 @@
 | KT N25.5.3 | Audit logs (hyrje/shitje/anulim/konfigurim) + kriptim + kontroll integriteti | PJESËRISHT | F1/F5 | **[C]** |
 | KT N26.8/N26.9 | Pas certifikimit: kod burimor + të dhëna të mbrojtura nga ndërhyrjet; mekanizma kundër ndryshimeve të paautorizuara | PJESËRISHT | F5/F9 | **[C]** |
 | UA N48 | **LMDhP**: inventar i të dhënave personale në rrjedhën SEF, retention, minimizim në logje | PJESËRISHT → SPECIFIKUAR (SSOT §9, ky PR) | F1–F9 (kontroll para certifikimit) | **[C]** |
-| KT N26.4d | Qasja në të dhënat lokale vetëm me kërkesë të ATK/autoritetit | PJESËRISHT | F5 | **[H]** |
+| **Amendamenti 22.06.2026 — N26.4 i ri, pika (iii)** | **Eksport CSV/PDF i të dhënave të patransmetuara VETËM me kërkesë të ATK-së/autoritetit shtetëror** (funksion eksporti i kontrolluar + audit i çdo eksporti; zëvendëson N26.4d e vjetër "qasja vetëm me kërkesë") | MUNGON | F1/F5 | **[C]** |
 
 ### 2d. Procesi operacional & rikuperimi
 | Ref | Kërkesa | Statusi | Faza | Gate |
@@ -67,7 +71,8 @@
 | UA N45.6 | **Regjistrimi i kuponëve të bllokut** pas ndërprerjes së plotë: brenda **5 ditësh** pas 48h, dërgim automatik | PJESËRISHT (parimi i dokumentuar; moduli mungon) | **F5 para KABI live** | **[G]** |
 | KT N25.2/N25.13/N25.17 | Raportim real-time i strukturuar përmes HTTPS | PJESËRISHT (pipeline me mock; lidhja me shitjen reale F5+) | Tier 2 + F5 | **[C]** |
 | UA N35.10 | **Tatimpaguesi njofton ATK-në** për zgjidhjen/zhvilluesin/mirëmbajtësin PARA kuponit të parë | MUNGON | F5/F9 (Cutover Runbook parakusht) | **[G]** |
-| UA N34.3 / KT N31.4 | **Regjistrim + certifikatë digjitale PER INSTALIM** (çdo instancë SEF/POS); **ATK ka të drejtë të verifikojë** — sistemi duhet të jetë **gati për verifikim** në çdo kohë | SPECIFIKUAR | F5/F7 (roadmap, ky PR) | **[G]** |
+| UA N34.3 / KT N31.4 + Kushtet N8.1 | **Regjistrim + certifikatë digjitale PER INSTALIM** (çdo instancë SEF/POS); **ATK ka të drejtë të verifikojë funksionimin pas instalimit** (Kushtet, Neni 8.1) — sistemi duhet të jetë **gati për verifikim** në çdo kohë | SPECIFIKUAR | F5/F7 (roadmap) | **[G]** |
+| **KT N25 "Instalimi i SEF" (i amenduar — në fuqi 22.06.2026)** | Teksti i RI (citimi besnik → `ATK_Source_Register.md` §3): SEF duhet të mundësojë instalimin dhe përdorimin **"së paku në njërën nga pajisjet apo ambientet e punës"** (PC, laptop, tablet, telefon i mençur, pajisje të tjera të përshtatshme). **KUJDES — pa konkluzion të nxjerrë:** NUK rrjedh nga ky tekst se një formë e vetme demonstrimi mjafton për certifikim; kufiri i prezantimit/pajisjeve para Komisionit mbetet **i gated nga `ATK-010`** | PJESËRISHT (web + mobile by design; verifikim në pajisje reale = F7/PoC-4b) | F5/F7 | **[C]** |
 | UA N36.1 | Tërheqja e certifikatës (probleme serioze/shkelje) — procedurë reagimi | MUNGON | F9 (runbook) | **[H]** |
 | KT N25.8 + N31.8 | **Mirëmbajtja e SEF**: monitorim i specifikave, zbatim brenda afateve, ri-testim/ri-certifikim | PJESËRISHT (snapshot+checksum po; procesi me SLA mungon) | shih §3 (Recertification Gate) | **[C]** |
 
@@ -79,6 +84,19 @@
 - **`RECERT: PO`** — ndryshim i sjelljes fiskale → **PARA deploy**: vlerësim ri-certifikimi/njoftim ATK (a kërkohet ri-test në test-server, a duhet njoftim formal, a preket certifikata e instancave), i dokumentuar në PR + tracker.
 
 Procesi i mirëmbajtjes (pronari: iCode/Tech; frekuenca: **javore** gjatë test phase, mujore pas live): monitoro `github.com/fiskalizimi` + portalin SEF → në ndryshim: krahaso checksum-in e `models.proto` të vendor-uar → përditëso → Tier 1 + Tier 2 ri-test → klasifiko RECERT → zbato **brenda afateve që publikon ATK** (SLA e brendshme).
+
+## 3a. Kufiri i certifikimit (bounded surface)
+
+- **Monorepo mbetet NJË** — **JO repo e dytë** për certifikim.
+- **Fiscal-core i izoluar**: moduli fiskal me kufij të qartë (paketë/module boundary), i identifikueshëm si njësi më vete brenda monorepo-s.
+- **Artefakti për Komisionin e Certifikimit** = **POS/SEF + diagrami/përshkrimi i integrimit** — varësitë reale **nuk fshihen**, paraqiten në diagram/përshkrim.
+- **Vendimi final** për formën e dorëzimit (bounded source bundle vs alternativa) merret **VETËM pas përgjigjes së `ATK-010` + aprovimit të Blendit** — deri atëherë asnjë dorëzim.
+
+## 3b. Rregulli i artefaktit të komisionit (i brendshëm, i hekurt)
+
+> **Artefakti i komisionit nuk përmban DEMO VERSION, mock, PoC routes, placeholders ose sample identifiers; prezantohet release-candidate i versionuar e funksional; etiketa zyrtare TEST e ambientit test NUK hiqet; test fixtures sintetike mbeten në test suite por jo në paketën e komisionit.**
+
+*Statusi i rregullit:* **rregull i brendshëm i iData+** (mësim terreni) — **JO citim ligjor**. Zbatimi verifikohet në review: `PM_REVIEW_PROTOCOL.md` checklist SEF (v1.3).
 
 ## 4. Follow-ups kodi (Faza 1/5 — JO në këtë PR)
 
@@ -95,4 +113,7 @@ Procesi i mirëmbajtjes (pronari: iCode/Tech; frekuenca: **javore** gjatë test 
 
 ## 5. Lidhjet
 
-`Kupon_Print_Spec.md` (i njëjti folder) · SSOT §7/§9 · `Reliability_Gate.md` §5.2 · `PM_REVIEW_PROTOCOL.md` (checklist SEF v1.2) · `poc/poc5-sef/ANALIZA.md` §11 (pyetjet Tier 2) · Tracker (`ATK-005`+).
+`ATK_Source_Register.md` (burimet + hash + citimet e amendamentit) · `Kupon_Print_Spec.md` (i njëjti folder) · SSOT §7/§9 · `Reliability_Gate.md` §5.2 · `PM_REVIEW_PROTOCOL.md` (checklist SEF v1.3) · `poc/poc5-sef/ANALIZA.md` §11 (pyetjet Tier 2) · Tracker (`ATK-005`, `ATK-010`, `ATK-011`).
+
+---
+*Historia: v1.0 (2026-07-09) — krijimi (PR #17, me aprovimin e Blendit). · v1.1 (2026-07-10) — **ATK normative refresh**: burimet → `ATK_Source_Register.md`; amendamenti 22.06 në fuqi (CRITICAL #3 rishkruar mbi N26.4 e RI; rreshti i ri i eksportit CSV/PDF §2c; KT N25 instalimi i amenduar §2d); §3a kufiri i certifikimit (bounded surface); §3b rregulli i artefaktit të komisionit (me aprovimin e Blendit — PR review = aprovimi).*
