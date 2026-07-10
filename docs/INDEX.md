@@ -49,6 +49,7 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/04-planet-finance/Finance_Operations_Workflow_Spec_2026-06-29.md`
 - `docs/canonical/05-sef-atk/ATK_SEF_Offline_Faturimi_Findings.md`
 - `docs/canonical/05-sef-atk/ATK_Compliance_Gate.md`
+- `docs/canonical/05-sef-atk/ATK_Source_Register.md`
 - `docs/canonical/05-sef-atk/Kupon_Print_Spec.md`
 - `docs/canonical/06-architecture/Reliability_Gate.md`
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
