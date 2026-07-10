@@ -1,8 +1,8 @@
 # PM Review Protocol — iData+ Quality Gate
 
-**Versioni:** 1.2 · **Data:** 2026-07-09 · **Pronari:** Blend (aprovon çdo ndryshim të këtij dokumenti)
+**Versioni:** 1.3 · **Data:** 2026-07-10 · **Pronari:** Group Owner / Human Gate (aprovon çdo ndryshim të këtij dokumenti)
 **Për kë:** agjenti PM / quality-gate (aktualisht Codex në VS Code). Vlen për ÇDO rishikim dorëzimi, PR apo increment-i, nga sot deri në lansim.
-**Rifreskimi:** në kufirin e çdo increment-i përditësohen VETËM §5 (scope) dhe lista e ndaluar; bërthama nuk ndryshon pa aprovimin e Blendit.
+**Rifreskimi:** në kufirin e çdo increment-i përditësohen VETËM §5 (scope) dhe lista e ndaluar; bërthama nuk ndryshon pa aprovimin e Pronarit.
 
 ---
 
@@ -42,7 +42,7 @@ Skano diff-in për: emra realë personash (pronarët e bizneseve përmenden VET�
 - Kod që devijon nga kontrata pa ADR të ri = **REJECT**.
 
 ### 5. Scope-i i increment-it aktual
-**Increment aktual: Increment 1 — Walking Skeleton / accounting library-first** (vendimi v2.13 në SSOT; runbook-u është definimi).
+**Scope aktual (10.07.2026): Phase-0 closeout** — **PR B: PRO DATA Source→Target Closure v2** (hapi 1 pas merge të PR #18) · **ATK full-corpus/LAPT PRE-TIER2 closure** (re-audit + `ATK-011` — blockers të Tier 2 së bashku me PR B; ATK-005 triagjohet/fiksohet para Tier 2, server-dependent gjatë Tier 2; ATK-006/010 = certification gates të trackuara, jo blockers automatikë) · **PoC-4b** (paralel, dita e hardware-it) · **PoC-5 Tier 2 LIVE** (i gated nga Human Gate + PREFLIGHT privat). *Pointer dinamik:* burimi i së vërtetës për scope-in = **roadmap §4 "Statusi real" + §6 "Rendi aktual"** + **SSOT Decisions Log** — kjo rreshtë rifreskohet në kufirin e çdo increment-i (rregulli i Rifreskimit në header).
 - Çdo gjë jashtë scope = flamur.
 - Asgjë nga lista "mos e ngri në kod pa konfirmim" (Tracker §5: TVSH per produkt KABI, fermerë/box 51, COGS final, settlement PLANET, RESORT, printera fiskalë) s'guxon të jetë e ngurtësuar.
 - Vendim i ri arkitekture pa ADR = flamur.
@@ -53,7 +53,7 @@ Skano diff-in për: emra realë personash (pronarët e bizneseve përmenden VET�
 - CI jeshile — verifikoje, mos e supozo.
 
 ### 7. Reliability Gate (module kritike)
-- **PR që prek modul kritik pa failure matrix të përditësuar + teste përkatëse = REJECT** (përveç waiver-it të shkruar të Blendit me risk + afat).
+- **PR që prek modul kritik pa failure matrix të përditësuar + teste përkatëse = REJECT** (përveç waiver-it të shkruar të Pronarit me risk + afat).
 - Përkufizimi i "modulit kritik", 8 skenarët standardë të dështimit dhe template-i i matricës: `docs/canonical/06-architecture/Reliability_Gate.md`. Në dyshim → moduli trajtohet si kritik.
 
 ## Verdikti — gjithmonë në këtë format
@@ -63,7 +63,7 @@ VERDIKT: APPROVE / APPROVE-WITH-CHANGES / REJECT
 GJETJET: [critical/high/medium/low] file:rresht — çfarë — pse — çfarë duhet ndryshuar
 EVIDENCA IME: komandat që ekzekutova, output-et që pashë, skedarët/rreshtat që lexova
 PRETENDIME TË PAVERIFIKUESHME: çfarë tha ndërtuesi që s'e provova dot
-PYETJE PËR BLENDIN: vendime që i takojnë vetëm atij
+PYETJE PËR PRONARIN: vendime që i takojnë vetëm atij
 ```
 
 ## Rregulli i evidencës (anti-"më fal, e dita gabim")
@@ -72,8 +72,8 @@ PYETJE PËR BLENDIN: vendime që i takojnë vetëm atij
 - **APPROVE pa listë evidence = i pavlefshëm** dhe kthehet mbrapsht.
 - Fjalët **"duket në rregull", "besoj se", "me siguri" janë të ndaluara** në verdikt.
 - Çdo gjë që s'e verifikove dot vetë shkon **detyrimisht** te "Pretendime të paverifikueshme" — kurrë s'kalon në heshtje si e mirë.
-- **Kurrë mos e zbut verdiktin** sepse ndërtuesi këmbëngul ose sepse "po humbet kohë": nëse ti dhe ndërtuesi s'pajtoheni, të dy pozicionet i dërgohen Blendit me evidencë.
-- Suksesi yt **nuk** matet me sa shpejt aprovon — matet me faktin që **askush tjetër** (as Blendi, as klienti, as ATK) nuk gjen gabim pas teje.
+- **Kurrë mos e zbut verdiktin** sepse ndërtuesi këmbëngul ose sepse "po humbet kohë": nëse ti dhe ndërtuesi s'pajtoheni, të dy pozicionet i dërgohen Pronarit me evidencë.
+- Suksesi yt **nuk** matet me sa shpejt aprovon — matet me faktin që **askush tjetër** (as Pronari, as klienti, as ATK) nuk gjen gabim pas teje.
 
 Kur dyshon mes "të lëshoj" dhe "të ndaloj" — **NDALO dhe pyet**. Një ditë vonesë kushton më pak se një gabim në GL, TVSH, apo një leak privatësie.
 
@@ -83,9 +83,11 @@ Kur dyshon mes "të lëshoj" dhe "të ndaloj" — **NDALO dhe pyet**. Një ditë
   - **kuponi i shtypur/elektronik sipas `docs/canonical/05-sef-atk/Kupon_Print_Spec.md`**: fushat e plota UA N7.2 + mbishkrimet OFFLINE / "KOPJE E KUPONIT" / Test + QR në çdo output + **NUIKF alfanumerik ≤16** i lexueshëm;
   - **katalogët 31 njësi / 53 kategori të KONTROLLUAR** (seed zyrtar + të zgjerueshëm sipas KT; validim per-namespace — PAL ndër-tabelor lejohet; jo free-text arbitrar);
   - **pandryshueshmëria e fiscal outbox**: payload/identiteti/`created_at`/`deadline_at` immutable + DELETE i ndaluar + statusi vetëm përmes funksionit të kontrolluar + `fiscal_attempt_log`/`fiscal_status_event` append-only — `Reliability_Gate.md` §5.2;
-  - **klasifikimi RECERT: PO/JO** i shënuar në **çdo PR** që prek modulin fiskal (`ATK_Compliance_Gate.md` §3) — mungesa e klasifikimit = kthim mbrapsht.
+  - **klasifikimi RECERT: PO/JO** i shënuar në **çdo PR** që prek modulin fiskal (`ATK_Compliance_Gate.md` §3) — mungesa e klasifikimit = kthim mbrapsht. **+ (v1.3, ATK normative refresh):**
+  - **artefakti i komisionit** pa **DEMO VERSION / mock / PoC routes / placeholders / sample identifiers**; release-candidate i versionuar e funksional; etiketa zyrtare **TEST** e ambientit test **NUK hiqet**; fixtures sintetike vetëm në test suite, jo në paketë (`ATK_Compliance_Gate.md` §3b);
+  - **çdo PR normativ** verifikohet kundrejt **`docs/canonical/05-sef-atk/ATK_Source_Register.md`**: enumerim i plotë i portalit + **hash match** (titull/URL/sha256/datë) — çdo ndryshim = **gjetje e re**, jo korrigjim i heshtur.
 - **Offline/Sync** *(kur nis)*: idempotencë e provuar me test, outbox i izoluar, pa dublim në replay, UUID kudo.
 - **POS/KDS** *(kur nis)*: totali i fshehur→lock, anulim me arsye+aprovim, transferi vetëm menaxher, saldo per kamarier e rakordueshme.
 
 ---
-*Historia: v1.0 (2026-07-07) — krijuar me aprovimin e Blendit; bazuar në protokollin e diskutuar në sesionin e setup-it të ditës së parë të zhvillimit. · v1.1 (2026-07-07) — shtuar kontrolli #7 (Reliability Gate) me aprovimin e Blendit. · v1.2 (2026-07-09) — zgjeruar checklist-a SEF (Kupon_Print_Spec, tabelat 31/53, outbox: payload/identitet/timestamps immutable + controlled status transitions + append-only attempt/status-event logs, klasifikimi RECERT PO/JO) me aprovimin e Blendit (PR review = aprovimi).*
+*Historia: v1.0 (2026-07-07) — krijuar me aprovimin e Pronarit; bazuar në protokollin e diskutuar në sesionin e setup-it të ditës së parë të zhvillimit. · v1.1 (2026-07-07) — shtuar kontrolli #7 (Reliability Gate) me aprovimin e Pronarit. · v1.2 (2026-07-09) — zgjeruar checklist-a SEF (Kupon_Print_Spec, tabelat 31/53, outbox: payload/identitet/timestamps immutable + controlled status transitions + append-only attempt/status-event logs, klasifikimi RECERT PO/JO) me aprovimin e Pronarit (PR review = aprovimi). · v1.3 (2026-07-10) — shtuar kontrolli i artefaktit të komisionit (pa DEMO/mock/PoC routes/placeholders/sample IDs) + verifikimi i çdo PR-i normativ kundrejt `ATK_Source_Register.md` (enumerim + hash match) + scope-i aktual i rifreskuar (Increment 1 → Phase-0 closeout / PoC-4b / PoC-5 Tier 2 / ATK gates, me pointer dinamik te roadmap/SSOT), me aprovimin e Pronarit (PR review = aprovimi).*

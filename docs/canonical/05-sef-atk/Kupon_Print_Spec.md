@@ -30,7 +30,7 @@ Kuponi fiskal përmban, **të paktën**:
 | 2.11 | **Shuma e tatimit sipas normave aktive** | per grup tatimor |
 | 2.12 | **Shuma totale pa tatim** | |
 | 2.13 | **Data, ora dhe minutat e lëshimit** | |
-| 2.14 | **Numri identifikues i SEF**: **`[Numri i Njësisë ARBK]-[NUI]-[PosId]`** (KT N25.18.4a: në krye të kuponit) | formatter = follow-up F5 |
+| 2.14 | **Numri identifikues i SEF**: **`[Numri i Njësisë]-[NUI]-[PosId]`** (KT N25.18.4a: në krye të kuponit; **Numri i Njësisë sipas KT gjenerohet nga Agjencioni i Regjistrimit të Tatimpaguesve**; **OPEN**: marrja/mapimi me `BranchId` + regjistrimi teknik te `/ca/verify` — `ATK-005`) | formatter = follow-up F5 |
 | 2.15 | **Numri DITOR i kuponit** + numri **rendor kronologjik** per POS | gjenerator sekuence DB me reset ditor = follow-up F5 |
 | 2.16 | **Kodi QR** | i renderuar e i skanueshëm — shih §3 |
 | 2.17 | **NUIKF** — Numri Unik Identifikues i Kuponit Fiskal (për verifikim) | **i lexueshëm në print**; alfanumerik **≤16**, unik (KT N26.10) |

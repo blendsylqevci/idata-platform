@@ -1,7 +1,7 @@
 # iData+ Project Documentation Index
 
-Date: 2026-07-02
-Status: Canonical split v0.1, prepared from `00_raw/claude` and `00_raw/codex`.
+Date: 2026-07-10 (canonical split origjinal: 2026-07-02)
+Status: Canonical split v0.1, prepared from `00_raw/claude` and `00_raw/codex`; mirëmbahet me docs-PR.
 
 ## Mandatory project rules
 
@@ -49,18 +49,21 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/04-planet-finance/Finance_Operations_Workflow_Spec_2026-06-29.md`
 - `docs/canonical/05-sef-atk/ATK_SEF_Offline_Faturimi_Findings.md`
 - `docs/canonical/05-sef-atk/ATK_Compliance_Gate.md`
+- `docs/canonical/05-sef-atk/ATK_Source_Register.md`
 - `docs/canonical/05-sef-atk/Kupon_Print_Spec.md`
 - `docs/canonical/06-architecture/Reliability_Gate.md`
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
 - `docs/canonical/08-roadmap/Cutover_Rollback_Runbook.md`
 
-## Next gate
+## Next gate (rendi aktual — 10.07.2026)
 
-Claude review should verify this split before first commit:
+1. **PR B: PRO DATA Source→Target Closure v2** — hapi i parë pas merge të PR #18 (07_PRODATA i paprekur deri atëherë).
+2. **ATK full-corpus/LAPT closure (P0 / PRE-TIER2):** full-corpus re-audit i `ATK_Compliance_Gate.md` kundrejt `ATK_Source_Register.md` + harta LAPT (`ATK-011`).
+   *Blockers PRE-TIER2 = vetëm PR B + re-audit + ATK-011.* `ATK-005` triagjohet/**fiksohet** para Tier 2 (përgjigjet server-dependent merren GJATË Tier 2); `ATK-006`/`ATK-010` = certification gates të trackuara — **jo blockers automatikë** të Tier 2 (përveç nëse përgjigjja ndryshon scope-in/sigurinë).
+3. **PREFLIGHT privat** (wrapper i maskuar — pjesë e Tier 2, i gated).
+4. **PoC-5 Tier 2 LIVE** — VETËM pas hapave 1–3 + aprovimit të veçantë të Pronarit (Human Gate).
+5. **Paralel:** PoC-4b — dita e hardware-it (checklist në `poc/poc4-local-hub/README.md`).
 
-1. No Claude-only requirement was dropped.
-2. No raw PRO DATA/PII/secret was promoted.
-3. The three phase0-pack minor pending items are either added later or tracked.
-4. Contracts remain confidential and outside git.
+*(Gate historik i split-it — kaluar: pa humbje kërkesash; pa PII/sekrete të promovuara; pending items të trackuara; kontratat jashtë git.)*
 
 - `canonical/03-kabi/USAID_Formula_Validation_Gate_2026-07-04.md` — sanitized Phase 0 evidence gate for KABI USAID milk settlement formula.
