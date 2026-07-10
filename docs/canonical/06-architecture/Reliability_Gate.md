@@ -1,6 +1,6 @@
 # Reliability Gate — iData+
 
-**Versioni:** 1.1 · **Data:** 2026-07-08 · **Pronari:** Blend (aprovon çdo ndryshim të këtij dokumenti)
+**Versioni:** 1.2 · **Data:** 2026-07-09 · **Pronari:** Blend (aprovon çdo ndryshim të këtij dokumenti)
 **Statusi:** canonical pas merge · **Zbatimi:** çdo modul kritik, nga sot deri në lansim (dhe pas tij)
 **Lidhje:** `../00-ssot/iData_Plus_SSOT.md` §2 (offline-first) · §7 (SEF offline 48h) · `../01-phase0/05_Decision_Gates_ADR.md` (ADR-023 backup/PITR/restore — Accepted) · `../../PM_REVIEW_PROTOCOL.md` (kontrolli #7) · `../08-roadmap/` (acceptance criteria per fazë + Go/No-Go)
 
@@ -78,7 +78,13 @@ Një skenar i matricës standarde mund të shënohet **N/A** për një modul VET
 
 **N/A pa justifikim, ose pa pranim në review = kolonë bosh = REJECT.** Një skenar s'lejohet të "zhduket" nga matrica pa e emërtuar se ku mbulohet.
 
-## 6. Waiver (rruga E VETME e anashkalimit)
+### 5.2 Kritere shtesë per modul — FISCAL OUTBOX (amendament v1.2; F1)
+
+Përveç matricës 8-skenarëshe, moduli i fiscal outbox-it (SEF) ka këto kritere të DETYRUESHME para se të quhet gati (burimi: `../05-sef-atk/ATK_Compliance_Gate.md`):
+
+1. **Pandryshueshmëria (KT N25.5.1a) — modeli i saktë:** **fiscal payload/identiteti/`created_at`/`deadline_at` = IMMUTABLE** (trigger) dhe **DELETE i ndaluar**; **tranzicionet e statusit lejohen VETËM përmes funksionit/procedurës së kontrolluar** (jo UPDATE i lirë; jo "pa UPDATE fare" — statusi duhet të lëvizë leshuar_offline→…→fiskalizuar). Afati 48h s'zhvendoset dot. (F1)
+2. **`fiscal_attempt_log`** (per TENTIM dërgimi: kush/kur/rezultat/gabim i pastruar) + **`fiscal_status_event`** (per TRANZICION statusi) — të dyja **append-only**; historia e plotë rindërtohet nga logjet, jo nga rreshti agregat. (F1–F5)
+3. **`technical_event` — regjistri i ndërprerjeve (KT N25.15):** fillimi/fundi i ndërprerjes, shkaku, kohëzgjatja, kuponët e prekur; ushqen raportimin ditor. (F1–F5)
 
 - VETËM me **vendim të shkruar të Blendit**, me:
   - **riskun** e shënuar eksplicit;
@@ -105,3 +111,4 @@ Kur një numër provohet me test të riprodhueshëm, promovohet në SSOT/ADR si 
 
 - v1.0 (2026-07-07) — krijuar me aprovimin e Blendit; formalizon rregullin e qëndrueshmërisë: çdo modul kritik kërkon failure matrix (8 skenarë standardë) + teste + evidencë para se të quhet gati; waiver vetëm me vendim të shkruar të pronarit.
 - v1.1 (2026-07-08) — shtuar §5.1 "Aplikueshmëria e skenarëve": N/A vetëm me justifikim të shkruar (cili modul/shtresë e mbulon) + pranim eksplicit në review PM #7. *Pse:* precedenti nga PoC-2, ku #1-4/#8 u shënuan N/A me justifikim — rregulli e bën këtë të detyrueshëm, jo opsional.
+- v1.2 (2026-07-09) — shtuar §5.2 kritere specifike për fiscal outbox (payload/identitet/timestamps immutable + controlled status transitions + append-only attempt/status-event logs — KT N25.5.1a · technical_event KT N25.15), nga auditimi ATK/SEF nen-për-nen (PR "ATK compliance hardening", me aprovimin e Blendit).

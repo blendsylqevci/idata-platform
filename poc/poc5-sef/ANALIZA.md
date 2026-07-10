@@ -116,5 +116,26 @@ Migrimi **0006** vetëm `poc5_`: `poc5_fiscal_outbox` (business_id NOT NULL; `co
 - Sjellja REALE e serverit ndaj dërgimit të dyfishtë të të njëjtit kupon (`CouponId` i njëjtë ×2) — e padokumentuar; **dokumentohet empirikisht në Tier 2** (modeli #5b).
 - `VerificationNo` (string 16-shifror në shembuj) — burimi/gjenerimi i vlerës reale sqarohet në onboarding Tier 2.
 
+## 11. Pyetje për test-serverin (Tier 2) — nga auditimi ATK nen-për-nen (v2.22)
+
+**HAPI I RI I PLAYBOOK-ut — PREFLIGHT:** para ÇDO dërgimi kuponi real, ekzekuto **VETËM `POST /ca/verify/{nui}`** me env-in real — konfirmon lidhjen, identifikuesit dhe statusin e regjistrimit **pa prodhuar asnjë kupon**. Vetëm pas PREFLIGHT OK vazhdohet me CSR/signcsr dhe `/pos/coupon`.
+
+**PRIVATËSIA E PREFLIGHT-it (e detyrueshme):** ekzekutohet përmes një **wrapper-i lokal** që e lexon `.env.sef.local` **pa echo** (asnjë `cat`/`printenv`/interpolim në komandë). **Asnjë NUI/ID/URL e plotë** nuk shfaqet në output komande, shell history, PR, CI apo evidencë — output-i i lejuar është vetëm **`SET`/`MISSING` per variabël + vlera të maskuara** (p.sh. 2 karakteret e para + "…"). Përgjigja raw e serverit → **vetëm** `evidence-private-local/`/`.sef-local/`. **Tier 2 mbetet i NDALUAR** deri në aprovimin e veçantë të Blendit — PREFLIGHT-i vetë bën pjesë në Tier 2 dhe s'ekzekutohet para atij aprovimi.
+
+Pyetjet (burimi: `docs/canonical/05-sef-atk/Kupon_Print_Spec.md` §9 + Tracker `ATK-005`):
+1. **NUIKF** — burimi/formati (kush e gjeneron; lidhja me `VerificationNo`).
+2. **Return** — shenja e shumave (pozitive me Type vs negative).
+3. **Zbritja per-artikull** në PosCoupon (rresht negativ vs çmim neto + `TotalDiscount`).
+4. **QR i kuponit të pafiskalizuar** (offline, para `transaction_id`) — përmbajtja.
+5. **Semantika e `Time`** në fiskalizim të vonuar (koha e lëshimit vs e dërgimit).
+6. **53 kategoritë ↔ `CouponItem.Type`** (a është 'TT' kod nga tabela).
+7. **Formati i paracaktuar i printimit** (UA N32.2.6).
+8. **X/Z raporti ditor** për SEF softuerik.
+9. **Refund payout** — rrjedha fiskale e pagesës negative.
+10. **Kupon→faturë tatimore B2B** (UA N5.3).
+11. **Kodi PM i dublikuar** në tabelën zyrtare të kategorive (#8 vs #36).
+12. **Furnizim falas / total 0** — a e pranon serveri (UA N5.2).
+13. **Dublimi i `CouponId`** — sjellja reale (zëvendëson supozimin idempotent të mock-ut).
+
 ---
-*FAZA A përfundon këtu. Asnjë kod SEF s'shkruhet pa: review të këtij dokumenti nga Codex/PM + aprovimin e Blendit (HARD STOP — rregulli A).*
+*FAZA A përfundon këtu. Asnjë kod SEF s'shkruhet pa: review të këtij dokumenti nga Codex/PM + aprovimin e Blendit (HARD STOP — rregulli A). §11 u shtua pas Fazës B si input i Tier 2 (docs-only).*

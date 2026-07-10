@@ -53,5 +53,5 @@ pnpm --filter @idata/database test   # Tier 1; Tier 2 = SKIPPED me log të qart�
 - Integrimi i plotë POS + certifikimi i prodhimit = jashtë PoC (kjo është provë teknike e rrugës).
 
 **Inpute për F1 (dizajni real — jo ky PoC):**
-- **`created_at` immutability**: trigger-i rillogarit `deadline_at` nga `created_at`, por vetë `created_at` mbetet i ndryshueshëm — në F1 rreshtat e outbox-it fiskal bëhen append-only/immutable (si journal_entry), që afati të mos zhvendoset dot as përmes created_at.
+- **`created_at` immutability**: trigger-i rillogarit `deadline_at` nga `created_at`, por vetë `created_at` mbetet i ndryshueshëm — në F1 outbox-i fiskal merr modelin canonical: **payload/identitet/`created_at`/`deadline_at` immutable; DELETE i ndaluar; status transitions vetëm përmes funksionit të kontrolluar; attempt/status-event logs append-only** — që afati të mos zhvendoset dot as përmes `created_at`.
 - **Guard dy-drejtimësh i shkallëve**: sot kufiri validon hyrjet (dp-max per shkallë); në F1 shtohet mbrojtje edhe në nivel tipi/lexim (brand types për ×10000 vs cents, konvertime të kryqëzuara të bllokuara në compile-time), që një int i shkallës së gabuar të mos futet dot askund në PosCoupon.

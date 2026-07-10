@@ -1,6 +1,6 @@
 # iData+ — Single Source of Truth (SSOT)
 
-**Versioni:** 2.21 · **Data:** 8 Korrik 2026 · **Statusi:** Draft pune për Fazën 0
+**Versioni:** 2.22 · **Data:** 9 Korrik 2026 · **Statusi:** Draft pune për Fazën 0
 **Pronar i dokumentit:** iCode L.L.C (Blend Sylqevci)
 **Rregull:** ky është **burimi i vetëm i vërtetë** për zhvillimin. Çdo vendim/feature i ri shkohet **vetëm këtu** (me datë te Decisions log). Dokumentet e aprovuara jashtë repo-s janë vetëm snapshot-e aprovimi të gjeneruara nga ky dokument. Faza aktuale: **dizajn + Faza 0**, pa kod prodhimi pa go-ahead.
 **v2.0:** integron raundin v2 të pyetjeve me Codex (Qershor 2026) — vendime të reja, pyetje të zgjidhura, dhe 2 konflikte të shënuara (paga, printera fiskalë). Sinkronizuar me numërimin e Codex (v2).
@@ -8,7 +8,7 @@
 **v2.2:** VENDIM — **pagat/payroll = Faza 2** (jo v1), sipas rekomandimit të Codex, konfirmuar nga Blendi. **(RISHIKUAR v2.17 → Faza 1 për KABI/kontabilist.)**
 **v2.3:** gati për Fazën 0 — paketa Faza 0 te `docs/canonical/01-phase0/` (+ `00-ssot/`); Node 24 LTS; +2 pyetje (floor-plan, inventar pajisjesh); decision gates shtesë; baseline sigurie; feature-status taxonomy.
 **v2.4:** 🟢 **SEF "Testim para Aplikimit" PRANUAR nga ATK (28.06.2026)** — test phase aktiv; protokolli zyrtar github.com/fiskalizimi (mandatory); ADR shtesë; data model shtesë (business_group/service_day/cost_layer); paketa Faza 0 → v1.1.
-**v2.5:** korrigjime teknike SEF (verifikuar nga pos-csharp + models.proto): **money scale PER-FIELD** (items €0.0001 / totals cents), **CouponType Sale=1/Cancel=2/Return=3**, **tax A/C/D/E** (TL→A); secrets në `docs-private`; paketa Faza 0 → v1.2.
+**v2.5:** korrigjime teknike SEF (verifikuar nga pos-csharp + models.proto): **money scale PER-FIELD** (items €0.0001 / totals cents), **CouponType Sale=1/Cancel=2/Return=3**, **tax A/C/D/E** (TL→A); secrets private-local (jashtë git); paketa Faza 0 → v1.2.
 **v2.6:** **template-et zyrtare ATK** (blerje+shitje) nga kontabilisti (28.06) → box-map i plotë për të dy librat; auto-deklaratë TVSH e mundshme; ruajtur te `docs/evidence/reference_atk/`.
 **v2.7:** PRO DATA **Wave 2 (PLANET POS/KDS)** review nga Codex → entitete të konfirmuara (table_session, kitchen_ticket, kds_station, cash_shift, worker_settlement, manager_approval); dizajni ynë i barazimit/anulimit konfirmohet net-new & më i rreptë.
 **v2.8:** PRO DATA **Wave 3 (audit/RBAC/config, sanitized)** krye → **nxjerrja nga backup-i E MBYLLUR** (gaps 0); evidence → `07_PRODATA_Evidence_Closure_Parity_Matrix.md`. Pa migrim passwords/PIN/MAC; audit append-only + break-glass + config typed.
@@ -109,9 +109,13 @@
 
 ## 7. SEF / Fiskalizimi
 - **iCode aplikon** si ofrues i softuerit SEF (Software House — jo secili biznes); merr Certifikatë + Numër Identifikues i SEF-it. Secili NUI/POS/PKI regjistrohet sipas ATK. KABI/PLANET = shfrytëzues të softuerit të certifikuar.
-- **🟢 STATUS (28.06.2026): "Testim para Aplikimit" PRANUAR nga ATK** — test phase teknik AKTIV. **Referenca zyrtare e detyrueshme: github.com/fiskalizimi** (`models.proto`, ECDSA P-256, QR=`base64(proto)|base64(sig)`, tax **A/C/D/E** (A=exempt), **money per-field** (items €0.0001 / totals cents), **CouponType Sale=1/Cancel=2/Return=3** +ReferenceNo). Test server `fiskalizimi-test.atk-ks.org` (Swagger). Identifikuesit = intern (GITIGNORED, private): `docs-private/sef/sef-test-identifiers.secret.md`. **PoC SEF s'nis pa analizë të GitHub-it.**
+- **🟢 STATUS (09.07.2026):** **aplikim i RI për test phase u regjistrua** dhe është **referenca aktuale për Tier 2**; aplikimi i mëparshëm (28.06.2026) mbetet vetëm **historik/superseded**. **Identifikuesit private-local, jashtë git.**
+- **Referenca zyrtare e detyrueshme: github.com/fiskalizimi** (`models.proto`, ECDSA P-256, QR=`base64(proto)|base64(sig)`, tax **A/C/D/E** (A=exempt), **money per-field** (items €0.0001 / totals cents), **CouponType Sale=1/Cancel=2/Return=3** +ReferenceNo). Test server `fiskalizimi-test.atk-ks.org` (Swagger). **PoC SEF s'nis pa analizë të GitHub-it.**
 - **Fazim:** Faza 0 = **test phase AKTIV + PoC** → Faza 1–2 = **fiscal flow minimal** → **pas testit teknik të suksesshëm** = aplikim formal (vendim ATK brenda **15 ditëve pune**) → **para KABI live** = certifikimi i kryer.
-- **Offline (Neni 44):** kupon offline + fiskalizim brenda **48h**; **fiscal outbox i ndarë** nga sync (radhë e izoluar — s'ndalet kurrë); retry/idempotencë; monitorim afati; raport ditor.
+- **Rendi ONLINE-FIRST (KT N26.5a — bllokues certifikimi):** rruga normale = **transmeto në ATK → merr `transaction_id` → PASTAJ shtyp/dorëzo kuponin**. Offline = **VETËM përjashtim** (s'ka lidhje) sipas Nenit 44 — kuponi mban **mbishkrimin "OFFLINE"** (KT N26.12b).
+- **Offline (Neni 44 — përjashtimi):** kupon offline + fiskalizim brenda **48h**; **fiscal outbox i ndarë** nga sync (radhë e izoluar — s'ndalet kurrë); retry/idempotencë; monitorim afati; raport ditor; pas ndërprerjes së plotë → **regjistrimi i bllokut brenda 5 ditësh** (UA N45.6).
+- **Pajtueshmëria nen-për-nen:** `docs/canonical/05-sef-atk/ATK_Compliance_Gate.md` (regjistri + 8 CRITICAL + Recertification Gate) · `docs/canonical/05-sef-atk/Kupon_Print_Spec.md` (kuponi i shtypur/elektronik: UA N7.2 i plotë + tabelat zyrtare 31/53).
+- **Config per tenant "në TVSH: po/jo"** — parakusht i fushës `vat_number` në kupon (UA N7.2.2; e detyrueshme vetëm kur tenant-i është i regjistruar për TVSH).
 - POS ID + **PKI per pajisje** (ECDSA P-256; onboarding `/ca/verify`→CSR→`/ca/signcsr`); printer mobil + QR; nënshkrim ECDSA P-256; Protobuf; dërgim `/pos/coupon`→`transaction_id`.
 - **Statuset (flag per faturë):** lëshuar offline / në pritje fiskalizimi / fiskalizuar (FIC/NIVF+QR) / dështuar / **kërkon ndërhyrje** (alert te kontabilisti).
 - **Go/No-Go:** KABI **nuk del live** pa kaluar 100% testi SEF/offline.
@@ -135,6 +139,8 @@
 - **Rolet konfigurueshme** nga Group Owner; **matricë RBAC per-feature:** Lexim / Krijim / Modifikim / **Anulim-Korrigjim** / Shtypje / **Aprovim** (+ all-checks) — granular (p.sh. kamarier sheh vetëm tavolinat e veta vs tërë sallën). **"Fshirje" vetëm për objekte JO-financiare** (edhe aty zakonisht **deaktivizim**); dokumentet financiare **s'fshihen kurrë**.
 - **Audit log** append-only për çdo veprim kritik; **matricë aprovimesh (default):** çmim/zbritje/anulim/kthim = **PIN menaxheri** (POS/terren); write-off/korrigjim stoku = **admin/kontabilist**; **hapje/mbyllje periudhe = vetëm kontabilisti kryesor**.
 - **Baseline sigurie (Faza 0):** GitHub org me **2FA + branch protection** (PR + review i detyrueshëm); **asnjë sekret në repo** (vault / `.env`, `.env.example`); **rezidencë EU + DPA** (Ligji 06/L-082); rotacion sekretesh; least-privilege.
+- **Enkriptim at-rest i të dhënave fiskale (KT N26.4c — bllokues certifikimi):** KT-ja kërkon **"standarde të avancuara"** (pa emërtuar algoritëm); **AES-256 = standardi i brendshëm/kandidati i iData+** — **vendim arkitekturor për t'u mbyllur në ADR**. Pajisje mobile = SQLCipher/OS keystore; server/hub = enkriptim disku ose pgcrypto për të dhënat fiskale; çelësat në keystore/vault — kurrë në kod/repo. Fazë: spec F1 → ADR + kod F1/F5 (shih `ATK_Compliance_Gate.md`).
+- **LMDhP — mbrojtja e të dhënave personale në rrjedhën SEF (UA N48):** (a) **inventar**: `OperatorId` (emër+ID operatori), `citizen_id`, kuponët me artikuj; (b) **retention** sipas LAPT/ligjit tatimor — periudha konkrete konfirmohet me kontabilistin/ATK para certifikimit; (c) **minimizim në logje/evidencë** — asnjë payload/PII në logje aplikative (redaction-i i PoC-5 bëhet standard); (d) baza ligjore = detyrimi i fiskalizimit; të drejtat e subjektit → procedurat e klientit. Kontroll i detyrueshëm para certifikimit (F5/F9).
 - Asnjë fshirje reale e dokumenteve financiare — vetëm reversal/korrigjim/notë krediti.
 
 ## 10. Dizajni (iData+)
@@ -203,7 +209,7 @@
 - **Money scale PER-FIELD:** `CouponItem.Price/Total` = €0.0001 (×10000); coupon `Total`/payments/tax-groups/totals = cents (×100). (Korrigjon "krejt cents".)
 - **CouponType:** `Sale=1, Cancel=2, Return=3` (nga models.proto; README prose ishte gabim). RETURN/CANCEL kërkojnë ReferenceNo.
 - **Tax codes:** `A`=exempt · `C`=0% · `D`=8% · `E`=18%; harta T0→C, T8→D, T18→E, **TL→A** (konfirmo). D=8% pa rregull blanket "qumështoret".
-- **Secrets:** App ID/Fiscalization No → `docs-private/*.secret.md` (gitignore); dokumenti publik pa ID.
+- **Secrets:** App ID/Fiscalization No → private-local (jashtë git); dokumenti publik pa ID.
 - **ADR-017:** konfirmo printer hardware-vs-software gjatë test phase aktive, para blerjes së pajisjeve.
 
 **28.06.2026 — v2.6 (template zyrtare ATK):**
@@ -285,6 +291,14 @@
 - **PoC-1 Tenant Isolation PASS** (PR #10) + **PoC-2 Accounting Posting PASS** (PR #12, +hardening 6-tabelësh reliability): izolimi 3-nivelësh (API deny-by-default / composite FK / RLS), motori i postimit me **debit=kredit të verifikuar në COMMIT**, **FX-005 mixed**, **[51] pending** (ACC-006), **dual-variant si input ADR-012**. **2/5 PoC të mbyllura.**
 - **ADR-012, ACC-003 dhe ACC-006 MBETEN gates të hapura** — PoC-2 jep vetëm evidence/input teknik dhe kontabël, **nuk i mbyll**.
 - **Gjetje për F1/F2:** rol aplikacioni jo-superuser (RLS); concurrency e `partner_card_entry.running_balance`; **TRUNCATE hardening** për tabelat append-only (edhe `audit_log`).
+
+**09.07.2026 — v2.22 (ATK/SEF compliance hardening — auditimi nen-për-nen):**
+- **Auditim i plotë KT (Maj 2026) + UA 01/2026** i kanonizuar: **278 kërkesa unike** (nota 7/10 për fazën PoC) → `05-sef-atk/ATK_Compliance_Gate.md` (regjistri me gate + **8 CRITICAL** + Recertification Gate + follow-ups kodi F1/F5) + `05-sef-atk/Kupon_Print_Spec.md` (UA N7.2 i plotë 2.1–2.20 + tabelat zyrtare 31 njësi/53 kategori + 11 pyetje të hapura Tier 2/ATK).
+- **§7 i përditësuar:** rendi **ONLINE-first** (transmeto→`transaction_id`→shtyp; offline = vetëm përjashtim Neni 44 me mbishkrimin "OFFLINE"); regjistrimi i bllokut 5-ditësh (UA N45.6); **config per tenant "në TVSH: po/jo"** si parakusht i `vat_number` në kupon.
+- **§9 i përditësuar:** **enkriptim at-rest** për të dhënat fiskale (KT N26.4c — KT: "standarde të avancuara"; **AES-256 = kandidati i brendshëm → ADR**) + seksioni **LMDhP** (UA N48: inventar/retention/minimizim në logje).
+- **VENDIM I HAPUR (pronari: Blend):** *shitje në distancë / e-kupon si kanal shitjeje* — PO me scope apo N/A me arsyetim? **Statusi: OPEN**; e-kuponi ndërkohë = **i kufizuar** te rastet që i lejon ATK (jo alternativë universale e printimit).
+- Tracker: rreshta të rinj **ATK-005..ATK-010** (13 pyetjet Tier 2/ATK, PEF+SEF paralel, backup/restore drill i regjistrit fiskal, decommissioning POS + revokim certifikate, load test i kanalit fiskal, **kufiri i certifikimit** — bounded bundle vs full repo etj.).
+- **Statusi i test-aplikimit:** aplikim i RI u regjistrua më **09.07.2026** → **referenca aktuale për Tier 2**; aplikimi i mëparshëm (28.06) = **historik/superseded**. Identifikuesit **private-local, jashtë git**.
 
 ## 12. Pyetjet e hapura (pending)
 | # | Pyetja | Kush | Afati |
