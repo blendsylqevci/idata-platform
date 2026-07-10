@@ -1,6 +1,6 @@
 # PM Review Protocol — iData+ Quality Gate
 
-**Versioni:** 1.2 · **Data:** 2026-07-09 · **Pronari:** Blend (aprovon çdo ndryshim të këtij dokumenti)
+**Versioni:** 1.3 · **Data:** 2026-07-10 · **Pronari:** Blend (aprovon çdo ndryshim të këtij dokumenti)
 **Për kë:** agjenti PM / quality-gate (aktualisht Codex në VS Code). Vlen për ÇDO rishikim dorëzimi, PR apo increment-i, nga sot deri në lansim.
 **Rifreskimi:** në kufirin e çdo increment-i përditësohen VETËM §5 (scope) dhe lista e ndaluar; bërthama nuk ndryshon pa aprovimin e Blendit.
 
@@ -83,9 +83,11 @@ Kur dyshon mes "të lëshoj" dhe "të ndaloj" — **NDALO dhe pyet**. Një ditë
   - **kuponi i shtypur/elektronik sipas `docs/canonical/05-sef-atk/Kupon_Print_Spec.md`**: fushat e plota UA N7.2 + mbishkrimet OFFLINE / "KOPJE E KUPONIT" / Test + QR në çdo output + **NUIKF alfanumerik ≤16** i lexueshëm;
   - **katalogët 31 njësi / 53 kategori të KONTROLLUAR** (seed zyrtar + të zgjerueshëm sipas KT; validim per-namespace — PAL ndër-tabelor lejohet; jo free-text arbitrar);
   - **pandryshueshmëria e fiscal outbox**: payload/identiteti/`created_at`/`deadline_at` immutable + DELETE i ndaluar + statusi vetëm përmes funksionit të kontrolluar + `fiscal_attempt_log`/`fiscal_status_event` append-only — `Reliability_Gate.md` §5.2;
-  - **klasifikimi RECERT: PO/JO** i shënuar në **çdo PR** që prek modulin fiskal (`ATK_Compliance_Gate.md` §3) — mungesa e klasifikimit = kthim mbrapsht.
+  - **klasifikimi RECERT: PO/JO** i shënuar në **çdo PR** që prek modulin fiskal (`ATK_Compliance_Gate.md` §3) — mungesa e klasifikimit = kthim mbrapsht. **+ (v1.3, ATK normative refresh):**
+  - **artefakti i komisionit** pa **DEMO VERSION / mock / PoC routes / placeholders / sample identifiers**; release-candidate i versionuar e funksional; etiketa zyrtare **TEST** e ambientit test **NUK hiqet**; fixtures sintetike vetëm në test suite, jo në paketë (`ATK_Compliance_Gate.md` §3b);
+  - **çdo PR normativ** verifikohet kundrejt **`docs/canonical/05-sef-atk/ATK_Source_Register.md`**: enumerim i plotë i portalit + **hash match** (titull/URL/sha256/datë) — çdo ndryshim = **gjetje e re**, jo korrigjim i heshtur.
 - **Offline/Sync** *(kur nis)*: idempotencë e provuar me test, outbox i izoluar, pa dublim në replay, UUID kudo.
 - **POS/KDS** *(kur nis)*: totali i fshehur→lock, anulim me arsye+aprovim, transferi vetëm menaxher, saldo per kamarier e rakordueshme.
 
 ---
-*Historia: v1.0 (2026-07-07) — krijuar me aprovimin e Blendit; bazuar në protokollin e diskutuar në sesionin e setup-it të ditës së parë të zhvillimit. · v1.1 (2026-07-07) — shtuar kontrolli #7 (Reliability Gate) me aprovimin e Blendit. · v1.2 (2026-07-09) — zgjeruar checklist-a SEF (Kupon_Print_Spec, tabelat 31/53, outbox: payload/identitet/timestamps immutable + controlled status transitions + append-only attempt/status-event logs, klasifikimi RECERT PO/JO) me aprovimin e Blendit (PR review = aprovimi).*
+*Historia: v1.0 (2026-07-07) — krijuar me aprovimin e Blendit; bazuar në protokollin e diskutuar në sesionin e setup-it të ditës së parë të zhvillimit. · v1.1 (2026-07-07) — shtuar kontrolli #7 (Reliability Gate) me aprovimin e Blendit. · v1.2 (2026-07-09) — zgjeruar checklist-a SEF (Kupon_Print_Spec, tabelat 31/53, outbox: payload/identitet/timestamps immutable + controlled status transitions + append-only attempt/status-event logs, klasifikimi RECERT PO/JO) me aprovimin e Blendit (PR review = aprovimi). · v1.3 (2026-07-10) — shtuar kontrolli i artefaktit të komisionit (pa DEMO/mock/PoC routes/placeholders/sample IDs) + verifikimi i çdo PR-i normativ kundrejt `ATK_Source_Register.md` (enumerim + hash match), me aprovimin e Blendit (PR review = aprovimi).*

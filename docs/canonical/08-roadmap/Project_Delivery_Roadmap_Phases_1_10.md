@@ -104,13 +104,14 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 | PoC-4 Local Hub | Infra/Hub Lead | 4 | LAN hub, printer fallback, local queue | ADR-013, HW-001 | web/mobile → hub → printer/test queue punon pa internet; recovery pas restart |
 | PoC-5 SEF TEST | iCode SEF Lead | 5 | fiskalizim test me protokollin zyrtar | ATK-002, ADR-017 | kupon test nënshkruhet/dërgohet në server test; QR/transaction id ruhen; retry i dështimit kontrollohet |
 
-**Statusi real (jo vetëm plan):**
+**Statusi real (jo vetëm plan) — përditësuar 10.07.2026:**
 
-- **PoC-1 Tenant Isolation — PASS / merged PR #10**
-- **PoC-2 Accounting Posting — PASS / merged PR #12**
-- PoC-3 Offline Sync — next
-- PoC-4 Local Hub — pending
-- PoC-5 SEF TEST — pending
+- **PoC-1 Tenant Isolation — PASS sipas kritereve të PoC-ut** (koncept i provuar; PR #10)
+- **PoC-2 Accounting Posting — PASS sipas kritereve të PoC-ut** (koncept i provuar; PR #12)
+- **PoC-3 Offline Sync — PASS sipas kritereve të PoC-ut** (koncept i provuar; PR #14)
+- **PoC-4 Local Hub — PARTIAL** (4a semantika ✅ PR #15; **4b hardware pending**)
+- **PoC-5 SEF — Tier 1 PASS** (PR #16); **Tier 2 LIVE pending** (i gated nga aprovimi i veçantë i Blendit)
+- **Production-readiness ≠ PoC PASS:** arrihet në **Fazat F1+** — follow-ups të regjistruara (`ATK_Compliance_Gate.md` §4, `Reliability_Gate.md` §5.2).
 
 **Rregull:** PoC-të nuk janë demo UI. Janë prova teknike me test/evidencë. Nëse një PoC dështon, faza që varet prej tij nuk kalon në implementim të plotë.
 
