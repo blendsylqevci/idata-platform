@@ -59,7 +59,7 @@ Këto janë datat më të vona të pranueshme që ruajnë shansin real për cuto
 | ACC-007 | Sent/Open | COGS valuation/yield/batch costing | Kontabilisti + KABI | Faza 3 | 2026-08-05 | Phase 3 nis me model configurable; COGS production freeze shtyhet |
 | ACC-008 | Sent/Open | Kthime/write-off/note krediti/periudha | Kontabilisti | Faza 2/3/5/8 | 2026-08-05 | lejohet vetëm reversal conservative + approval, jo automation final |
 | Payroll gate | Open | Payroll engine i plotë vs master-data + kontribute | Blend + kontabilisti | Faza 1 | 2026-07-20 | në Faza 1 ndërtohet vetëm master-data + kontribute minimale |
-| ATK-002 | Open | SEF PoC teknik me GitHub fiskalizimi | iCode dev | Faza 5 | 2026-08-15 | nuk fillon aplikimi formal; KABI live rrezikohet |
+| ATK-002 | **Tier 1 PASS / Tier 2 LIVE pending** (PR #16; Tier 2 i gated) | SEF PoC teknik me GitHub fiskalizimi | iCode dev | Faza 5 | 2026-08-15 | nuk fillon aplikimi formal; KABI live rrezikohet |
 | ATK-003 | Open | Aplikim/certifikim final SEF | iCode + ATK | KABI live / PLANET live | 2026-10-15 start | shtyrje e go-live fiskal; as KABI as PLANET nuk dalin live me faturim jo-konform |
 | ATK-004 | Open | Printer hardware vs SEF software + printer termik | iCode + ATK/vendor | Hardware procurement | 2026-08-15 | ndalo blerjen e printerëve/pajisjeve fiskale |
 | HW-001 | Open | Inventar pajisjesh ekzistuese | Klienti | Faza 4/5/7/8 | 2026-08-15 | buxhet/hardware test shtyhet; PoC me pajisje test |
@@ -672,10 +672,12 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 ---
 
-## 6. Rendi pas këtij dokumenti
+## 6. Rendi aktual i punës (përditësuar 10.07.2026)
 
-1. Review nga Fable/Claude kundër SSOT, tracker, audit findings, PR #6 dhe PR #8.
-2. Review kundërshtues nga Codex.
-3. Aprovim nga Blend.
-4. PR docs për roadmap + cutover/rollback runbook.
-5. Pastaj nisim 5 PoC-të me radhë: tenant isolation, accounting, offline sync, local hub, SEF.
+1. **PR B: PRO DATA Source→Target Closure v2** — hapi i parë pas merge të PR #18.
+2. **ATK full-corpus/LAPT closure (P0 / PRE-TIER2):** re-audit i regjistrit 278-rreshtor kundrejt corpus-it të plotë (`ATK_Source_Register.md`) + harta LAPT nen-për-nen (`ATK-011`).
+3. **PREFLIGHT privat** (wrapper i maskuar; pjesë e Tier 2 — i gated).
+4. **Tier 2 LIVE** — VETËM pas closures 1–3 + aprovimit të Pronarit (Human Gate).
+5. **Paralel:** PoC-4b ecën i pavarur kur vjen hardware-i.
+
+*(Rendi origjinal i 07.07.2026 — HISTORIK, i kryer: review Fable/Codex → aprovim → PR docs → 5 PoC-të me radhë; të gjitha të mbyllura sipas §4 "Statusi real".)*

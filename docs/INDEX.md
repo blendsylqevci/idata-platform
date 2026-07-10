@@ -55,13 +55,13 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
 - `docs/canonical/08-roadmap/Cutover_Rollback_Runbook.md`
 
-## Next gate (10.07.2026)
+## Next gate (rendi aktual — 10.07.2026)
 
-1. **PR #18 "ATK normative refresh"** — delta-check (Fable) + review final (Codex) para merge.
-2. **PR B: PRO DATA Source→Target Closure v2** — pas merge të PR #18 (07_PRODATA i paprekur deri atëherë).
-3. **PoC-4b** — dita e hardware-it (checklist në `poc/poc4-local-hub/README.md`).
-4. **PoC-5 Tier 2 LIVE** — i NDALUAR deri në aprovimin e veçantë të Pronarit (Human Gate) + PREFLIGHT privat.
-5. **ATK gates** — pyetjet formale (tracker `ATK-005`/`ATK-006`/`ATK-010`/`ATK-011`) + re-audit i Gate kundrejt corpus-it të plotë (`ATK_Source_Register.md`).
+1. **PR B: PRO DATA Source→Target Closure v2** — hapi i parë pas merge të PR #18 (07_PRODATA i paprekur deri atëherë).
+2. **ATK full-corpus/LAPT closure (P0 / PRE-TIER2):** full-corpus re-audit i `ATK_Compliance_Gate.md` kundrejt `ATK_Source_Register.md` + harta LAPT (`ATK-011`) + pyetjet formale (`ATK-005`/`ATK-006`/`ATK-010`).
+3. **PREFLIGHT privat** (wrapper i maskuar — pjesë e Tier 2, i gated).
+4. **PoC-5 Tier 2 LIVE** — VETËM pas hapave 1–3 + aprovimit të veçantë të Pronarit (Human Gate).
+5. **Paralel:** PoC-4b — dita e hardware-it (checklist në `poc/poc4-local-hub/README.md`).
 
 *(Gate historik i split-it — kaluar: pa humbje kërkesash; pa PII/sekrete të promovuara; pending items të trackuara; kontratat jashtë git.)*
 

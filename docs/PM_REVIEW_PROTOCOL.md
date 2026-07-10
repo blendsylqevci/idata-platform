@@ -2,7 +2,7 @@
 
 **Versioni:** 1.3 · **Data:** 2026-07-10 · **Pronari:** Group Owner / Human Gate (aprovon çdo ndryshim të këtij dokumenti)
 **Për kë:** agjenti PM / quality-gate (aktualisht Codex në VS Code). Vlen për ÇDO rishikim dorëzimi, PR apo increment-i, nga sot deri në lansim.
-**Rifreskimi:** në kufirin e çdo increment-i përditësohen VETËM §5 (scope) dhe lista e ndaluar; bërthama nuk ndryshon pa aprovimin e Blendit.
+**Rifreskimi:** në kufirin e çdo increment-i përditësohen VETËM §5 (scope) dhe lista e ndaluar; bërthama nuk ndryshon pa aprovimin e Pronarit.
 
 ---
 
@@ -53,7 +53,7 @@ Skano diff-in për: emra realë personash (pronarët e bizneseve përmenden VET�
 - CI jeshile — verifikoje, mos e supozo.
 
 ### 7. Reliability Gate (module kritike)
-- **PR që prek modul kritik pa failure matrix të përditësuar + teste përkatëse = REJECT** (përveç waiver-it të shkruar të Blendit me risk + afat).
+- **PR që prek modul kritik pa failure matrix të përditësuar + teste përkatëse = REJECT** (përveç waiver-it të shkruar të Pronarit me risk + afat).
 - Përkufizimi i "modulit kritik", 8 skenarët standardë të dështimit dhe template-i i matricës: `docs/canonical/06-architecture/Reliability_Gate.md`. Në dyshim → moduli trajtohet si kritik.
 
 ## Verdikti — gjithmonë në këtë format
@@ -63,7 +63,7 @@ VERDIKT: APPROVE / APPROVE-WITH-CHANGES / REJECT
 GJETJET: [critical/high/medium/low] file:rresht — çfarë — pse — çfarë duhet ndryshuar
 EVIDENCA IME: komandat që ekzekutova, output-et që pashë, skedarët/rreshtat që lexova
 PRETENDIME TË PAVERIFIKUESHME: çfarë tha ndërtuesi që s'e provova dot
-PYETJE PËR BLENDIN: vendime që i takojnë vetëm atij
+PYETJE PËR PRONARIN: vendime që i takojnë vetëm atij
 ```
 
 ## Rregulli i evidencës (anti-"më fal, e dita gabim")
@@ -72,8 +72,8 @@ PYETJE PËR BLENDIN: vendime që i takojnë vetëm atij
 - **APPROVE pa listë evidence = i pavlefshëm** dhe kthehet mbrapsht.
 - Fjalët **"duket në rregull", "besoj se", "me siguri" janë të ndaluara** në verdikt.
 - Çdo gjë që s'e verifikove dot vetë shkon **detyrimisht** te "Pretendime të paverifikueshme" — kurrë s'kalon në heshtje si e mirë.
-- **Kurrë mos e zbut verdiktin** sepse ndërtuesi këmbëngul ose sepse "po humbet kohë": nëse ti dhe ndërtuesi s'pajtoheni, të dy pozicionet i dërgohen Blendit me evidencë.
-- Suksesi yt **nuk** matet me sa shpejt aprovon — matet me faktin që **askush tjetër** (as Blendi, as klienti, as ATK) nuk gjen gabim pas teje.
+- **Kurrë mos e zbut verdiktin** sepse ndërtuesi këmbëngul ose sepse "po humbet kohë": nëse ti dhe ndërtuesi s'pajtoheni, të dy pozicionet i dërgohen Pronarit me evidencë.
+- Suksesi yt **nuk** matet me sa shpejt aprovon — matet me faktin që **askush tjetër** (as Pronari, as klienti, as ATK) nuk gjen gabim pas teje.
 
 Kur dyshon mes "të lëshoj" dhe "të ndaloj" — **NDALO dhe pyet**. Një ditë vonesë kushton më pak se një gabim në GL, TVSH, apo një leak privatësie.
 
@@ -90,4 +90,4 @@ Kur dyshon mes "të lëshoj" dhe "të ndaloj" — **NDALO dhe pyet**. Një ditë
 - **POS/KDS** *(kur nis)*: totali i fshehur→lock, anulim me arsye+aprovim, transferi vetëm menaxher, saldo per kamarier e rakordueshme.
 
 ---
-*Historia: v1.0 (2026-07-07) — krijuar me aprovimin e Blendit; bazuar në protokollin e diskutuar në sesionin e setup-it të ditës së parë të zhvillimit. · v1.1 (2026-07-07) — shtuar kontrolli #7 (Reliability Gate) me aprovimin e Blendit. · v1.2 (2026-07-09) — zgjeruar checklist-a SEF (Kupon_Print_Spec, tabelat 31/53, outbox: payload/identitet/timestamps immutable + controlled status transitions + append-only attempt/status-event logs, klasifikimi RECERT PO/JO) me aprovimin e Blendit (PR review = aprovimi). · v1.3 (2026-07-10) — shtuar kontrolli i artefaktit të komisionit (pa DEMO/mock/PoC routes/placeholders/sample IDs) + verifikimi i çdo PR-i normativ kundrejt `ATK_Source_Register.md` (enumerim + hash match) + scope-i aktual i rifreskuar (Increment 1 → Phase-0 closeout / PoC-4b / PoC-5 Tier 2 / ATK gates, me pointer dinamik te roadmap/SSOT), me aprovimin e Pronarit (PR review = aprovimi).*
+*Historia: v1.0 (2026-07-07) — krijuar me aprovimin e Pronarit; bazuar në protokollin e diskutuar në sesionin e setup-it të ditës së parë të zhvillimit. · v1.1 (2026-07-07) — shtuar kontrolli #7 (Reliability Gate) me aprovimin e Pronarit. · v1.2 (2026-07-09) — zgjeruar checklist-a SEF (Kupon_Print_Spec, tabelat 31/53, outbox: payload/identitet/timestamps immutable + controlled status transitions + append-only attempt/status-event logs, klasifikimi RECERT PO/JO) me aprovimin e Pronarit (PR review = aprovimi). · v1.3 (2026-07-10) — shtuar kontrolli i artefaktit të komisionit (pa DEMO/mock/PoC routes/placeholders/sample IDs) + verifikimi i çdo PR-i normativ kundrejt `ATK_Source_Register.md` (enumerim + hash match) + scope-i aktual i rifreskuar (Increment 1 → Phase-0 closeout / PoC-4b / PoC-5 Tier 2 / ATK gates, me pointer dinamik te roadmap/SSOT), me aprovimin e Pronarit (PR review = aprovimi).*
