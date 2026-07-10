@@ -1,7 +1,7 @@
 # iData+ Project Documentation Index
 
-Date: 2026-07-02
-Status: Canonical split v0.1, prepared from `00_raw/claude` and `00_raw/codex`.
+Date: 2026-07-10 (canonical split origjinal: 2026-07-02)
+Status: Canonical split v0.1, prepared from `00_raw/claude` and `00_raw/codex`; mirëmbahet me docs-PR.
 
 ## Mandatory project rules
 
@@ -55,13 +55,14 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
 - `docs/canonical/08-roadmap/Cutover_Rollback_Runbook.md`
 
-## Next gate
+## Next gate (10.07.2026)
 
-Claude review should verify this split before first commit:
+1. **PR #18 "ATK normative refresh"** — delta-check (Fable) + review final (Codex) para merge.
+2. **PR B: PRO DATA Source→Target Closure v2** — pas merge të PR #18 (07_PRODATA i paprekur deri atëherë).
+3. **PoC-4b** — dita e hardware-it (checklist në `poc/poc4-local-hub/README.md`).
+4. **PoC-5 Tier 2 LIVE** — i NDALUAR deri në aprovimin e veçantë të Pronarit (Human Gate) + PREFLIGHT privat.
+5. **ATK gates** — pyetjet formale (tracker `ATK-005`/`ATK-006`/`ATK-010`/`ATK-011`) + re-audit i Gate kundrejt corpus-it të plotë (`ATK_Source_Register.md`).
 
-1. No Claude-only requirement was dropped.
-2. No raw PRO DATA/PII/secret was promoted.
-3. The three phase0-pack minor pending items are either added later or tracked.
-4. Contracts remain confidential and outside git.
+*(Gate historik i split-it — kaluar: pa humbje kërkesash; pa PII/sekrete të promovuara; pending items të trackuara; kontratat jashtë git.)*
 
 - `canonical/03-kabi/USAID_Formula_Validation_Gate_2026-07-04.md` — sanitized Phase 0 evidence gate for KABI USAID milk settlement formula.

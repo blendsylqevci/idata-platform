@@ -1,7 +1,7 @@
 # iData+ — Project Delivery Roadmap, Fazat 1–10
 
-**Status:** Draft PM/Architecture v0.2 për review pas gjetjeve Fable/Codex  
-**Data:** 2026-07-07  
+**Status:** canonical / approved (kopja kanonike e roadmap-it — miratuar nga Pronari; merged PR #9, përditësime me PR review)  
+**Data:** 2026-07-07 · **Përditësuar:** 2026-07-10  
 **Burime kryesore:** SSOT §3/§8/§12, Feature Status Register, Outstanding Confirmations Tracker, ADR Register, 5 PoC Specs, PRO DATA Evidence Closure, KABI Operational Evidence Update, Accountant Confirmation Pack, Increment 1 PR #4/#6, security PR #8  
 **Rregull i hekurt:** ky roadmap **nuk krijon numërim të ri fazash**. Ndjek 1:1 SSOT §3. Nëse ndryshon numërimi, duhet vendim formal në SSOT + Decisions Log.
 
@@ -110,8 +110,8 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - **PoC-2 Accounting Posting — PASS sipas kritereve të PoC-ut** (koncept i provuar; PR #12)
 - **PoC-3 Offline Sync — PASS sipas kritereve të PoC-ut** (koncept i provuar; PR #14)
 - **PoC-4 Local Hub — PARTIAL** (4a semantika ✅ PR #15; **4b hardware pending**)
-- **PoC-5 SEF — Tier 1 PASS** (PR #16); **Tier 2 LIVE pending** (i gated nga aprovimi i veçantë i Blendit)
-- **Production-readiness ≠ PoC PASS:** arrihet në **Fazat F1+** — follow-ups të regjistruara (`ATK_Compliance_Gate.md` §4, `Reliability_Gate.md` §5.2).
+- **PoC-5 SEF — Tier 1 PASS** (PR #16); **Tier 2 LIVE pending** (i gated nga aprovimi i veçantë i Pronarit — Human Gate)
+- **Production-readiness ≠ PoC PASS:** arrihet përmes **gates F1–F10** (jo automatikisht me F1+) — follow-ups të regjistruara (`ATK_Compliance_Gate.md` §4, `Reliability_Gate.md` §5.2) + gates e certifikimit (Gate §2e/§3).
 
 **Rregull:** PoC-të nuk janë demo UI. Janë prova teknike me test/evidencë. Nëse një PoC dështon, faza që varet prej tij nuk kalon në implementim të plotë.
 

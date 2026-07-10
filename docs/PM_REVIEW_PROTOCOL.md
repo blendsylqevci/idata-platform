@@ -1,6 +1,6 @@
 # PM Review Protocol — iData+ Quality Gate
 
-**Versioni:** 1.3 · **Data:** 2026-07-10 · **Pronari:** Blend (aprovon çdo ndryshim të këtij dokumenti)
+**Versioni:** 1.3 · **Data:** 2026-07-10 · **Pronari:** Group Owner / Human Gate (aprovon çdo ndryshim të këtij dokumenti)
 **Për kë:** agjenti PM / quality-gate (aktualisht Codex në VS Code). Vlen për ÇDO rishikim dorëzimi, PR apo increment-i, nga sot deri në lansim.
 **Rifreskimi:** në kufirin e çdo increment-i përditësohen VETËM §5 (scope) dhe lista e ndaluar; bërthama nuk ndryshon pa aprovimin e Blendit.
 
@@ -42,7 +42,7 @@ Skano diff-in për: emra realë personash (pronarët e bizneseve përmenden VET�
 - Kod që devijon nga kontrata pa ADR të ri = **REJECT**.
 
 ### 5. Scope-i i increment-it aktual
-**Increment aktual: Increment 1 — Walking Skeleton / accounting library-first** (vendimi v2.13 në SSOT; runbook-u është definimi).
+**Scope aktual (10.07.2026): Phase-0 closeout** — **PoC-4b** (dita e hardware-it) · **PoC-5 Tier 2 LIVE** (i gated nga Human Gate + PREFLIGHT privat) · **ATK gates** (`ATK_Source_Register.md`, `ATK_Compliance_Gate.md` §2e/§3, tracker ATK-005/010/011). *Pointer dinamik:* burimi i së vërtetës për scope-in = **roadmap §4 "Statusi real"** + **SSOT Decisions Log** — kjo rreshtë rifreskohet në kufirin e çdo increment-i (rregulli i Rifreskimit në header).
 - Çdo gjë jashtë scope = flamur.
 - Asgjë nga lista "mos e ngri në kod pa konfirmim" (Tracker §5: TVSH per produkt KABI, fermerë/box 51, COGS final, settlement PLANET, RESORT, printera fiskalë) s'guxon të jetë e ngurtësuar.
 - Vendim i ri arkitekture pa ADR = flamur.
@@ -90,4 +90,4 @@ Kur dyshon mes "të lëshoj" dhe "të ndaloj" — **NDALO dhe pyet**. Një ditë
 - **POS/KDS** *(kur nis)*: totali i fshehur→lock, anulim me arsye+aprovim, transferi vetëm menaxher, saldo per kamarier e rakordueshme.
 
 ---
-*Historia: v1.0 (2026-07-07) — krijuar me aprovimin e Blendit; bazuar në protokollin e diskutuar në sesionin e setup-it të ditës së parë të zhvillimit. · v1.1 (2026-07-07) — shtuar kontrolli #7 (Reliability Gate) me aprovimin e Blendit. · v1.2 (2026-07-09) — zgjeruar checklist-a SEF (Kupon_Print_Spec, tabelat 31/53, outbox: payload/identitet/timestamps immutable + controlled status transitions + append-only attempt/status-event logs, klasifikimi RECERT PO/JO) me aprovimin e Blendit (PR review = aprovimi). · v1.3 (2026-07-10) — shtuar kontrolli i artefaktit të komisionit (pa DEMO/mock/PoC routes/placeholders/sample IDs) + verifikimi i çdo PR-i normativ kundrejt `ATK_Source_Register.md` (enumerim + hash match), me aprovimin e Blendit (PR review = aprovimi).*
+*Historia: v1.0 (2026-07-07) — krijuar me aprovimin e Blendit; bazuar në protokollin e diskutuar në sesionin e setup-it të ditës së parë të zhvillimit. · v1.1 (2026-07-07) — shtuar kontrolli #7 (Reliability Gate) me aprovimin e Blendit. · v1.2 (2026-07-09) — zgjeruar checklist-a SEF (Kupon_Print_Spec, tabelat 31/53, outbox: payload/identitet/timestamps immutable + controlled status transitions + append-only attempt/status-event logs, klasifikimi RECERT PO/JO) me aprovimin e Blendit (PR review = aprovimi). · v1.3 (2026-07-10) — shtuar kontrolli i artefaktit të komisionit (pa DEMO/mock/PoC routes/placeholders/sample IDs) + verifikimi i çdo PR-i normativ kundrejt `ATK_Source_Register.md` (enumerim + hash match) + scope-i aktual i rifreskuar (Increment 1 → Phase-0 closeout / PoC-4b / PoC-5 Tier 2 / ATK gates, me pointer dinamik te roadmap/SSOT), me aprovimin e Pronarit (PR review = aprovimi).*
