@@ -42,7 +42,7 @@ Skano diff-in për: emra realë personash (pronarët e bizneseve përmenden VET�
 - Kod që devijon nga kontrata pa ADR të ri = **REJECT**.
 
 ### 5. Scope-i i increment-it aktual
-**Scope aktual (10.07.2026): Phase-0 closeout** — **PoC-4b** (dita e hardware-it) · **PoC-5 Tier 2 LIVE** (i gated nga Human Gate + PREFLIGHT privat) · **ATK gates** (`ATK_Source_Register.md`, `ATK_Compliance_Gate.md` §2e/§3, tracker ATK-005/010/011). *Pointer dinamik:* burimi i së vërtetës për scope-in = **roadmap §4 "Statusi real"** + **SSOT Decisions Log** — kjo rreshtë rifreskohet në kufirin e çdo increment-i (rregulli i Rifreskimit në header).
+**Scope aktual (10.07.2026): Phase-0 closeout** — **PR B: PRO DATA Source→Target Closure v2** (hapi 1 pas merge të PR #18) · **ATK full-corpus/LAPT PRE-TIER2 closure** (re-audit + `ATK-011` — blockers të Tier 2 së bashku me PR B; ATK-005 triagjohet/fiksohet para Tier 2, server-dependent gjatë Tier 2; ATK-006/010 = certification gates të trackuara, jo blockers automatikë) · **PoC-4b** (paralel, dita e hardware-it) · **PoC-5 Tier 2 LIVE** (i gated nga Human Gate + PREFLIGHT privat). *Pointer dinamik:* burimi i së vërtetës për scope-in = **roadmap §4 "Statusi real" + §6 "Rendi aktual"** + **SSOT Decisions Log** — kjo rreshtë rifreskohet në kufirin e çdo increment-i (rregulli i Rifreskimit në header).
 - Çdo gjë jashtë scope = flamur.
 - Asgjë nga lista "mos e ngri në kod pa konfirmim" (Tracker §5: TVSH per produkt KABI, fermerë/box 51, COGS final, settlement PLANET, RESORT, printera fiskalë) s'guxon të jetë e ngurtësuar.
 - Vendim i ri arkitekture pa ADR = flamur.

@@ -58,7 +58,8 @@ During implementation, code plus tests become the truth for system behavior.
 ## Next gate (rendi aktual — 10.07.2026)
 
 1. **PR B: PRO DATA Source→Target Closure v2** — hapi i parë pas merge të PR #18 (07_PRODATA i paprekur deri atëherë).
-2. **ATK full-corpus/LAPT closure (P0 / PRE-TIER2):** full-corpus re-audit i `ATK_Compliance_Gate.md` kundrejt `ATK_Source_Register.md` + harta LAPT (`ATK-011`) + pyetjet formale (`ATK-005`/`ATK-006`/`ATK-010`).
+2. **ATK full-corpus/LAPT closure (P0 / PRE-TIER2):** full-corpus re-audit i `ATK_Compliance_Gate.md` kundrejt `ATK_Source_Register.md` + harta LAPT (`ATK-011`).
+   *Blockers PRE-TIER2 = vetëm PR B + re-audit + ATK-011.* `ATK-005` triagjohet/**fiksohet** para Tier 2 (përgjigjet server-dependent merren GJATË Tier 2); `ATK-006`/`ATK-010` = certification gates të trackuara — **jo blockers automatikë** të Tier 2 (përveç nëse përgjigjja ndryshon scope-in/sigurinë).
 3. **PREFLIGHT privat** (wrapper i maskuar — pjesë e Tier 2, i gated).
 4. **PoC-5 Tier 2 LIVE** — VETËM pas hapave 1–3 + aprovimit të veçantë të Pronarit (Human Gate).
 5. **Paralel:** PoC-4b — dita e hardware-it (checklist në `poc/poc4-local-hub/README.md`).
