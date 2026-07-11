@@ -43,6 +43,7 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/00-ssot/Outstanding_Confirmations_Tracker_2026-06-29.md`
 - `docs/canonical/01-phase0/00_Phase0_Execution_Plan.md`
 - `docs/canonical/01-phase0/Repo_Assembly_Walking_Skeleton_Runbook_2026-06-30.md`
+- `docs/canonical/01-phase0/07_PRODATA_Evidence_Closure_Parity_Matrix.md` — v2 Source→Target Closure (dy boshte + capability map)
 - `docs/canonical/02-accounting/Accounting_Posting_Rules_v0_2026-06-29.md`
 - `docs/canonical/02-accounting/VAT_Book_Mapping_v0_2026-06-29.md`
 - `docs/canonical/03-kabi/KABI_Logjika_Operacionale_Kontabiliteti_Draft.md`
@@ -57,12 +58,13 @@ During implementation, code plus tests become the truth for system behavior.
 
 ## Next gate (rendi aktual — 10.07.2026)
 
-1. **PR B: PRO DATA Source→Target Closure v2** — hapi i parë pas merge të PR #18 (07_PRODATA i paprekur deri atëherë).
-2. **ATK full-corpus/LAPT closure (P0 / PRE-TIER2):** full-corpus re-audit i `ATK_Compliance_Gate.md` kundrejt `ATK_Source_Register.md` + harta LAPT (`ATK-011`).
-   *Blockers PRE-TIER2 = vetëm PR B + re-audit + ATK-011.* `ATK-005` triagjohet/**fiksohet** para Tier 2 (përgjigjet server-dependent merren GJATË Tier 2); `ATK-006`/`ATK-010` = certification gates të trackuara — **jo blockers automatikë** të Tier 2 (përveç nëse përgjigjja ndryshon scope-in/sigurinë).
-3. **PREFLIGHT privat** (wrapper i maskuar — pjesë e Tier 2, i gated).
-4. **PoC-5 Tier 2 LIVE** — VETËM pas hapave 1–3 + aprovimit të veçantë të Pronarit (Human Gate).
-5. **Paralel:** PoC-4b — dita e hardware-it (checklist në `poc/poc4-local-hub/README.md`).
+*(**PRO DATA Source→Target Closure v2 = kryer** me merge të këtij ndryshimi — `07_PRODATA_Evidence_Closure_Parity_Matrix.md` v2.0.)*
+
+1. **ATK full-corpus/LAPT closure (P0 / PRE-TIER2):** full-corpus re-audit i `ATK_Compliance_Gate.md` kundrejt `ATK_Source_Register.md` + harta LAPT (`ATK-011`).
+   *Blockers PRE-TIER2 = PRO DATA Closure v2 (kryer) + re-audit + ATK-011.* `ATK-005` triagjohet/**fiksohet** para Tier 2 (përgjigjet server-dependent merren GJATË Tier 2); `ATK-006`/`ATK-010` = certification gates të trackuara — **jo blockers automatikë** të Tier 2 (përveç nëse përgjigjja ndryshon scope-in/sigurinë).
+2. **PREFLIGHT privat** (wrapper i maskuar — pjesë e Tier 2, i gated).
+3. **PoC-5 Tier 2 LIVE** — VETËM pas hapave 1–2 + aprovimit të veçantë të Pronarit (Human Gate).
+4. **Paralel:** PoC-4b — dita e hardware-it (checklist në `poc/poc4-local-hub/README.md`).
 
 *(Gate historik i split-it — kaluar: pa humbje kërkesash; pa PII/sekrete të promovuara; pending items të trackuara; kontratat jashtë git.)*
 

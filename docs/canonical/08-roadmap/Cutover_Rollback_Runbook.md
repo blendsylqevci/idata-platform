@@ -1,7 +1,7 @@
 # iData+ — Cutover & Rollback Runbook
 
-**Status:** Draft PM/Architecture v0.2 për review  
-**Data:** 2026-07-07  
+**Status:** Draft PM/Architecture v0.3 për review · **Data:** 2026-07-07 · **Përditësuar:** 2026-07-10 (§3.1 legacy custody + ndarja custody↔ADR-023 në Go/No-Go/rollback/evidence)
+
 **Qëllimi:** të përcaktojë si kalohet nga PRO DATA / proceset ekzistuese në iData+ pa humbur kontroll financiar, fiskal, stok apo operativ.
 
 ---
@@ -51,6 +51,17 @@
 - Audit logs të vjetra.
 - Raw PRO DATA dumps.
 - Kontrata/oferta/çmime marrëveshjeje në GitHub/Notion/Slack.
+
+### 3.1 Legacy PRO DATA backup custody (kontrolle PARA cutover-it — ≠ ADR-023)
+
+Burimi historik (backup-i PRO DATA) duhet të mbetet i rikthyeshëm deri në cutover + periudhën e referencës:
+
+- **Burimi autoritativ = `.bak`** — MDF/LDF të container-it **nuk janë** burimi autoritativ.
+- **Kopje e dytë e enkriptuar** e `.bak` — **REQUIRED / OPEN / EVIDENCE PENDING**.
+- **Hash manifest** i kopjeve — **REQUIRED / OPEN / EVIDENCE PENDING**.
+- **Isolated restore drill** (mjedis i izoluar, pa ekspozim të dhënash) — **REQUIRED / OPEN / EVIDENCE PENDING**.
+- Evidence për këto kontrolle jepet **privatisht nga Pronari** (asnjë filename/path/hash/inventar privat në git); **ky dokument nuk pretendon verifikim** pa atë evidence.
+- **KUFIRI:** ky seksion mbulon **vetëm custody-n e backup-it legacy**; DR i produktit të ri (PITR/backup/restore drill i Postgres-it iData+) = **ADR-023**, track më vete.
 
 ---
 
@@ -107,7 +118,9 @@ Parallel run nuk është demo; është prova financiare/operative.
 ### Go lejohet vetëm nëse
 
 - SEF/certifikimi i kërkuar është i kryer për scope-in live.
-- Backup + restore drill ka kaluar.
+- **(A) Legacy PRO DATA custody PASS:** `.bak` autoritativ + kopje e dytë e enkriptuar + hash manifest + **isolated legacy restore drill** (evidence private e Pronarit).
+- **(B) iData+ product DR PASS (ADR-023):** PITR + backup + **restore drill i produktit të ri**.
+- *(A dhe B janë kontrolle TË NDARA — një PASS nuk e maskon tjetrin.)*
 - Opening balances janë nënshkruar.
 - Accounting books dhe VAT mapping janë validuar.
 - Hardware është testuar në vend.
@@ -121,7 +134,8 @@ Parallel run nuk është demo; është prova financiare/operative.
 
 - Nuk ka SEF compliance për dokumentet live.
 - Nuk rakordon GL/TVSH/stock/cash.
-- Nuk ka backup të rikthyeshëm.
+- **(A)** Legacy custody dështon: s'ka kopje të dytë të enkriptuar / hash manifest / legacy restore drill të provuar.
+- **(B)** Product DR (ADR-023) dështon: s'ka PITR/backup/restore drill të produktit të rikthyeshëm.
 - Nuk ka person përgjegjës për day-1 support.
 - Një gate P0 mbetet “open” pa Plan-B të aprovuar.
 
@@ -131,9 +145,9 @@ Parallel run nuk është demo; është prova financiare/operative.
 
 ### Scenario A — Dështon para cutover
 
-**Veprim:** shtyhet go-live. PRO DATA mbetet source-of-record.  
-**Kriter:** UAT/SEF/backup/opening balances dështojnë para T day.  
-**Evidence:** incident log + revised date + owner approval.
+- **Veprim:** shtyhet go-live. PRO DATA mbetet source-of-record.
+- **Kriter:** UAT/SEF/opening balances dështojnë para T day, OSE dështon njëri nga dy kontrollet e ndara të backup-it — **(A) legacy custody** apo **(B) product DR (ADR-023)**.
+- **Evidence:** incident log + revised date + owner approval.
 
 ### Scenario B — Dështon në ditën e parë
 
@@ -193,7 +207,8 @@ Për 7 ditët e para minimum:
 ## 10. Evidence që ruhet
 
 - Go/No-Go checklist i nënshkruar.
-- Backup/restore drill logs.
+- **(A)** Legacy custody evidence (kopja e enkriptuar + hash manifest + isolated legacy restore drill) — **private, e Pronarit**; këtu vetëm konfirmimi PASS/FAIL.
+- **(B)** Product DR (ADR-023): backup/restore drill logs të produktit.
 - Opening balances import reports.
 - Parallel run comparison reports.
 - SEF certification/test evidence.
