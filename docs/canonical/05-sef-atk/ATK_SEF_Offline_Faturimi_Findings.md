@@ -1,6 +1,6 @@
 # ATK / SEF - Faturimi offline dhe kerkesa per KABI
 
-Status: Hulumtim zyrtar fillestar
+Status: **Supporting synthesis (historik, 24.06.2026)** — burimet/statuset AKTUALE = `ATK_Source_Register.md` v2.0 + `ATK_SEF_Requirements_Ledger.md` + `ATK_Compliance_Gate.md` v2.0. **Korrigjim konteksti (12.07.2026):** rendi normal = **ONLINE-first** (transmeto→prano→shtyp); offline = **vetëm përjashtimi i Nenit 44**; afati 48h **nis nga momenti i ndërprerjes** (siç e thotë saktë §Neni 44 më poshtë).
 Data: 2026-06-24
 Burime:
 
@@ -70,7 +70,7 @@ Keto duhet te sqarohen ne sandbox/SEF dhe me ATK/ofrues fiskal:
 1. Cfare fusha saktesisht duhet te kete kuponi offline ne print/PDF?
 2. Si gjenerohet QR kur kuponi ende nuk eshte pranuar nga ATK?
 3. A lejohet printimi ne printer mobil nga ambulanti?
-4. A duhet secila pajisje mobile/terminal te kete POS ID dhe PKI key pair te vetin?
+4. ~~A duhet secila pajisje mobile/terminal te kete POS ID dhe PKI key pair te vetin?~~ **[MBYLLUR 12.07.2026: PO — keypair unik per POS/makinë + certifikatë per instalim SEF; çelësi privat s'largohet nga makina (Gate v2 §3.9; UA 34; T2-05). S'është më pyetje e hapur.]**
 5. Si regjistrohet branch/vehicle/ambulant ne SEF?
 6. Si trajtohen kthimet dhe anulimet offline?
 7. Cfare ndodh nese kuponi offline deshton ne fiskalizim pas rikthimit te lidhjes?

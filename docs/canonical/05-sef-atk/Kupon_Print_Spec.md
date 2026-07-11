@@ -1,6 +1,6 @@
 # Kupon Print Spec — kuponi fiskal i shtypur / elektronik (SEF)
 
-**Versioni:** 1.0 · **Data:** 2026-07-09 · **Pronari:** Blend · **Statusi:** canonical pas merge (spec — kodi vjen në F5/F7, shih `ATK_Compliance_Gate.md` §4)
+**Versioni:** 1.1 · **Data:** 2026-07-12 · **Pronari:** Group Owner (Human Gate) · **Statusi:** canonical — effective on merge (spec; **implementimi aktual FAIL ku shënohet** — Gate v2.0 §2/§4)
 **Burimet (PUBLIKE):** UA (MF) Nr. 01/2026 — Neni 5, 6, 7, 39, 45 · KT Maj 2026 — N25.18, N26.5, N26.12(b), N28.6, Shtojca F, Shtojca SEF, f.86–88.
 **Parim:** ky spec mbulon **paraqitjen** (print/PDF/e-kupon); **përmbajtja dixhitale** (proto/firma/QR) = `poc/poc5-sef/ANALIZA.md`. Asnjë vlerë reale identifikuesi këtu — vetëm fusha/kërkesa/config.
 
@@ -32,8 +32,8 @@ Kuponi fiskal përmban, **të paktën**:
 | 2.13 | **Data, ora dhe minutat e lëshimit** | |
 | 2.14 | **Numri identifikues i SEF**: **`[Numri i Njësisë]-[NUI]-[PosId]`** (KT N25.18.4a: në krye të kuponit; **Numri i Njësisë sipas KT gjenerohet nga Agjencioni i Regjistrimit të Tatimpaguesve**; **OPEN**: marrja/mapimi me `BranchId` + regjistrimi teknik te `/ca/verify` — `ATK-005`) | formatter = follow-up F5 |
 | 2.15 | **Numri DITOR i kuponit** + numri **rendor kronologjik** per POS | gjenerator sekuence DB me reset ditor = follow-up F5 |
-| 2.16 | **Kodi QR** | i renderuar e i skanueshëm — shih §3 |
-| 2.17 | **NUIKF** — Numri Unik Identifikues i Kuponit Fiskal (për verifikim) | **i lexueshëm në print**; alfanumerik **≤16**, unik (KT N26.10) |
+| 2.16 | **Kodi QR** | i renderuar e i skanueshëm — shih §3; **payload-i i firmosur i QR = `CitizenCoupon`** (JO PosCoupon); **implementimi aktual = FAIL (T2-02)** |
+| 2.17 | **NUIKF** — Numri Unik Identifikues i Kuponit Fiskal (për verifikim) | **i lexueshëm në print**; **formati BAZË dihet**: alfanumerik, **pa separatorë**, **≤16**, unik, automatik (KT N26.10; UA 39.5); **implementimi aktual = FAIL (fixture invalid; zero generator/validator — T2-03)**; OPEN vetëm algoritmi/origjina/binding me `VerificationNo` (ATK-005) |
 | 2.18 | **Logo – RKS** | + logo fiskale, shih §4 |
 | 2.19 | **Tipi i kuponit** (i rregullt, anulim, kthim malli, etj.) | shih §6 |
 | 2.20 | **Teksti i lirë**, etj. | + **"e-kupon"** për kuponët nga SEF (UA N7.2.20) |
@@ -44,7 +44,7 @@ Kuponi duhet të jetë **i lexueshëm** (KT N25.18.4a).
 
 - **UA N6.1 — HARD GATE (POS, F8) — semantika e saktë:** printimi + dhënia e kuponit është **e detyrueshme në momentin e pagesës**. Para mbylljes së pagesës:
   - **ONLINE (rruga normale):** ATK e ka **pranuar** kuponin + `transaction_id` i **persistuar** + kuponi i **dorëzuar/i printueshëm**;
-  - **OFFLINE (vetëm përjashtim, Neni 44):** payload-i fiskal **durable në fiscal outbox** + kuponi me mbishkrimin **"OFFLINE"** + retry/deadline(48h)/alert **aktive**.
+  - **OFFLINE (vetëm përjashtim, Neni 44):** payload-i fiskal **durable në fiscal outbox** + kuponi me mbishkrimin **"OFFLINE"** + retry/alert aktive; **afati 48h NIS nga MOMENTI I NDËRPRERJES së lidhjes** (JO nga krijimi i secilit kupon — implementimi aktual `created_at+48h` = jo-konform, T2-08).
 - **UA N6.2 — Parapagesat:** kupon fiskal **edhe për çdo pagesë para furnizimit**; modeli duhet të lidhë parapagesën me faturën finale **pa tatim të dyfishtë**.
 - **UA N6.3 — Pagesa me afat:** kur furnizimi ndodh e pagesa vjen më vonë, kuponi lëshohet **në momentin e furnizimit**.
 - **UA N5.2 — Furnizimet FALAS:** kupon i detyrueshëm edhe për furnizime falas (total 0) — verifikim Tier 2 që serveri e pranon.
@@ -52,7 +52,7 @@ Kuponi duhet të jetë **i lexueshëm** (KT N25.18.4a).
 
 ## 3. QR + rendi i transmetimit
 
-- **UA N39.4:** QR = **element përbërës i ÇDO kuponi** — print, PDF, apo elektronik. Test i detyrueshëm (F5+): *asnjë kupon s'del pa QR*.
+- **UA N39.4:** QR = **element përbërës i ÇDO kuponi** — print, PDF, apo elektronik; **përmbajtja = base64(`CitizenCoupon` proto) | base64(firma e CitizenCoupon)** (Gate v2 §3.5). Test i detyrueshëm (F5+): *asnjë kupon s'del pa QR*.
 - **Rendi ONLINE-first (KT N26.5a):** transmeto → ATK pranon → `transaction_id` **persistohet** → **PASTAJ shtyp/dorëzo**. Offline = **vetëm përjashtim** (Neni 44, 48h; kushtet e hard gate-it te §2) — shih §7.
 - **Print Preview (KT N25.18 par.1):** para shtypjes ofrohet preview me **QR të skanueshëm pa shtypje**.
 - **Dërgimi elektronik (e-kupon) — i KUFIZUAR, jo alternativë universale:** lejohet **vetëm** për furnizime elektronike/në distancë dhe rastet që i lejon ATK, me **pëlqimin/kushtet përkatëse** të konsumatorit; për të gjitha rastet e tjera **printimi/dorëzimi fizik mbetet gate**. **Scope-i i "shitjes në distancë / e-kupon" = vendim OPEN** (SSOT v2.22, pronari: Blend).
@@ -185,7 +185,7 @@ Kuponi duhet të jetë **i lexueshëm** (KT N25.18.4a).
 
 ## 9. Pyetje të hapura për Tier 2 / ATK (regjistrohen — NUK zgjidhen këtu)
 
-1. **NUIKF**: burimi/formati i saktë (kush e gjeneron — SEF ynë sipas algoritmi apo jepet nga ATK; lidhja me `VerificationNo` në proto).
+1. **NUIKF** *(korrigjuar 12.07 — formati DIHET: alfanumerik/pa separatorë/≤16/unik/automatik)*: OPEN vetëm **algoritmi + origjina** (SEF ynë apo server-side) + **binding-u me `VerificationNo`** në proto.
 2. **Return**: shenja e shumave (pozitive me `Type=Return` vs negative)?
 3. **Zbritja per-artikull në PosCoupon**: rresht negativ vs çmim neto + `TotalDiscount` agregat?
 4. **QR i kuponit të pafiskalizuar** (offline, para `transaction_id`): çfarë përmban saktësisht?

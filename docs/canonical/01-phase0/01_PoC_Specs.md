@@ -67,10 +67,12 @@
 
 ---
 
-## PoC-5 — SEF (fiskalizim) — 🟢 TEST PHASE AKTIV
+## PoC-5 — SEF (fiskalizim) — ⚠️ ACCEPTANCE NOT MET (post-audit 12.07.2026)
+
+> **Statusi aktual:** PR #16 = evidence historike mock; **Tier 1 overall PARTIAL/REOPENED · compliance FAIL · Tier 2 NOT IMPLEMENTED/NO-GO**; kriteret PASS më poshtë **NUK janë të përmbushura sot** dhe mbeten parakusht i ardhshëm (Gate v2.0 + Ledger). Money/QR më poshtë = **të korrigjuara**.
 **Para-kusht (MANDATORY):** analizo `github.com/fiskalizimi` (pos-golang/csharp/php/ruby) + `models.proto` + Swagger (`https://fiskalizimi-test.atk-ks.org/swagger`). **PoC nuk nis pa këtë.** Detajet/identifikuesit: `06_SEF_Test_Phase_Active.md`.
 **Qëllimi:** onboard një POS test (PKI) + dërgo PosCoupon te serveri TEST + statuset + alarmi 48h.
-**Scope (brenda):** ECDSA P-256 per POS; onboarding `/ca/verify`→CSR→`/ca/signcsr`; Protobuf (CitizenCoupon + PosCoupon, **detajet përputhen**); QR = `base64(proto)|base64(sig)`; `POST /pos/coupon` → `transaction_id`; fiscal outbox i ndarë nga sync; statuset (lëshuar offline / në pritje / fiskalizuar / dështuar / kërkon ndërhyrje); alarm 48h; **tax A/C/D/E** (A=exempt/C=0/D=8/E=18); **money PER-FIELD** (items `Price/Total` = €0.0001/×10000; totals/payments/tax = cents/×100); **CouponType Sale=1/Cancel=2/Return=3**.
+**Scope (brenda):** ECDSA P-256 per POS; onboarding `/ca/verify`→CSR→`/ca/signcsr`; Protobuf (CitizenCoupon + PosCoupon, **detajet përputhen**); QR = **base64(`CitizenCoupon` proto)|base64(firma e CitizenCoupon)** *(korrigjuar 12.07)*; `POST /pos/coupon` → `transaction_id` (uint64 ekzakt); fiscal outbox i ndarë nga sync; statuset (lëshuar offline / në pritje / fiskalizuar / dështuar / kërkon ndërhyrje); alarm 48h **nga ndërprerja e lidhjes** *(korrigjuar 12.07)*; **tax A/C/D/E** (A=exempt/C=0/D=8/E=18); **money PER-FIELD i KORRIGJUAR: unit `Price` = ×10000; item `Total` + totals/payments/tax = ×100 (cents)** — golden: €1.50×3 → Price=15000, Total=450; **CouponType Sale=1/Cancel=2/Return=3**.
 **Jashtë:** integrim i plotë POS.
 **Pre-kushti:** ✅ test phase AKTIV (App ID/Fiscalization No te `06_SEF_Test_Phase_Active.md`).
 **Hapat:** (1) onboard POS test (verify→CSR→signcsr → çelës+certifikatë); (2) ndërto+nënshkruaj PosCoupon → `/pos/coupon` (test) → merr `transaction_id`; (3) `RETURN`/`CANCEL` me `ReferenceNo`; (4) offline → fiskalizim brenda 48h + alarm para afatit; (5) certifikatë e skaduar → "kërkon ndërhyrje" + alert.
@@ -78,7 +80,7 @@
 - PosCoupon merr `transaction_id` nga test serveri; CitizenCoupon↔PosCoupon **përputhen** (jo "FAILED VERIFICATION").
 - `RETURN`/`CANCEL` me `ReferenceNo` pranohen; pa ReferenceNo → refuzohen (siç pritet).
 - Kuponi offline fiskalizohet brenda 48h; alarm para afatit.
-- Dështimi → status + alert; **fiscal outbox kurrë s'ndalet** nga sync.
+- Dështimi → status + alert; **fiscal outbox i izoluar nga sync-u i përgjithshëm** (izolimi i provuar deri sot vetëm në mock lokal).
 **FAIL:** "FAILED VERIFICATION", kupon pa `transaction_id` pa alarm, ose outbox i bllokuar.
 **Evidenca:** përgjigjet e test serverit (`transaction_id`) + QR + screenshot statusesh + log alarmi.
 **Pronari:** Claude Code + Blend (ATK). **SSOT:** §7. **Ref:** `06_SEF_Test_Phase_Active.md`.

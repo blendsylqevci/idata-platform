@@ -39,7 +39,7 @@ KPI card · **data-table e dendur** (sortable me aria-sort, sticky header, **tab
 
 ## 6. Rregulla UX (të detyrueshme)
 - Çdo ekran: **një CTA primare** (azure), sekondaret të nënrenditura.
-- **Para:** shfaq € të formatuar (p.sh. `€18.20`) me **tabular-nums**; numra djathtas; rresht totali. *(Shkalla teknike e SEF — items €0.0001 / totals cents — është shtresë e të dhënave, JO në UI.)*
+- **Para:** shfaq € të formatuar (p.sh. `€18.20`) me **tabular-nums**; numra djathtas; rresht totali. *(Shkalla teknike e SEF — **unit `Price` ×10000; line `Total` ×100** — është shtresë e të dhënave, JO në UI; UI mbetet euro të formatuara.)*
 - Tabela: sortable (aria-sort), empty-state kuptimplotë, **mos** Excel i ngjeshur.
 - Forma: label të dukshme, validim on-blur, gabim afër fushës, helper text; required me yll.
 - Veprime destruktive (anulim/diferencë/rihapje): **konfirmim + PIN/aprovim**, ngjyrë danger, audit.
