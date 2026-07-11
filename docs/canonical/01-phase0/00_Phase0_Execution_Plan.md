@@ -1,12 +1,13 @@
 # Faza 0 — Plani i Ekzekutimit (iData+)
 
-**Versioni:** 1.2 · **Data:** 28 Qershor 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.5
+**Versioni:** 1.2 (HISTORIK — plani origjinal i Fazës 0) · **Data:** 28 Qershor 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.5
+**Shënim statusi (12.07.2026):** ky dokument = **plan/histori**; statusi AKTUAL i punës = roadmap §4/§6 + `ATK_SEF_Requirements_Ledger.md` + Gate v2.0 — **asnjë pretendim "100% gati" nuk rrjedh nga ky plan** (PoC-5 compliance = FAIL/REOPENED; Tier 2 = NO-GO).
 **Parim kryesor:** Faza 0 = **dokumentim + provë + setup**, **PA kod prodhimi**. Asnjë feature pa status; asnjë vendim pa pronar + afat.
 
 ---
 
 ## 1. Objektivi
-Të çojmë projektin nga "~85–90% gati" në **100% gati për Fazën 1 (Foundation)** duke mbyllur paketën organizative dhe teknike: repo + board + plan + 5 PoC + RBAC + parity kontabël + data model + decision gates + nisja e SEF sandbox. Në fund të Fazës 0 dimë **me prova** se arkitektura qëndron.
+Të çojmë projektin nga "~85–90% gati" në **100% gati për Fazën 1 (Foundation)** *(objektiv HISTORIK i planit — statusi real sot = roadmap/ledger)* duke mbyllur paketën organizative dhe teknike: repo + board + plan + 5 PoC + RBAC + parity kontabël + data model + decision gates + nisja e SEF sandbox. Në fund të Fazës 0 dimë **me prova** se arkitektura qëndron.
 
 ## 2. Kohëzgjatja & ritmi
 - **1–2 javë.** Pa kod biznesi. Lejohet vetëm kod "**Walking Skeleton**" (aplikacione bosh që dërgojnë "ping" nga mobili → hub → cloud) dhe PoC të izoluar.

@@ -59,7 +59,7 @@ Këto janë datat më të vona të pranueshme që ruajnë shansin real për cuto
 | ACC-007 | Sent/Open | COGS valuation/yield/batch costing | Kontabilisti + KABI | Faza 3 | 2026-08-05 | Phase 3 nis me model configurable; COGS production freeze shtyhet |
 | ACC-008 | Sent/Open | Kthime/write-off/note krediti/periudha | Kontabilisti | Faza 2/3/5/8 | 2026-08-05 | lejohet vetëm reversal conservative + approval, jo automation final |
 | Payroll gate | Open | Payroll engine i plotë vs master-data + kontribute | Blend + kontabilisti | Faza 1 | 2026-07-20 | në Faza 1 ndërtohet vetëm master-data + kontribute minimale |
-| ATK-002 | **Tier 1 PASS / Tier 2 LIVE pending** (PR #16; Tier 2 i gated) | SEF PoC teknik me GitHub fiskalizimi | iCode dev | Faza 5 | 2026-08-15 | nuk fillon aplikimi formal; KABI live rrezikohet |
+| ATK-002 | **REOPENED (12.07)** — local regression evidence only (66 PASS/1 LIVE SKIP); **Tier 1 overall PARTIAL/REOPENED; compliance FAIL; Tier 2 NO-GO** (Gate v2 + ATK-012) | SEF PoC teknik me GitHub fiskalizimi | iCode dev | Faza 5 | 2026-08-15 | nuk fillon aplikimi formal; KABI live rrezikohet |
 | ATK-003 | Open | Aplikim/certifikim final SEF | iCode + ATK | KABI live / PLANET live | 2026-10-15 start | shtyrje e go-live fiskal; as KABI as PLANET nuk dalin live me faturim jo-konform |
 | ATK-004 | Open | Printer hardware vs SEF software + printer termik | iCode + ATK/vendor | Hardware procurement | 2026-08-15 | ndalo blerjen e printerëve/pajisjeve fiskale |
 | HW-001 | Open | Inventar pajisjesh ekzistuese | Klienti | Faza 4/5/7/8 | 2026-08-15 | buxhet/hardware test shtyhet; PoC me pajisje test |
@@ -110,7 +110,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - **PoC-2 Accounting Posting — PASS sipas kritereve të PoC-ut** (koncept i provuar; PR #12)
 - **PoC-3 Offline Sync — PASS sipas kritereve të PoC-ut** (koncept i provuar; PR #14)
 - **PoC-4 Local Hub — PARTIAL** (4a semantika ✅ PR #15; **4b hardware pending**)
-- **PoC-5 SEF — Tier 1 PASS** (PR #16); **Tier 2 LIVE pending** (i gated nga aprovimi i veçantë i Pronarit — Human Gate)
+- **PoC-5 SEF — post-audit 12.07.2026:** PR #16 = **evidence historike mock** (regression 66 PASS/1 LIVE SKIP); **Tier 1 overall PARTIAL/REOPENED · compliance FAIL** (4 CONTRADICTS) · **Tier 2 NOT IMPLEMENTED/NO-GO**. **"PoC-5 PASS" = parakusht i ardhshëm, EKSPLICITISHT NOT MET sot** (Gate v2.0 + Ledger; Step B/C para çdo hapi live)
 - **Production-readiness ≠ PoC PASS:** arrihet përmes **gates F1–F10** (jo automatikisht me F1+) — follow-ups të regjistruara (`ATK_Compliance_Gate.md` §4, `Reliability_Gate.md` §5.2) + gates e certifikimit (Gate §2e/§3).
 
 **Rregull:** PoC-të nuk janë demo UI. Janë prova teknike me test/evidencë. Nëse një PoC dështon, faza që varet prej tij nuk kalon në implementim të plotë.
@@ -672,14 +672,17 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 ---
 
-## 6. Rendi aktual i punës (përditësuar 10.07.2026)
+## 6. Rendi aktual i punës (përditësuar 12.07.2026 — pa cikël)
 
-*(**PRO DATA Source→Target Closure v2 = kryer** me merge të këtij ndryshimi — `07_PRODATA_Evidence_Closure_Parity_Matrix.md` v2.0.)*
+*(**Full-corpus re-audit + harta LAPT = KRYER** me këtë ndryshim — `ATK_Source_Register.md` v2.0 + `ATK_SEF_Requirements_Ledger.md` + Gate v2.0; `ATK-011` mbyllet me merge si mapping only.)*
 
-1. **ATK full-corpus/LAPT closure (P0 / PRE-TIER2):** re-audit i regjistrit 278-rreshtor kundrejt corpus-it të plotë (`ATK_Source_Register.md`) + harta LAPT nen-për-nen (`ATK-011`).
-   - **Blockers PRE-TIER2 (përkufizim pa cikël):** **PRO DATA Closure v2 (kryer) + full-corpus re-audit + `ATK-011`** — vetëm këto. `ATK-005` **triagjohet/fiksohet para Tier 2**; përgjigjet që varen nga serveri merren **GJATË** Tier 2. `ATK-006`/`ATK-010` = **certification gates të trackuara — JO blockers automatikë të Tier 2** (bëhen blockers vetëm nëse përgjigjja ndryshon scope-in/sigurinë).
-2. **PREFLIGHT privat** (wrapper i maskuar; pjesë e Tier 2 — i gated).
-3. **Tier 2 LIVE** — VETËM pas hapave 1–2 + aprovimit të Pronarit (Human Gate).
-4. **Paralel:** PoC-4b ecën i pavarur kur vjen hardware-i.
+1. **Step A — ky docs correction PR** (kanonizimi i verdiktit + kontratave).
+2. **Step B — PRE-Tier2 code hardening (`ATK-012`, P0):** mbyllja e **T2-01..T2-10** (Gate v2 §4).
+3. **Step C — official golden vectors + fake-HTTP/negative tests** (kundër C#/Go @ pins).
+4. **Independent re-review** i deltës + i të gjitha gates të Tier 2.
+5. **Private preflight** — VETËM pasi Step B/C kanë prodhuar **wrapper/harness të testuar evidence-safe** (sot NUK ekziston).
+6. **Human Gate i veçantë** → **Tier 2** (thirrja e parë reale e test-serverit).
+7. **Certifikimi / go-live = NO-GO më vete** (blockers shtesë — Gate v2 §5).
+8. **Paralel:** PoC-4b ecën i pavarur kur vjen hardware-i.
 
 *(Rendi origjinal i 07.07.2026 — HISTORIK: review Fable/Codex → aprovim → PR docs → 5 PoC-të me radhë. Sekuenca është ekzekutuar; statusi final është te §4 "Statusi real": **PoC-4b dhe PoC-5 Tier 2 mbeten pending**.)*

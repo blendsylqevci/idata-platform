@@ -1,6 +1,6 @@
 # PM Review Protocol — iData+ Quality Gate
 
-**Versioni:** 1.4 · **Data:** 2026-07-10 · **Pronari:** Group Owner / Human Gate (aprovon çdo ndryshim të këtij dokumenti)
+**Versioni:** 1.5 · **Data:** 2026-07-12 · **Pronari:** Group Owner / Human Gate (aprovon çdo ndryshim të këtij dokumenti)
 **Për kë:** agjenti PM / quality-gate (aktualisht Codex në VS Code). Vlen për ÇDO rishikim dorëzimi, PR apo increment-i, nga sot deri në lansim.
 **Rifreskimi:** në kufirin e çdo increment-i përditësohen VETËM §5 (scope) dhe lista e ndaluar; bërthama nuk ndryshon pa aprovimin e Pronarit.
 
@@ -42,7 +42,7 @@ Skano diff-in për: emra realë personash (pronarët e bizneseve përmenden VET�
 - Kod që devijon nga kontrata pa ADR të ri = **REJECT**.
 
 ### 5. Scope-i i increment-it aktual
-**Scope aktual (10.07.2026, pas PRO DATA Closure v2): Phase-0 closeout** — **ATK full-corpus/LAPT PRE-TIER2 closure** (re-audit + `ATK-011` — blockers të Tier 2 së bashku me **PRO DATA Closure v2 të kryer** me `07_PRODATA...md` v2.0; ATK-005 triagjohet/fiksohet para Tier 2, server-dependent gjatë Tier 2; ATK-006/010 = certification gates të trackuara, jo blockers automatikë) · **PoC-4b** (paralel, dita e hardware-it) · **PoC-5 Tier 2 LIVE** (i gated nga Human Gate + PREFLIGHT privat). *Pointer dinamik:* burimi i së vërtetës për scope-in = **roadmap §4 "Statusi real" + §6 "Rendi aktual"** + **SSOT Decisions Log** — kjo rreshtë rifreskohet në kufirin e çdo increment-i (rregulli i Rifreskimit në header).
+**Scope aktual (12.07.2026, post full-corpus re-audit): Step B/C closure — JO Tier 2 direkt.** **Step B** = `ATK-012`/T2-01..10 (code hardening) · **Step C** = golden vectors + negative tests · pastaj re-review → private preflight (wrapper-i ndërtohet në Step B/C) → Human Gate → Tier 2. **PoC-4b** paralel. ATK-005 fiksohet para Tier 2 (server-dependent gjatë); ATK-006/010 = certification gates, jo blockers automatikë. *Pointer dinamik:* burimi i së vërtetës për scope-in = **roadmap §4 "Statusi real" + §6 "Rendi aktual"** + **SSOT Decisions Log** — kjo rreshtë rifreskohet në kufirin e çdo increment-i (rregulli i Rifreskimit në header).
 - Çdo gjë jashtë scope = flamur.
 - Asgjë nga lista "mos e ngri në kod pa konfirmim" (Tracker §5: TVSH per produkt KABI, fermerë/box 51, COGS final, settlement PLANET, RESORT, printera fiskalë) s'guxon të jetë e ngurtësuar.
 - Vendim i ri arkitekture pa ADR = flamur.
@@ -79,15 +79,23 @@ Kur dyshon mes "të lëshoj" dhe "të ndaloj" — **NDALO dhe pyet**. Një ditë
 
 ## Checklist-a shtesë sipas domenit (aktivizohen kur hyn domeni në zhvillim)
 
-- **SEF/Fiskalizimi** *(AKTIVE — PoC-5+)*: money scale PER-FIELD (items ×10000, totals cents), CouponType Sale=1/Cancel=2/Return=3 (+ReferenceNo), tax codes A/C/D/E, ECDSA P-256, asnjë identifikues SEF në git. **+ (v1.2, nga auditimi ATK):**
+- **SEF/Fiskalizimi** *(AKTIVE — PoC-5+)*: **money PER-FIELD i KORRIGJUAR (v1.5): unit `Price` ×10000 / item `Total` ×100 / totals-payments-tax ×100** (golden €1.50×3 → 15000/450), CouponType Sale=1/Cancel=2/Return=3 (+ReferenceNo), tax codes A/C/D/E, ECDSA P-256, asnjë identifikues SEF në git. **+ (v1.2, nga auditimi ATK):**
   - **kuponi i shtypur/elektronik sipas `docs/canonical/05-sef-atk/Kupon_Print_Spec.md`**: fushat e plota UA N7.2 + mbishkrimet OFFLINE / "KOPJE E KUPONIT" / Test + QR në çdo output + **NUIKF alfanumerik ≤16** i lexueshëm;
   - **katalogët 31 njësi / 53 kategori të KONTROLLUAR** (seed zyrtar + të zgjerueshëm sipas KT; validim per-namespace — PAL ndër-tabelor lejohet; jo free-text arbitrar);
   - **pandryshueshmëria e fiscal outbox**: payload/identiteti/`created_at`/`deadline_at` immutable + DELETE i ndaluar + statusi vetëm përmes funksionit të kontrolluar + `fiscal_attempt_log`/`fiscal_status_event` append-only — `Reliability_Gate.md` §5.2;
   - **klasifikimi RECERT: PO/JO** i shënuar në **çdo PR** që prek modulin fiskal (`ATK_Compliance_Gate.md` §3) — mungesa e klasifikimit = kthim mbrapsht. **+ (v1.3, ATK normative refresh):**
   - **artefakti i komisionit** pa **DEMO VERSION / mock / PoC routes / placeholders / sample identifiers**; release-candidate i versionuar e funksional; etiketa zyrtare **TEST** e ambientit test **NUK hiqet**; fixtures sintetike vetëm në test suite, jo në paketë (`ATK_Compliance_Gate.md` §3b);
-  - **çdo PR normativ** verifikohet kundrejt **`docs/canonical/05-sef-atk/ATK_Source_Register.md`**: enumerim i plotë i portalit + **hash match** (titull/URL/sha256/datë) — çdo ndryshim = **gjetje e re**, jo korrigjim i heshtur.
+  - **çdo PR normativ** verifikohet kundrejt **`docs/canonical/05-sef-atk/ATK_Source_Register.md`**: enumerim i plotë i portalit + **hash match** (titull/URL/sha256/datë) — çdo ndryshim = **gjetje e re**, jo korrigjim i heshtur. **+ (v1.5, post full-corpus re-audit — kontrolle të DETYRUESHME):**
+  - **QR firmos `CitizenCoupon`** (jo PosCoupon) + fushat e përbashkëta rakordojnë;
+  - **NUIKF**: alfanumerik/pa separatorë/≤16/**unik** (constraint DB) + generator/validator — fixture invalide = REJECT;
+  - **`CouponId` unik business-wide** (jo vetëm per-degë/uuid lokal);
+  - **48h nga NDËRPRERJA e lidhjes** (jo `created_at` per kupon) — çdo claim ndryshe = REJECT;
+  - **P1363/DER**: encoding explicit/configurable + shënimi i konfliktit C#↔Go (pa "final" para server evidence);
+  - **PKI per POS/instalim** (çelësi s'largohet nga makina);
+  - **transport**: timeout + response cap + **exact uint64** + retry classification + **allowlisted redaction**;
+  - **LIVE i skip-uar / placeholder NUK do të thotë KURRË GO** — dhe **CI green ≠ compliance** (regression lokale ≠ pranim autoriteti).
 - **Offline/Sync** *(kur nis)*: idempotencë e provuar me test, outbox i izoluar, pa dublim në replay, UUID kudo.
 - **POS/KDS** *(kur nis)*: totali i fshehur→lock, anulim me arsye+aprovim, transferi vetëm menaxher, saldo per kamarier e rakordueshme.
 
 ---
-*Historia: v1.0 (2026-07-07) — krijuar me aprovimin e Pronarit; bazuar në protokollin e diskutuar në sesionin e setup-it të ditës së parë të zhvillimit. · v1.1 (2026-07-07) — shtuar kontrolli #7 (Reliability Gate) me aprovimin e Pronarit. · v1.2 (2026-07-09) — zgjeruar checklist-a SEF (Kupon_Print_Spec, tabelat 31/53, outbox: payload/identitet/timestamps immutable + controlled status transitions + append-only attempt/status-event logs, klasifikimi RECERT PO/JO) me aprovimin e Pronarit (PR review = aprovimi). · v1.3 (2026-07-10) — shtuar kontrolli i artefaktit të komisionit (pa DEMO/mock/PoC routes/placeholders/sample IDs) + verifikimi i çdo PR-i normativ kundrejt `ATK_Source_Register.md` (enumerim + hash match) + scope-i aktual i rifreskuar (Increment 1 → Phase-0 closeout / PoC-4b / PoC-5 Tier 2 / ATK gates, me pointer dinamik te roadmap/SSOT), me aprovimin e Pronarit (PR review = aprovimi). · v1.4 (2026-07-10) — scope: **PRO DATA Source→Target Closure v2 e kryer** (07 v2.0) → hapi aktual = ATK full-corpus/LAPT closure; pa ndryshim kontrollesh, me aprovimin e Pronarit (PR review = aprovimi).*
+*Historia: v1.0 (2026-07-07) — krijuar me aprovimin e Pronarit; bazuar në protokollin e diskutuar në sesionin e setup-it të ditës së parë të zhvillimit. · v1.1 (2026-07-07) — shtuar kontrolli #7 (Reliability Gate) me aprovimin e Pronarit. · v1.2 (2026-07-09) — zgjeruar checklist-a SEF (Kupon_Print_Spec, tabelat 31/53, outbox: payload/identitet/timestamps immutable + controlled status transitions + append-only attempt/status-event logs, klasifikimi RECERT PO/JO) me aprovimin e Pronarit (PR review = aprovimi). · v1.3 (2026-07-10) — shtuar kontrolli i artefaktit të komisionit (pa DEMO/mock/PoC routes/placeholders/sample IDs) + verifikimi i çdo PR-i normativ kundrejt `ATK_Source_Register.md` (enumerim + hash match) + scope-i aktual i rifreskuar (Increment 1 → Phase-0 closeout / PoC-4b / PoC-5 Tier 2 / ATK gates, me pointer dinamik te roadmap/SSOT), me aprovimin e Pronarit (PR review = aprovimi). · v1.4 (2026-07-10) — scope: **PRO DATA Source→Target Closure v2 e kryer** (07 v2.0) → hapi aktual = ATK full-corpus/LAPT closure; pa ndryshim kontrollesh, me aprovimin e Pronarit (PR review = aprovimi). · v1.5 (2026-07-12) — post full-corpus re-audit: korrigjuar money (Price ×10000 / Total ×100); shtuar kontrollet e detyrueshme CitizenCoupon-QR/NUIKF/CouponId/48h-outage/P1363-DER/PKI-per-POS/transport/LIVE-skip≠GO/CI≠compliance; scope = Step B/C (jo Tier 2 direkt), me aprovimin e Pronarit (PR review = aprovimi).*
