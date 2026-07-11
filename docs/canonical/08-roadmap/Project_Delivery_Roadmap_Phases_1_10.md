@@ -674,11 +674,12 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 ## 6. Rendi aktual i punës (përditësuar 10.07.2026)
 
-1. **PR B: PRO DATA Source→Target Closure v2** — hapi i parë pas merge të PR #18.
-2. **ATK full-corpus/LAPT closure (P0 / PRE-TIER2):** re-audit i regjistrit 278-rreshtor kundrejt corpus-it të plotë (`ATK_Source_Register.md`) + harta LAPT nen-për-nen (`ATK-011`).
-   - **Blockers PRE-TIER2 (përkufizim pa cikël):** **PR B + full-corpus re-audit + `ATK-011`** — vetëm këto. `ATK-005` **triagjohet/fiksohet para Tier 2**; përgjigjet që varen nga serveri merren **GJATË** Tier 2. `ATK-006`/`ATK-010` = **certification gates të trackuara — JO blockers automatikë të Tier 2** (bëhen blockers vetëm nëse përgjigjja ndryshon scope-in/sigurinë).
-3. **PREFLIGHT privat** (wrapper i maskuar; pjesë e Tier 2 — i gated).
-4. **Tier 2 LIVE** — VETËM pas closures 1–3 + aprovimit të Pronarit (Human Gate).
-5. **Paralel:** PoC-4b ecën i pavarur kur vjen hardware-i.
+*(**PRO DATA Source→Target Closure v2 = kryer** me merge të këtij ndryshimi — `07_PRODATA_Evidence_Closure_Parity_Matrix.md` v2.0.)*
+
+1. **ATK full-corpus/LAPT closure (P0 / PRE-TIER2):** re-audit i regjistrit 278-rreshtor kundrejt corpus-it të plotë (`ATK_Source_Register.md`) + harta LAPT nen-për-nen (`ATK-011`).
+   - **Blockers PRE-TIER2 (përkufizim pa cikël):** **PRO DATA Closure v2 (kryer) + full-corpus re-audit + `ATK-011`** — vetëm këto. `ATK-005` **triagjohet/fiksohet para Tier 2**; përgjigjet që varen nga serveri merren **GJATË** Tier 2. `ATK-006`/`ATK-010` = **certification gates të trackuara — JO blockers automatikë të Tier 2** (bëhen blockers vetëm nëse përgjigjja ndryshon scope-in/sigurinë).
+2. **PREFLIGHT privat** (wrapper i maskuar; pjesë e Tier 2 — i gated).
+3. **Tier 2 LIVE** — VETËM pas hapave 1–2 + aprovimit të Pronarit (Human Gate).
+4. **Paralel:** PoC-4b ecën i pavarur kur vjen hardware-i.
 
 *(Rendi origjinal i 07.07.2026 — HISTORIK: review Fable/Codex → aprovim → PR docs → 5 PoC-të me radhë. Sekuenca është ekzekutuar; statusi final është te §4 "Statusi real": **PoC-4b dhe PoC-5 Tier 2 mbeten pending**.)*

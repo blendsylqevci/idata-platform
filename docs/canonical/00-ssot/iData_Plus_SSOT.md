@@ -1,6 +1,6 @@
 # iData+ — Single Source of Truth (SSOT)
 
-**Versioni:** 2.23 · **Data:** 10 Korrik 2026 · **Statusi:** Draft pune për Fazën 0
+**Versioni:** 2.24 · **Data:** 10 Korrik 2026 · **Statusi:** Draft pune për Fazën 0
 **Pronar i dokumentit:** iCode L.L.C (Blend Sylqevci)
 **Rregull:** ky është **burimi i vetëm i vërtetë** për zhvillimin. Çdo vendim/feature i ri shkohet **vetëm këtu** (me datë te Decisions log). Dokumentet e aprovuara jashtë repo-s janë vetëm snapshot-e aprovimi të gjeneruara nga ky dokument. Faza aktuale: **dizajn + Faza 0**, pa kod prodhimi pa go-ahead.
 **v2.0:** integron raundin v2 të pyetjeve me Codex (Qershor 2026) — vendime të reja, pyetje të zgjidhura, dhe 2 konflikte të shënuara (paga, printera fiskalë). Sinkronizuar me numërimin e Codex (v2).
@@ -309,6 +309,15 @@
 - **Tracker:** ATK-005 = **13 pyetje protokollare + 1 pyetje regjistrimi** (ApplicationID nga ATK; **Numri i Njësisë nga Agjencioni i Regjistrimit të Tatimpaguesve** sipas KT; **OPEN = mapimi Numri i Njësisë↔`BranchId` + regjistrimi teknik te `/ca/verify`**); **ATK-011 i ri** (LAPT: burimi i regjistruar — **harta nen-për-nen mungon**; **P0 / PRE-TIER2** së bashku me **full-corpus re-audit-in** e Gate); **ATK-002** i rakorduar (Tier 1 PASS, Tier 2 pending). **Rendi aktual (roadmap §6):** PR #18 merge → **PR B PRO DATA Closure v2** → **ATK full-corpus/LAPT closure** → **PREFLIGHT privat** → **Tier 2**; PoC-4b paralel kur vjen hardware-i. **Blockers PRE-TIER2 (pa cikël) = PR B + full-corpus re-audit + ATK-011**; ATK-005 = lista e FIKSUAR para Tier 2 (server-dependent GJATË Tier 2); ATK-006/010 = certification gates të trackuara — **jo blockers automatikë** të Tier 2 (përveç ndryshimit scope/siguri).
 - **Statuset reale të PoC-ve** (roadmap, statusi canonical/approved): PoC-1/2/3 = PASS **sipas kritereve të PoC-ve**; PoC-4 = **PARTIAL** (4a ✅, 4b hardware pending); PoC-5 = **Tier 1 PASS, Tier 2 LIVE pending**; **production-readiness arrihet përmes gates F1–F10** (jo automatikisht me F1+).
 - **PM protocol v1.3:** + kontrolli i artefaktit të komisionit + verifikimi kundrejt `ATK_Source_Register.md` + scope aktual (Phase-0 closeout / PoC-4b / PoC-5 Tier 2 / ATK gates) me pointer dinamik te roadmap/SSOT.
+
+**10.07.2026 — v2.24 (PRO DATA Source→Target Closure v2):**
+- **`07_PRODATA_Evidence_Closure_Parity_Matrix.md` v2.0** — parimi **"NXJERRJA E MBYLLUR ≠ E IMPLEMENTUAR"**: dy boshte të NDARA — **Treatment tag-set** (REQ/MD/OB/REF/NO me kombinime; **`NO` = "source data nuk migrohet", JO "capability s'kërkohet"** — shembulli passwords `REQ+NO`) dhe **Target Maturity** (GAP→EVIDENCE→SPECIFIED→MODELED→IMPLEMENTED→TESTED→SIGNED-OFF, me prova të verifikueshme per rresht) + **PROVEN-PoC si qualifier i veçantë** (PoC PASS ≠ production readiness). **Zero përqindje pa metodologji**; claims që kërkojnë evidence të ndaluar = `EVIDENCE_REFERENCE_ONLY / NOT_REVERIFIED_IN_THIS_PR`.
+- **Capability Coverage Map WMS/OMS** brenda 07 (sales_order · purchase_order · goods_receipt · reservation/allocation · bin/putaway · pick/pack/ship · wave picking · cycle count · assembly/production) me kufij eksplicitë: PLANET `order` ≠ `sales_order` universal; `delivery_note` ≠ `goods_receipt`; **prodhimi KABI NUK inferohet nga backup-i i PLANET-it**; GAP/LATER/DECISION_REQUIRED ku s'ka vendim — **jo pretendim WMS/OMS universal**.
+- **ADR-003 riafirmuar, JO rihapur:** clean start + master-data + saldo hapëse (cutover 1 Jan 2027); pa histori transaksionale; pa kredenciale. **OPEN vetëm delivery gates:** mapping/cleansing/dedup/freeze/dry-run/reconciliation/sign-off (F9 + runbook).
+- **Legacy PRO DATA custody ≠ ADR-023 (product DR):** burimi autoritativ = `.bak` (MDF/LDF jo); **kopje e dytë e enkriptuar + hash manifest + isolated restore drill = REQUIRED/OPEN/EVIDENCE PENDING** (evidence privatisht nga Pronari; PR-ja s'verifikoi asgjë) → 07 §6 + `Cutover_Rollback_Runbook.md` §3.1 (v0.3).
+- **Evidence historike = opaque/read-only:** ruhet në **ignored private-local evidence store** (jashtë git, pa path/filename këtu) — verifikuar vetëm me metadata (`test -e`/`git ls-files`); **zero content-read në këtë PR**; extraction provenance/metrikat mbeten evidence historike e pandryshuar.
+- **ACC-004 mbetet `answered`** (scope-i i burimit/parity) — **answered ≠ target SIGNED-OFF**; **ACC-010 = closed** (Maj 2026, vlerat private-local); **OPS-001/RESORT mbetet OPEN**; statuset stale të 07 v1.1 (burimi "(memory)", path private, "mungon muaji real", "të gjitha entitetet") = të korrigjuara në v2.
+- **Roadmap §6 + PM protocol v1.4 + INDEX (merge-stable):** pas këtij merge next gate = **ATK full-corpus/LAPT closure → PREFLIGHT privat → Tier 2 LIVE**; **PoC-4b paralel**.
 
 ## 12. Pyetjet e hapura (pending)
 | # | Pyetja | Kush | Afati |
