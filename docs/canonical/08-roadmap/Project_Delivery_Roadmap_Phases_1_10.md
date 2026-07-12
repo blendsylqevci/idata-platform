@@ -114,7 +114,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - **PoC-2 Accounting Posting — PASS sipas kritereve të PoC-ut** (koncept i provuar; PR #12)
 - **PoC-3 Offline Sync — PASS sipas kritereve të PoC-ut** (koncept i provuar; PR #14)
 - **PoC-4 Local Hub — PARTIAL** (4a semantika ✅ PR #15; **4b hardware pending**)
-- **PoC-5 SEF — post-audit 12.07.2026:** PR #16 = **evidence historike mock** (regression 66 PASS/1 LIVE SKIP); **Tier 1 overall PARTIAL/REOPENED · compliance FAIL** (4 CONTRADICTS) · **Tier 2 NOT IMPLEMENTED/NO-GO**. **"PoC-5 PASS" = parakusht i ardhshëm, EKSPLICITISHT NOT MET sot** (Gate v2.0 + Ledger; Step B/C para çdo hapi live)
+- **PoC-5 SEF — post-audit 12.07.2026:** PR #16 = **evidence historike mock** (regression 66 PASS/1 LIVE SKIP); **Tier 1 overall PARTIAL/REOPENED · compliance FAIL** (5 CONTRADICTS-rreshta = 4 defekte unike) · **Tier 2 NOT IMPLEMENTED/NO-GO**. **"PoC-5 PASS" = parakusht i ardhshëm, EKSPLICITISHT NOT MET sot** (Gate v2.0 + Ledger; Step B/C para çdo hapi live)
 - **Production-readiness ≠ PoC PASS:** arrihet përmes **gates F1–F10** (jo automatikisht me F1+) — follow-ups të regjistruara (`ATK_Compliance_Gate.md` §4, `Reliability_Gate.md` §5.2) + gates e certifikimit (Gate §2e/§3).
 
 **Rregull:** PoC-të nuk janë demo UI. Janë prova teknike me test/evidencë. Nëse një PoC dështon, faza që varet prej tij nuk kalon në implementim të plotë.
@@ -678,7 +678,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 ## 6. Rendi aktual i punës (përditësuar 12.07.2026 — pa cikël)
 
-*(**Full-corpus re-audit + harta LAPT = KRYER** me këtë ndryshim — `ATK_Source_Register.md` v2.0 + `ATK_SEF_Requirements_Ledger.md` + Gate v2.0; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate).)*
+*(**Full-corpus re-audit + harta LAPT = KRYER** me këtë ndryshim — `ATK_Source_Register.md` v2.3 + `ATK_SEF_Requirements_Ledger.md` v1.3 + Gate v2.0; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate).)*
 
 1. **Step A — ky docs correction PR** (kanonizimi i verdiktit + kontratave).
 2. **Step B — PRE-Tier2 code hardening (`ATK-012`, P0):** mbyllja e **T2-01..T2-10** (Gate v2 §4).
