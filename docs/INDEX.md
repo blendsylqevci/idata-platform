@@ -51,7 +51,7 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/05-sef-atk/ATK_SEF_Offline_Faturimi_Findings.md`
 - `docs/canonical/05-sef-atk/ATK_Compliance_Gate.md`
 - `docs/canonical/05-sef-atk/ATK_Source_Register.md` — v2.0 source graph (CORE/EXT/LIN/CONF)
-- `docs/canonical/05-sef-atk/ATK_SEF_Requirements_Ledger.md` — v1.2: 108 source-rows · 40 closure keys · disposition LAPT 1–123 (burimi i statusit)
+- `docs/canonical/05-sef-atk/ATK_SEF_Requirements_Ledger.md` — v1.3: 117 source-rows · 44 closure keys · disposition substantiv 1–123 (burimi i statusit)
 - `docs/canonical/05-sef-atk/Kupon_Print_Spec.md`
 - `docs/canonical/06-architecture/Reliability_Gate.md`
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
@@ -59,7 +59,7 @@ During implementation, code plus tests become the truth for system behavior.
 
 ## Next gate (rendi aktual — 12.07.2026, post full-corpus re-audit)
 
-*(**Re-audit-i + harta LAPT = KRYER** me këtë ndryshim; `ATK-011` mbyllet me merge si mapping only. **Verdikti: regression lokale 66 PASS/1 LIVE SKIP · Tier 1 PARTIAL/REOPENED · compliance FAIL · Tier 2 NOT IMPLEMENTED/NO-GO** — Gate v2.0.)*
+*(**Re-audit-i + harta LAPT = KRYER** me këtë ndryshim; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate). **Verdikti: regression lokale 66 PASS/1 LIVE SKIP · Tier 1 PARTIAL/REOPENED · compliance FAIL · Tier 2 NOT IMPLEMENTED/NO-GO** — Gate v2.0.)*
 
 1. **Step B — code hardening (`ATK-012`, P0/PRE-TIER2):** T2-01..T2-10 (Gate v2 §4).
 2. **Step C — golden vectors zyrtarë + fake-HTTP/negative tests.**

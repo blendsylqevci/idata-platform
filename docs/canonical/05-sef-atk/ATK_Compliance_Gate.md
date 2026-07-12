@@ -1,7 +1,7 @@
 # ATK Compliance Gate — verdikti + gates (v2.0, post full-corpus re-audit)
 
 **Versioni:** 2.0 · **Cutoff i auditit:** 2026-07-12 · **Repo baseline:** `55126b1b48004e4fba4a5604c9717cd9456722d3` · **Pronari:** Group Owner (Human Gate) · **Statusi:** canonical — effective on merge
-**Burimet:** `ATK_Source_Register.md` v2.2 (bounded registered corpus) · **burimi i statusit = `ATK_SEF_Requirements_Ledger.md` v1.2 (108 source-rows · 40 closure keys · disposition LAPT 1–123)** — ky Gate mban verdiktin, kontratat e korrigjuara dhe gates; NUK dyfishon statuset per-kontroll.
+**Burimet:** `ATK_Source_Register.md` v2.3 (bounded registered corpus) · **burimi i statusit = `ATK_SEF_Requirements_Ledger.md` v1.3 (117 source-rows · 44 closure keys · disposition substantiv 1–123)** — ky Gate mban verdiktin, kontratat e korrigjuara dhe gates; NUK dyfishon statuset per-kontroll.
 **Gate-t:** **[T2]** = bllokues PARA Tier 2 (thirrjes së parë reale të test-serverit) · **[C]** = bllokues certifikimi · **[G]** = bllokues go-live · **[H]** = hardening.
 
 ---
@@ -16,7 +16,7 @@
 - **Certification / go-live: NO-GO.**
 - **PoC-5 (PR #16) = evidence historike e mock mechanics — JO compliance PASS.**
 
-**Shpërndarja aktuale (ledger v1.2 — 108 source-rows):** MISSING 60 · PARTIAL 18 · EXTERNAL_GATE 17 · **CONTRADICTS 5 (= 4 defekte unike: money/QR/NUIKF/origjina-48h)** · PROVEN_LOCAL 2 · N/A_LINEAGE 6; **38 konfirmime**; **40 unique closure keys**; **T2-01..T2-10 të gjithë me rreshta realë** (U27→T2-08; G06→T2-04; G07→T2-09; G08→T2-10).
+**Shpërndarja aktuale (ledger v1.3 — 117 source-rows):** MISSING 64 · PARTIAL 21 · EXTERNAL_GATE 19 · **CONTRADICTS 5 (= 4 defekte unike: money/QR/NUIKF/origjina-48h)** · PROVEN_LOCAL 2 · N/A_LINEAGE 6; **43 konfirmime**; **44 unique closure keys**; **T2-01..T2-10 të gjithë me rreshta realë** (U27→T2-08; G06→T2-04; G07→T2-09; G08→T2-10).
 
 ## 2. `CONTRADICTS`: **5 source-rows = 4 DEFEKTE UNIKE** (+ LIVE placeholder = MISSING/`T2-04`, JO CONTRADICTS)
 
@@ -85,9 +85,9 @@ Online-accept/persist-**para**-print pipeline (U03/T15) · renderer i plotë kup
 
 Monorepo mbetet NJË; fiscal-core i izoluar; **fokusi i prezantimit para Komisionit = kandidat i brendshëm pune (POS/SEF + diagrami i integrimit), JO vendim**; **lista finale e source/artifacts = GATED nga `ATK-010`** + Human Gate. **Rregulli i artefaktit të komisionit (i brendshëm, i hekurt):** pa DEMO VERSION/mock/PoC routes/placeholders/sample identifiers; release-candidate i versionuar e funksional; etiketa zyrtare TEST **nuk hiqet**; fixtures sintetike vetëm në test suite.
 
-## 9. `ATK-011` — mbyllet me merge SI MAPPING DELIVERABLE
+## 9. `ATK-011` — **OPEN / PENDING_INDEPENDENT_REVIEW** (builder-i s'e mbyll vetë)
 
-Crosswalk-u LAPT (Arts. 6.1–6.13, 43.3–43.5; sanksionet **100/101(1)/101(2)/101(9)/102.3/106**; Art.6.11–12 ↔ Vendimi 19/2026 me caveat-in **akti i nënshkruar s'u gjet publikisht**; UA 49(2) scope; KO159/24 dispozitivi) = **i përfunduar në `ATK_SEF_Requirements_Ledger.md` v1.2** (L01–L17 + K01–K04 + **DISPOSITION nen-për-nen 1–123 i PDF-së primare** — IN_SCOPE/SANCTION_CONTEXT/LINEAGE/N-A me arsye per nen; skript lokal: Ref + Faqe reale + Afat/sanksion per L-row; **pa etiketë "exhaustiv" për akte të tjera**). **Mbyllja = VETËM mapping** — implementimi (L-rows PARTIAL/MISSING) dhe aplikueshmëria ligjore (gates) mbeten të hapura. **Step B (code hardening) dhe Step C (golden vectors/tests) mbeten blockers** të sekuencës.
+Crosswalk-u LAPT (Arts. 6.1–6.13, 43.3–43.5; sanksionet **100/101(1)/101(2)/101(9)/102.3/106**; Art.6.11–12 ↔ Vendimi 19/2026 me caveat-in **akti i nënshkruar s'u gjet publikisht**; UA 49(2) scope; KO159/24 dispozitivi) = i PËRPUNUAR në `ATK_SEF_Requirements_Ledger.md` v1.3 (L01–L26 + K01–K04 + disposition substantiv 1–123 me arsye per-nen). **Statusi: OPEN / PENDING_INDEPENDENT_REVIEW** — mbyllja kërkon coverage nen/paragraf të konfirmuar + reconciliation të plotë + zero substantive gap + **review të pavarur nga Codex + Human Gate të Pronarit**; edhe atëherë mbyllet **vetëm mapping-u dokumentar** (JO compliance/implementim/certifikim). Step B/C mbeten blockers të sekuencës.
 
 ## 10. BASELINE HISTORIK (etiketë — JO status aktual)
 
