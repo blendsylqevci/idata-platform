@@ -678,7 +678,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 ## 6. Rendi aktual i punës (përditësuar 12.07.2026 — pa cikël)
 
-*(**Full-corpus re-audit + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim — `ATK_Source_Register.md` v2.3 + `ATK_SEF_Requirements_Ledger.md` v1.5 + Gate v2.0; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate).)*
+*(**Full-corpus re-audit + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim — `ATK_Source_Register.md` v2.4 + `ATK_SEF_Requirements_Ledger.md` v1.6 + Gate v2.0; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate).)*
 
 1. **Step A — ky docs correction PR** (kanonizimi i verdiktit + kontratave).
 2. **Step B — PRE-Tier2 code hardening (`ATK-012`, P0):** mbyllja e **T2-01..T2-10** (Gate v2 §4).
