@@ -1,32 +1,32 @@
-# ATK/SEF Requirements Ledger — kontrollet e corpus-it të regjistruar (v1.2)
+# ATK/SEF Requirements Ledger — kontrollet e corpus-it të regjistruar (v1.3)
 
-**Versioni:** 1.2 · **Cutoff i auditit:** 2026-07-12 · **Përditësuar:** 2026-07-12 (v1.2: disposition LAPT 1–123 + U23 i ndarë + T2-09/T2-10 me rreshta realë + faqet KT/blk nga renderimi) · **Repo baseline:** `55126b1b48004e4fba4a5604c9717cd9456722d3` · **Pronari:** Group Owner (Human Gate)
+**Versioni:** 1.3 · **Cutoff i auditit:** 2026-07-12 · **Përditësuar:** 2026-07-12 (v1.3: re-review substantiv 1–123 kundër tekstit të plotë të CORE-01 — hash i riverifikuar; kontrolle atomike të reja L18–L26; arsyetime per-nen; UPHELD=AKTIVE) · **Repo baseline:** `55126b1b48004e4fba4a5604c9717cd9456722d3` · **Pronari:** Group Owner (Human Gate)
 **Statusi:** canonical — effective on merge. **Ky ledger është BURIMI EXHAUSTIV i statusit të pajtueshmërisë** (Gate-i mban verdiktin/gates; Register-i mban burimet).
 **Baza:** *independent full-corpus audit, cutoff 2026-07-12* (zero-trust; Fable/Claude output i përjashtuar nga mbledhja e evidence-it — përdorur vetëm për reconciliation pas verdiktit).
 
 **Rregulli i numërimit:** një rresht = **një kontroll i testueshëm/i mbyllshëm në mënyrë të pavarur**. Lista fushash të detyrueshme = një kontroll, përveç kur elementët kanë lifecycle/gate të ndryshëm. **Metodologjia e mapimit:** një klauzolë burimi MUND të mapojë disa closure keys (p.sh. U20 → T2-02+T2-03) OSE ndahet në rreshta atomikë kur detyrimet kanë jetë të pavarur (p.sh. U23/U27; T04/T22).
 
-## Certifikata e mbulimit (RILLOGARITUR NGA ZERO — v1.2)
+## Certifikata e mbulimit (RILLOGARITUR NGA ZERO — v1.3)
 
-**(a) Source-requirement rows: 108** (102 aktive/potencialisht të aplikueshme + 6 lineage) · **(b) Unique closure/product keys: 40** (kolona `Closure key`; T2-01..T2-10 TË GJITHA me rreshta realë).
+**(a) Source-requirement rows: 117** (111 aktive/potencialisht të aplikueshme + 6 lineage-record) · **(b) Unique closure/product keys: 44** (T2-01..T2-10 të gjithë me rreshta realë).
 
 | Status (source-rows) | Count |
 |---|---:|
-| MISSING | 60 |
-| PARTIAL | 18 |
-| EXTERNAL_GATE | 17 |
+| MISSING | 64 |
+| PARTIAL | 21 |
+| EXTERNAL_GATE | 19 |
 | CONTRADICTS | 5 |
 | PROVEN_LOCAL | 2 |
 | N/A_LINEAGE | 6 |
-| **TOTAL** | **108** |
+| **TOTAL** | **117** |
 
-**38 kontrolle** me `CONFIRM_ATK/ACCOUNTANT/LAWYER/AIP`. **Asnjë `PASS`.**
-**CONTRADICTS: 5 source-rows = 4 defekte unike** (money `T2-01` · QR `T2-02` · NUIKF `T2-03` · **origjina e afatit 48h `T2-08` — U27**). **LIVE placeholder = MISSING (G06/`T2-04`), JO CONTRADICTS.**
-**Konventa `—`:** vetëm me arsye eksplicite; web/GitHub/repo = `N/A — non-paginated` + locator. **Faqet e KT/amendamentit/CORE-08 = nga renderimi i PDF-ve** (skanuar → faqe të verifikuara vizualisht).
+**43 kontrolle** me `CONFIRM_ATK/ACCOUNTANT/LAWYER/AIP`. **Asnjë `PASS`.**
+**CONTRADICTS: 5 source-rows = 4 defekte unike** (money `T2-01` · QR `T2-02` · NUIKF `T2-03` · origjina 48h `T2-08`). **LIVE placeholder = MISSING (G06/`T2-04`), JO CONTRADICTS.**
+**Konventa `—`:** vetëm me arsye eksplicite; web/GitHub/repo = `N/A — non-paginated` + locator.
 
-**108 vs 102/94/278:** numrat rillogariten sa herë korrigjohet semantika — nuk ruhen për raporte; 278 = extraction baseline historik.
+**117 vs 108/102/94/278:** numrat rillogariten me çdo korrigjim semantik; asnjë numër s'ruhet për raporte të vjetra.
 
-## Ledger — kontrollet (108)
+## Ledger — kontrollet (117)
 
 | ID | Source | Ref | Faqe | Control | Status | Actor/aplikueshmëria | Kategori | Afat/sanksion | Repo evidence | Confirmation | Closure key | Closure owner/gate |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -47,6 +47,15 @@
 | L15 | LAPT (CORE-01) | 6.4 | 10 | Librat/regjistrat për biznese mbi pragun e TVSH-së mbahen sipas **parimeve të kontabilitetit dhe raportimit financiar** në fuqi | PARTIAL | tatimpaguesi (KABI/PLANET) | Books/ERP | — · 101(2) | `packages/accounting/` (libraria synon këtë; jo e mbyllur) | CONFIRM_ACCOUNTANT | BOOKS-F2 | Kontabilist/Product |
 | L16 | LAPT (CORE-01) | 7 (+107 sanksionet) | 11 (+61) | **Aplikueshmëria e regjimit OE** (furnizim/instalim/mirëmbajtje PEF/SF: garanci bankare, ri-licencim 4-vjeçar, riçertifikime) **ndaj iCode si zhvillues/mirëmbajtës SEF** — SEF licencohet sipas UA 35 (U14/U15); a shtrihet edhe regjimi OE? **MOS infero** | EXTERNAL_GATE | iCode | Applicability | — · **107: 150€ per shkelje (instalim 15 ditë pune; servisim 48h; përsëritëse)** (f.61) | none | CONFIRM_ATK+CONFIRM_LAWYER | ATK-013 | ATK/jurist |
 | L17 | LAPT (CORE-01) | 8 (+101(5)) | 11–12 | **Qasja e plotë e ATK-së** në libra/regjistra/kompjuterë/PEF-SF/pajisje ruajtjeje — përfshirë te **palët e treta** që mbajnë dokumentacionin (cloud/hosting) brenda e jashtë Kosovës; tatimpaguesi e siguron atë qasje | MISSING | operacionet + legal (cloud custody) | Operations/Access | — · **101(5): 150€/ditë** mos-sigurimi i qasjes (f.59) | none | CLEAR | OPS-ACCESS-F9 | Operations/Legal (lidhet me P10/V08) |
+| L18 | LAPT (CORE-01) | 4(1)–(2), 4(8) (+98, 101(2)) | 8 | **Identifikuesi tatimor në kupona/fatura/deklarata = numri fiskal OSE NUIB** — 4(2): subjektet e regjistruara në ARBK **NUK pajisen me numër fiskal shtesë** (kanë NUIB); ndryshimi i formës së biznesit → NUIB i RI (4(8)); konfigurimi per-tenant mban identifikuesin e SAKTË (JO "numri fiskal detyrimisht kudo") | PARTIAL | tatimpaguesi/config | Tax-ID/Config | — · **98: 500€** veprimtari pa certifikatë (ATK lëshon numrin + gjobën); 101(2) kërkon **fiskal OSE NUIB** në kupona/fatura | `docs/canonical/05-sef-atk/Kupon_Print_Spec.md` (fusha 2.1) | CLEAR | TAX-ID-CONFIG-F1 | Config per tenant (F1/F2) |
+| L19 | LAPT (CORE-01) | 5(1)–(8) | 8–9 | **Offboarding/çregjistrimi:** kërkon (1.1) detyrimet e paguara, (1.2) **bilancin e mbylljes/regjistrimet**, (1.3) **çregjistrimin e PEF/SF** — teksti përmend PEF/SF; **shtrirja te SEF = E PAQARTË — MOS infero**; detyrimet mbeten pas çregjistrimit (5(7)) | EXTERNAL_GATE | tatimpaguesi/iCode | Lifecycle/Offboarding | 45 ditë verifikim ATK · — | none | CONFIRM_ATK | ATK-008-COND | ATK (conditional applicability me `ATK-008` decommissioning) |
+| L20 | LAPT (CORE-01) | 13(4)–(5.2) | 15 | **Faturat/dokumentet REALE e të sakta** si bazë: ATK s'pranon TVSH të zbritshme pa fatura **të vërteta e të sakta** (13.5.1) as shpenzime të pafaturuara/padokumentuara (13.5.2); deklarata mban **NUIB/numrin fiskal** (13(4)); deklarimi elektronik = i nënshkruar (13(5)) | PARTIAL | faturimi/kontabiliteti | Books/Integrity | — · 19(3): faturat FIKTIVE refuzohen + masa | `packages/accounting/src/posting.test.ts` (invariante lokale — jo mbyllje) | CONFIRM_ACCOUNTANT | BOOKS-F2 | Kontabilist/Product |
+| L21 | LAPT (CORE-01) | 13(6)–(7) | 15 | **Afatet e deklarimit** sipas ligjit përkatës; **kur data s'është ditë pune → dita e PARË e punës vijuese** (13.7) — rregull kalendarik për reminders/EDI | MISSING | finance ops | Calendar/EDI | ditë-pune rollover · 99: 50/150/20€ per deklaratë të padorëzuar | none | CLEAR | BOOKS-EDI-F2 | Finance ops (F2) |
+| L22 | LAPT (CORE-01) | 14(2)–(7) | 16 | **Amended returns/korrigjimet:** ndryshim deklarate brenda **3 vitesh**; obligim korrigjimi **pa vonesë** kur zbulohet pasaktësi (14(3)); TVSH-amendment për periudha më të hershme se vlerësimi = **vetëm me aprovim të ATK-së** (14(6)); pa efekt pas nisjes së hetimit (14(7)) | MISSING | kontabiliteti/EDI | Books/Corrections | 3 vjet · 100: 15%/25% nën-deklarimi | none | CONFIRM_ACCOUNTANT | BOOKS-EDI-F2 | Kontabilist (F2) |
+| L23 | LAPT (CORE-01) | 43.1 | 33 | **Barter/këmbimi = shitje me VLERË TREGU** — transaksionet e këmbimit konsiderohen shitje mallrash/pune/shërbimesh me vlerë tregu; ATK mund të rregullojë vlerën e zvogëluar | MISSING | faturimi | Barter/Valuation | — · rregullim vlere nga ATK | none | CONFIRM_ACCOUNTANT | BARTER-F2 | Kontabilist (F2) |
+| L24 | LAPT (CORE-01) | 43.2 | 33 | **Faturimi i barter-it si me para në dorë** — fatura tatimore lëshohet për këmbimin njësoj si për cash | MISSING | faturimi | Barter/Invoicing | — · — | none | CLEAR | BARTER-F2 | Product (F2) |
+| L25 | LAPT (CORE-01) | 6.3.5 | 10 | **Ruajtja e regjistrave ORIGJINALË në mikrofilm/media tjera** = **VETËM me leje të ATK-së kundrejt kërkesës**, nën kushtet që ATK specifikon — e ARDHSHMJA e-arkivë e origjinaleve kërkon këtë leje | EXTERNAL_GATE | retention/arkiva | Retention/Archive | — · 101(2) | none | CONFIRM_ATK | ARCHIVE-GATE | ATK (leja e medias alternative) |
+| L26 | LAPT (CORE-01) | 6.3.6 | 10 | **Regjistrat lidhen me periudhat tatimore** të legjislacionit; periudha të ndryshme = **vetëm me leje/specifikim të ATK-së** (mbrojtja e FKPK/fondeve) — kufizim modelimi për `fiscal_period` | PARTIAL | modelimi/DB | Books/Periods | — · 101(2) | `packages/database/migrations/0003_accounting_posting.sql` (fiscal_period — PoC-2 feasibility) | CLEAR | BOOKS-F2 | Product (F2) |
 | D01 | Vendimi19-notice (EXT-03d/EXT-04) | LAPT 6.11–6.12 + Vendimi19-notice (EXT-03d/EXT-04) | 11 (LAPT) + njoftimi | B2C: transaksioni me person fizik jo-afarist mbi vlerën e vendimit të ministrit (19/2026: 2,000 € nga 01.06.2026) → bankë/elektronik; **6.12: edhe pjesa CASH e pagesës së pjesshme**. **Ndarje statusi:** product/control = MISSING (s'ka gate pagese në produkt); **source evidence = vetëm njoftimi zyrtar — AKTI ORIGJINAL I NËNSHKRUAR MUNGON publikisht** (EXT-04). MISSING ≠ thjesht "mungon kod" | MISSING | tatimpaguesi | Payments | 2,000 € (njoftimi) · **101(9)** (f.59) | none | CONFIRM_ATK+CONFIRM_LAWYER | ATK-013 | ATK/jurist |
 | U01 | UA 01/2026 (CORE-02) | 5.1–2 | 6 | Kupon për çdo furnizim te konsumatori final, përfshirë falas | MISSING | POS/SEF | Fiscal | — | none | CONFIRM_ATK+CONFIRM_ACCOUNTANT | FISCAL-F5 | ATK/kontabilist |
 | U02 | UA 01/2026 | 5.3 | 6 | Faturë tatimore për biznes/person juridik, me përjashtimet | MISSING | ERP/faturimi | Fiscal/Books | — | none | CONFIRM_ATK+CONFIRM_ACCOUNTANT | BOOKS-F2 | ATK/kontabilist |
@@ -133,141 +142,141 @@
 | P09 | Privatësia 06/L-082 | 37, 40 | N/A — GZ ActDetail (HTML/PDF locator; ligji jo i ngrirë me hash këtu) | DPO applicability dhe aktet/personat e brendshëm | EXTERNAL_GATE | AIP/jurist | Privacy | — | none | CONFIRM_AIP+CONFIRM_LAWYER | PRIV-001 | AIP/jurist |
 | P10 | Privatësia 06/L-082 | 46–49 | N/A — GZ ActDetail (HTML/PDF locator; ligji jo i ngrirë me hash këtu) | Cross-border/cloud transfers | EXTERNAL_GATE | AIP/jurist | Privacy | — | none | CONFIRM_AIP+CONFIRM_LAWYER | PRIV-001 | AIP/jurist |
 | K01 | KO159/24 (EXT-01) | LAPT 9(5–7) | N/A — GZ ActDetail (HTML/PDF locator; ligji jo i ngrirë me hash këtu) | Të pavlefshme; no blanket periodic bank/notary feed | N/A_LINEAGE | — | Legal lineage | — | none | CLEAR | LINEAGE | Legal correction |
-| K02 | KO159/24 | LAPT 14, 16, 26 | N/A — GZ ActDetail (HTML/PDF locator; ligji jo i ngrirë me hash këtu) | U shpallën kushtetuese; JO të anuluara | N/A_LINEAGE | — | Legal lineage | — | none | CLEAR | LINEAGE | Legal correction |
+| K02 | KO159/24 | LAPT 14, 16, 26 | N/A — GZ ActDetail (HTML/PDF locator; ligji jo i ngrirë me hash këtu) | U shpallën kushtetuese (UPHELD) — **dispozitat MBETEN AKTIVE**; ky rresht = vetëm regjistrim i efektit të aktgjykimit; dispositions reale të neneve 14/16/26 = te tabela nen-për-nen | N/A_LINEAGE | — | Legal lineage | — | none | CLEAR | LINEAGE | Legal correction |
 | K03 | KO159/24 | LAPT 89(12) | N/A — GZ ActDetail (HTML/PDF locator; ligji jo i ngrirë me hash këtu) | Claim **dismissed** — JO i pavlefshëm | N/A_LINEAGE | — | Legal lineage | — | none | CLEAR | LINEAGE | Legal correction |
 | K04 | KO159/24 | LAPT 79(4), (6) | N/A — GZ ActDetail (HTML/PDF locator; ligji jo i ngrirë me hash këtu) | Të pavlefshme | N/A_LINEAGE | — | Legal lineage | — | none | CLEAR | LINEAGE | Legal correction |
 | K05 | UA 01/2025 (EXT-02a/b/c) | PA09/2025 | N/A — GZ ActDetail (HTML/PDF locator; ligji jo i ngrirë me hash këtu) | UA 01/2025 e shfuqizuar (Supreme PA09/2025 + korrigjimi); historical only | N/A_LINEAGE | — | Legal lineage | — | none | CLEAR | LINEAGE | Lineage |
 | K06 | UA 02/2018 (EXT-02d) | UA 01/2026 Art.51 | N/A — GZ ActDetail (HTML/PDF locator; ligji jo i ngrirë me hash këtu) | UA 02/2018 e shfuqizuar nga UA 01/2026 | N/A_LINEAGE | — | Legal lineage | — | none | CLEAR | LINEAGE | Lineage |
 
-## Disposition LAPT nen-për-nen (1–123, PDF-ja primare — kusht i ATK-011)
+## Disposition LAPT nen-për-nen (1–123, PDF-ja primare CORE-01 — hash i riverifikuar para përdorimit)
 
-*Çdo nen i PDF-së primare (GZ 5/2024, 69 f.) ka disposition: `IN_SCOPE` → kontroll(e) atomik(e) në ledger; `SANCTION_CONTEXT` → i lidhur te kontrolli përkatës; `LINEAGE/N-A` → KO159/24; `CONTEXT`/`N/A` → arsyetim eksplicit. Ky pass mbulon PDF-në primare të LAPT — **pa pretendim "exhaustiv" për akte të tjera**.*
+*Re-review substantiv 12.07 (pass i dytë): çdo nen kundrejt tekstit të plotë të PDF-së primare; arsyetimet janë **specifike per-nen (të lidhura me titullin/përmbajtjen reale)**; interpretimet e diskutueshme = OPEN/EXTERNAL_GATE/CONFIRM_*, JO opinion ligjor i builder-it. **UPHELD (KO159/24) = dispozita AKTIVE** — jo lineage; nenet e prekura pjesërisht = paragraf-për-paragraf. Ky pass mbulon PDF-në primare — pa pretendim për akte të tjera.*
 
-| Neni (faqe) | Titulli | Disposition | Arsyeja / Ledger IDs |
+| Neni (faqe) | Titulli | Disposition | Arsyeja specifike / Ledger IDs |
 |---|---|---|---|
-| 1 (f.1) | Qëllimi | N/A | qëllimi/fushëveprimi — pa detyrim produkti |
-| 2 (f.1) | Fushëveprimi | N/A | qëllimi/fushëveprimi — pa detyrim produkti |
-| 3 (f.1) | Përkufizimet | CONTEXT | përkufizimet (person, aktivitet ekonomik…) — bazë interpretimi, pa kontroll më vete |
-| 4 (f.8) | Numri Fiskal dhe pajisja me Certifikatë Fiskale | N/A | e drejta e informimit të tatimpaguesit — procedurë ATK |
-| 5 (f.8) | Çregjistrimi i Tatimpaguesit | N/A | mbrojtja e të dhënave tatimore nga ATK — detyrim i ATK-së (privatësia jonë = P-rows) |
-| 6 (f.9) | Krijimi dhe mbajtja e regjistrave | IN_SCOPE | L01–L15, D01 (6.11–12), L13 (6.13) |
-| 7 (f.11) | Operatori Ekonomik i autorizuar për furnizim, instalim dhe m | IN_SCOPE | L16 (aplikueshmëria OE) + sanksionet 107 |
-| 8 (f.11) | Qasja në libra, regjistra, kompjuterë dhe pajisje të tjera p | IN_SCOPE | L17 (qasja; sanksioni 101(5)) |
-| 9 (f.13) | Mbledhja e informatave ose provave | LINEAGE/N-A | PJESËRISHT INVALID (K01: 9(5–7)); pjesa e mbetur = kërkesa informatash (kontekst i L17/101(5)) |
-| 10 (f.14) | Shkëmbimi i informacionit për qëllime ndërkombëtare | N/A | kërkesa informatash/vizita — procedura ATK ndaj tatimpaguesit (operacionale, jo sistem) |
-| 11 (f.14) | Negociatat për Marrëveshje Ndërkombëtare | N/A | kërkesa informatash/vizita — procedura ATK ndaj tatimpaguesit (operacionale, jo sistem) |
-| 12 (f.14) | Obligimet e përfaqësuesve juridik dhe menaxherëve të pasuris | N/A | kërkesa informatash/vizita — procedura ATK ndaj tatimpaguesit (operacionale, jo sistem) |
-| 13 (f.15) | Deklaratat tatimore | N/A | kërkesa informatash/vizita — procedura ATK ndaj tatimpaguesit (operacionale, jo sistem) |
-| 14 (f.16) | Vetë-vlerësimi | LINEAGE/N-A | UPHELD (K02) — procedurë ATK, N/A produkt |
-| 15 (f.16) | Vlerësimi i ATK për tatimin | N/A | deklarimi/vlerësimi tatimor — procedura ATK (deklaratat mbulohen te BOOKS/EDI: L08/V-rows) |
-| 16 (f.19) | Kufizimet kohore për vlerësimet | LINEAGE/N-A | UPHELD (K02) — procedurë ATK, N/A produkt |
-| 17 (f.19) | Vlerësimet në rast rreziku | N/A | deklarimi/vlerësimi tatimor — procedura ATK (deklaratat mbulohen te BOOKS/EDI: L08/V-rows) |
-| 18 (f.19) | Njoftim vlerësimi | N/A | deklarimi/vlerësimi tatimor — procedura ATK (deklaratat mbulohen te BOOKS/EDI: L08/V-rows) |
-| 19 (f.20) | Anulimi i dokumenteve tatimore | N/A | deklarimi/vlerësimi tatimor — procedura ATK (deklaratat mbulohen te BOOKS/EDI: L08/V-rows) |
-| 20 (f.20) | Detyrimi në rastet e veprës penale në fushën e tatimeve | N/A | deklarimi/vlerësimi tatimor — procedura ATK (deklaratat mbulohen te BOOKS/EDI: L08/V-rows) |
-| 21 (f.20) | Detyrimi i personave përgjegjës | N/A | deklarimi/vlerësimi tatimor — procedura ATK (deklaratat mbulohen te BOOKS/EDI: L08/V-rows) |
-| 22 (f.21) | Vlerësimi i detyrimit të personit të tretë | N/A | deklarimi/vlerësimi tatimor — procedura ATK (deklaratat mbulohen te BOOKS/EDI: L08/V-rows) |
-| 23 (f.22) | Pagesat | N/A | deklarimi/vlerësimi tatimor — procedura ATK (deklaratat mbulohen te BOOKS/EDI: L08/V-rows) |
-| 24 (f.22) | Interesi | N/A | deklarimi/vlerësimi tatimor — procedura ATK (deklaratat mbulohen te BOOKS/EDI: L08/V-rows) |
-| 25 (f.23) | Rendi i pagesave | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 26 (f.23) | Kreditimet dhe rimbursimet | LINEAGE/N-A | UPHELD (K02) — procedurë ATK, N/A produkt |
-| 27 (f.24) | Pagesat përmes bankave apo institucioneve financiare të lice | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 28 (f.24) | Tatimi i detyrueshëm dhe i pagueshëm | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 29 (f.24) | Barra tatimore | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 30 (f.27) | Masa për marrjen e pasurisë | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 31 (f.28) | Zbatimi me përmbarim i masës së marrjes | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 32 (f.28) | Shitja në ankand publik | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 33 (f.28) | Kufizimet mbi mbledhjen e detyrueshme | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 34 (f.29) | Mbledhja e tatimit nga ortakët dhe anëtarët e shoqatave të p | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 35 (f.30) | Urdhrat për raste rrezikimi | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 36 (f.30) | Embargo në importe dhe eksporte | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 37 (f.30) | Vendimi për publikim | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 38 (f.30) | Transferimi i aseteve | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 39 (f.31) | Borxhet tatimore të pambledhshme | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 40 (f.32) | Të ardhurat e kundërligjshme | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 41 (f.32) | Ri-karakterizimi i marrëveshjeve | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 42 (f.32) | Transaksionet në mes të personave të lidhur | N/A | vlerësime/ankesa/mbledhje/masa — procedura administrative ATK, pa kërkesë sistemi POS/SEF |
-| 43 (f.33) | Shkëmbimi i transaksioneve dhe raportimi i informatave nga p | IN_SCOPE | L08 (43.3–4; 101(1)) + L14 (43.5; 102.3) |
-| 44 (f.33) | Nën-deklarimi i të ardhurave dhe arkëtimet e devijuara | N/A | nën-deklarimi/metodat indirekte — procedurë vlerësimi e ATK-së |
-| 45 (f.33) | Legjislacioni Tatimor | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 46 (f.34) | Administrata Tatimore e Kosovës | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 47 (f.34) | Organizimi i Administratës Tatimore të Kosovës | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 48 (f.34) | Përgjegjësitë dhe detyrat e Drejtorit të Përgjithshëm të Adm | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 49 (f.35) | Delegimi i kompetencave | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 50 (f.35) | Raportimi i Drejtorit të Përgjithshëm | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 51 (f.36) | Kriteret për përzgjedhjen dhe emërimin e Drejtorit të Përgji | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 52 (f.37) | Përfundimi i mandatit të Drejtorit të Përgjithshëm | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 53 (f.38) | Zëvendës Drejtorët e Përgjithshëm të Administratës Tatimore  | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 54 (f.38) | Kriteret për përzgjedhjen dhe emërimin e Zëvendës Drejtorit  | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 55 (f.38) | Përfundimi i mandatit të Zëvendës Drejtorit të Përgjithshëm | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 56 (f.39) | Hetimet Tatimore dhe Inteligjenca | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 57 (f.41) | Ankesat | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 58 (f.41) | Avokati i Tatimpaguesve | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 59 (f.42) | Standardet Profesionale | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 60 (f.43) | Zyra për Gjoba dhe Ndëshkime Administrative | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 61 (f.43) | Bordi i Ankesave | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 62 (f.44) | Juridiksioni i Bordit | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 63 (f.44) | Vendimi shpjegues publik | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 64 (f.44) | Vendimi shpjegues individual | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 65 (f.45) | Përfaqësuesit e Tatimpaguesit | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 66 (f.45) | Konfidencialiteti i informatave tatimore | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 67 (f.47) | Regjimi juridik i marrëdhënies së punës së punonjësit të ATK | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 68 (f.47) | Klasifikimi i vendeve të punës | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 69 (f.47) | Plani i Rekrutimit | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 70 (f.47) | Konkurrimi | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 71 (f.48) | Komisioni për zhvillimin e procedurave të punësimit | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 72 (f.48) | Kushtet për pranimin në marrëdhënie pune të zyrtarit tatimor | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 73 (f.49) | Kohëzgjatja e akteve të marrëdhënies së punës | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 74 (f.49) | Periudha provuese | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 75 (f.49) | Avancimi në karrierë i zyrtarit tatimor | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 76 (f.50) | Akti i brendshëm për pranimin dhe karrierën në ATK | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 77 (f.50) | Vlerësimi i rezultateve të punës | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 78 (f.50) | Emërimet e përkohshme | N/A | organizimi i ATK-së / legjislacioni / bordi / procedurat — institucionale |
-| 79 (f.50) | Emërimi dhe mandati i pozitave drejtuese | LINEAGE/N-A | 79(4),(6) INVALID (K04); pjesa tjetër procedurë mbledhjeje, N/A produkt |
-| 80 (f.51) | Transferimi | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 81 (f.52) | Riorganizimi | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 82 (f.52) | Orari i punës dhe pushimet | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 83 (f.52) | Pezullimi i marrëdhënies së punës | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 84 (f.53) | Përfundimi i marrëdhënies së punës | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 85 (f.53) | Parandalimi i konfliktit të Interesit | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 86 (f.54) | Kufizimi i shfrytëzimit të informatave | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 87 (f.54) | Përgjegjësia dhe shkeljet disiplinore | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 88 (f.54) | Masat disiplinore për shkeljen e detyrave të punës | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 89 (f.55) | Shqyrtimi i përgjegjësisë disiplinore dhe mbrojtja e të drej | LINEAGE/N-A | 89(12) DISMISSED — JO invalid (K03); procedurë, N/A produkt |
-| 90 (f.56) | Shuarja e masave disiplinore | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 91 (f.56) | Akti i brendshëm për disiplinën dhe ankesat e punonjësve të  | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 92 (f.56) | Zbatimi i legjislacionit penal | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 93 (f.56) | Mosraportimi i veprave penale në fushën e tatimeve | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 94 (f.57) | Bashkëpunimi me institucionet për zbatimin e ligjit | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 95 (f.57) | Pjesëmarrja e ATK në procedurat gjyqësore | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 96 (f.57) | Përgjegjësitë e zyrtarëve tatimor | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 97 (f.57) | Sanksionet për mospërmbushje | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 98 (f.57) | Gjoba lidhur me Çertifikatën Fiskale dhe Çertifikatën e Regj | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 99 (f.58) | Gjobat lidhur me mosdeklarim | N/A | ankesat/ekzekutimi/parashkrimi — procedura ligjore, pa kontroll produkti |
-| 100 (f.58) | Gjobat lidhur me nën deklarimin e tatimit dhe mbi deklarimin | SANCTION_CONTEXT | kontekst sanksioni (nën/mbi-deklarimi 15%/25%) — lidhet me saktësinë e deklarimeve (BOOKS) |
-| 101 (f.58) | Sanksionet për mos dorëzim, mos krijim ose mos paraqitje të  | SANCTION_CONTEXT | sanksionet bazë të regjistrimeve/kuponit/qasjes/pagesave — të lidhura në L04–L08/L17/D01 |
-| 102 (f.60) | Gjoba për mos ofrimin e informatave dhe provave | SANCTION_CONTEXT | 102.3 → L14; 102.1–2 kontekst i qasjes/informatave |
-| 103 (f.60) | Gjobat për mos-mbajte të tatimit/kontributit në burim | SANCTION_CONTEXT | kontekst (mbajtja në burim — payroll F1) |
-| 104 (f.60) | Gjobë për mosdorëzim të pasurisë që i nënshtrohet masës së m | SANCTION_CONTEXT | kontekst (konfiskimi) |
-| 105 (f.60) | Gjoba për gabime nga përfaqësuesit e tatimpaguesve, këshillt | SANCTION_CONTEXT | kontekst (përfaqësuesit) |
-| 106 (f.60) | Gjobat lidhur me mosinstalimin e PEF/SF | SANCTION_CONTEXT | kontekst sanksionesh të përgjithshme — referuar në crosswalk |
-| 107 (f.61) | Gjobat për Operatorët Ekonomik të autorizuar për furnizim, i | SANCTION_CONTEXT | → L16 (OE) |
-| 108 (f.61) | Gjobat lidhur me TVSh | N/A | procedurë administrative |
-| 109 (f.62) | Gjoba për mallrat pa dokumentacion | SANCTION_CONTEXT | → sanksion i L04 (mallra pa dokumentacion) |
-| 110 (f.62) | Zbritja e gjobave | SANCTION_CONTEXT | kontekst (zbritja e gjobave — stimulon vetëdeklarimin) |
-| 111 (f.63) | Ankesat në Administratën Tatimore të Kosovës | N/A | dispozita kalimtare/përfundimtare (shfuqizimet → LIN-01) |
-| 112 (f.64) | Ankesat në Bord | N/A | dispozita kalimtare/përfundimtare (shfuqizimet → LIN-01) |
-| 113 (f.64) | Përmbajtja e ankesës në Bord | N/A | dispozita kalimtare/përfundimtare (shfuqizimet → LIN-01) |
-| 114 (f.65) | Barra e provës | N/A | dispozita kalimtare/përfundimtare (shfuqizimet → LIN-01) |
-| 115 (f.65) | Procedura e Bordit | N/A | dispozita kalimtare/përfundimtare (shfuqizimet → LIN-01) |
-| 116 (f.66) | Marrëveshja tatimore | N/A | dispozita kalimtare/përfundimtare (shfuqizimet → LIN-01) |
-| 117 (f.66) | Obligimi për të paguar detyrimin tatimor gjatë procedurës së | N/A | dispozita kalimtare/përfundimtare (shfuqizimet → LIN-01) |
-| 118 (f.67) | Rregullat ndërkombëtare | N/A | dispozita kalimtare/përfundimtare (shfuqizimet → LIN-01) |
-| 119 (f.67) | Dispozitat Kalimtare | N/A | dispozita kalimtare/përfundimtare (shfuqizimet → LIN-01) |
-| 120 (f.67) | Plotësimi dhe ndryshimi i Ligji Nr. 08/L-196 për Pagat në Se | N/A | dispozita kalimtare/përfundimtare (shfuqizimet → LIN-01) |
-| 121 (f.68) | Aktet Nënligjore | N/A | dispozita kalimtare/përfundimtare (shfuqizimet → LIN-01) |
-| 122 (f.68) | Shfuqizimi | N/A | dispozita kalimtare/përfundimtare (shfuqizimet → LIN-01) |
-| 123 (f.68) | Hyrja në fuqi | N/A | dispozita kalimtare/përfundimtare (shfuqizimet → LIN-01) |
+| 1 (f.1) | Qëllimi | N/A | 'Qëllimi' — përcakton objektin e ligjit; pa detyrim të veçantë sistemi |
+| 2 (f.1) | Fushëveprimi | N/A | 'Fushëveprimi' — përcakton subjektet; pa kontroll produkti më vete |
+| 3 (f.1) | Përkufizimet | CONTEXT | 'Përkufizimet' — baza interpretimi (person/aktivitet ekonomik etj.); përdoret nga Kushtet N4.1 |
+| 4 (f.8) | Numri Fiskal dhe pajisja me Certifikatë Fiskale | IN_SCOPE | 'Numri Fiskal dhe pajisja me Certifikatë Fiskale' — lifecycle i identifikuesit: fiskal OSE NUIB (4(2) përjashtimi ARBK; 4(8) NUIB i ri në ndryshim forme) → **L18**; sanksioni bazë **98** |
+| 5 (f.8) | Çregjistrimi i Tatimpaguesit | IN_SCOPE | 'Çregjistrimi i Tatimpaguesit' — closing balance + çregjistrim PEF/SF (5(1.3): SEF i paqartë → gate) + detyrimet mbeten (5(7)) → **L19** (EXTERNAL_GATE/ATK-008-COND) |
+| 6 (f.9) | Krijimi dhe mbajtja e regjistrave | IN_SCOPE | 'Krijimi dhe mbajtja e regjistrave' → **L01–L07, L09–L13, L25–L26, D01(6.11–12)**; sanksionet 101(2)/(5)/(6)/(9), 109 |
+| 7 (f.11) | Operatori Ekonomik i autorizuar për furnizim, instalim dhe mirëmbajtje | IN_SCOPE | 'Operatori Ekonomik i autorizuar… PEF/SF' → **L16** (aplikueshmëria ndaj iCode = EXTERNAL_GATE; sanksionet **107**) |
+| 8 (f.11) | Qasja në libra, regjistra, kompjuterë dhe pajisje të tjera për ruajtje | IN_SCOPE | 'Qasja në libra, regjistra, kompjuterë…' → **L17** (qasja e ATK-së edhe te palët e treta/cloud; sanksioni **101(5)** 150€/ditë) |
+| 9 (f.13) | Mbledhja e informatave ose provave | IN_SCOPE-PARTIAL | 'Mbledhja e informatave ose provave' — **9(5–7) INVALID (KO159/24, K01)**; paragrafët e tjerë AKTIVË: kërkesat për informata mbështeten nga qasja/eksporti (L17, T14); mosparaqitja → 102(1) 500€ |
+| 10 (f.14) | Shkëmbimi i informacionit për qëllime ndërkombëtare | N/A | 'Shkëmbimi i informacionit për qëllime ndërkombëtare' — detyrim ndërinstitucional i ATK-së; sistemi ynë s'është palë; 102(2) sanksion për personat që s'japin informata sipas tij |
+| 11 (f.14) | Negociatat për Marrëveshje Ndërkombëtare | N/A | 'Detyrimi për të ofruar ndihmë' (siç titullohet në f.14) — bashkëpunim procedural me ATK gjatë kontrolleve; operacional, pa kërkesë softueri |
+| 12 (f.14) | Obligimet e përfaqësuesve juridik dhe menaxherëve të pasurisë | CONTEXT | 'Obligimet e përfaqësuesve juridik dhe menaxherëve' — përgjegjësi personale/rolesh (12(1)–(4)) + licencimi i Këshilltarit Tatimor (12(5)–(7)); governance, jo kontroll sistemi — mbulohet organizativisht (U16-adjacent) |
+| 13 (f.15) | Deklaratat tatimore | IN_SCOPE | 'Deklaratat tatimore' → **L20** (fatura reale 13.5.1–5.2; NUIB/fiskal në deklaratë 13(4)) + **L21** (afati ditë-pune 13.7); sanksioni 99 |
+| 14 (f.16) | Vetë-vlerësimi | IN_SCOPE | 'Vetë-vlerësimi' — **UPHELD nga KO159/24 (AKTIV)** → **L22** amended returns (3 vjet; korrigjim pa vonesë; TVSH-amendment me aprovim ATK 14(6)) |
+| 15 (f.16) | Vlerësimi i ATK për tatimin | N/A | 'Vlerësimi i ATK për tatimin' — kompetencë vlerësimi e ATK-së (përfshirë 15(17) nën-deklarim qarkullimi → gjoba 100(3)); procedurë e autoritetit, pa kontroll produkti |
+| 16 (f.19) | Kufizimet kohore për vlerësimet | N/A | 'Kufizimet kohore për vlerësimet' — **UPHELD (AKTIV)**; afate parashkrimi për ATK-në; s'krijon detyrim sistemi — retention-i ynë mbulohet nga L02–L03/6.3.x |
+| 17 (f.19) | Vlerësimet në rast rreziku | N/A | 'Vlerësimet në rast rreziku' — masë e jashtëzakonshme e ATK-së (lidhet me 109(2) për mallrat pa dokumentacion); pa kërkesë softueri |
+| 18 (f.19) | Njoftim vlerësimi | N/A | 'Njoftim vlerësimi' — procedurë vlerësimi/dokumenti tatimor i ATK-së; pa kontroll produkti |
+| 19 (f.20) | Anulimi i dokumenteve tatimore | CONTEXT | 'Anulimi i dokumenteve tatimore' — 19(3): **faturat FIKTIVE refuzohen** (forcon L20); 19(2)/(4): publikimi i tërheqjes së certifikatës/njoftimi ARBK = kontekst risku partneri (feature opsionale LATER, pa detyrim) |
+| 20 (f.20) | Detyrimi në rastet e veprës penale në fushën e tatimeve | N/A | 'Detyrimi në rastet e veprës penale në fushën e tatimeve' — procedurë vlerësimi/njoftimi e ATK-së ndaj tatimpaguesit; pa kërkesë sistemi POS/SEF |
+| 21 (f.20) | Detyrimi i personave përgjegjës | N/A | 'Detyrimi i personave përgjegjës' — procedurë vlerësimi/njoftimi e ATK-së ndaj tatimpaguesit; pa kërkesë sistemi POS/SEF |
+| 22 (f.21) | Vlerësimi i detyrimit të personit të tretë | N/A | 'Vlerësimi i detyrimit të personit të tretë' — procedurë vlerësimi/njoftimi e ATK-së ndaj tatimpaguesit; pa kërkesë sistemi POS/SEF |
+| 23 (f.22) | Pagesat | IN_SCOPE-PARTIAL | 'Pagesat' — 23(4)–(5): kontributet e punëdhënësit/vetëpunësuarve → **payroll Faza 1** (L13; SSOT v2.17 — vendimi i vjetër v2.2 superseded); 23(6): tatimet paguhen në banka të licencuara = operacion pagese tatimesh i tatimpaguesit (reminder opsional F2), jo flow i POS-it |
+| 24 (f.22) | Interesi | N/A | 'Interesi' — procedurë pagese/marrëveshjeje me ATK-në; operacion i financës, pa kontroll produkti |
+| 25 (f.23) | Rendi i pagesave | N/A | 'Rendi i pagesave' — alokimi i pagesave TATIMORE nga ATK (shpenzime→tatim→interes→gjoba); sistemi ynë s'administron borxhe tatimore ndaj ATK-së — pa kontroll produkti |
+| 26 (f.23) | Kreditimet dhe rimbursimet | N/A | 'Kreditimet dhe rimbursimet' — **UPHELD (AKTIV)**; procedurë e ATK-së me afate (30 ditë, interesi); ndjekja e rimbursimeve = punë e kontabilistit (raportim opsional F2), pa detyrim sistemi |
+| 27 (f.24) | Pagesat përmes bankave apo institucioneve financiare të licencuara nga | N/A | 'Pagesat përmes bankave apo institucioneve financiare të licencuara nga Banka' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 28 (f.24) | Tatimi i detyrueshëm dhe i pagueshëm | N/A | 'Tatimi i detyrueshëm dhe i pagueshëm' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 29 (f.24) | Barra tatimore | N/A | 'Barra tatimore' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 30 (f.27) | Masa për marrjen e pasurisë | N/A | 'Masa për marrjen e pasurisë' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 31 (f.28) | Zbatimi me përmbarim i masës së marrjes | N/A | 'Zbatimi me përmbarim i masës së marrjes' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 32 (f.28) | Shitja në ankand publik | N/A | 'Shitja në ankand publik' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 33 (f.28) | Kufizimet mbi mbledhjen e detyrueshme | N/A | 'Kufizimet mbi mbledhjen e detyrueshme' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 34 (f.29) | Mbledhja e tatimit nga ortakët dhe anëtarët e shoqatave të pa inkorpor | N/A | 'Mbledhja e tatimit nga ortakët dhe anëtarët e shoqatave të pa inkorporuara' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 35 (f.30) | Urdhrat për raste rrezikimi | N/A | 'Urdhrat për raste rrezikimi' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 36 (f.30) | Embargo në importe dhe eksporte | N/A | 'Embargo në importe dhe eksporte' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 37 (f.30) | Vendimi për publikim | N/A | 'Vendimi për publikim' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 38 (f.30) | Transferimi i aseteve | N/A | 'Transferimi i aseteve' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 39 (f.31) | Borxhet tatimore të pambledhshme | N/A | 'Borxhet tatimore të pambledhshme' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 40 (f.32) | Të ardhurat e kundërligjshme | N/A | 'Të ardhurat e kundërligjshme' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 41 (f.32) | Ri-karakterizimi i marrëveshjeve | N/A | 'Ri-karakterizimi i marrëveshjeve' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 42 (f.32) | Transaksionet në mes të personave të lidhur | N/A | 'Transaksionet në mes të personave të lidhur' — masë/procedurë e mbledhjes së detyrueshme ose e sigurimit të borxhit nga ATK; asnjë funksion i sistemit tonë |
+| 43 (f.33) | Shkëmbimi i transaksioneve dhe raportimi i informatave nga palët e tre | IN_SCOPE | 'Shkëmbimi i transaksioneve dhe raportimi i informatave nga palët e treta' (titulli i PLOTË) → **L23/L24 (barter 43.1–2)** + **L08 (43.3–4; 101(1))** + **L14 (43.5; 102.3)** |
+| 44 (f.33) | Nën-deklarimi i të ardhurave dhe arkëtimet e devijuara | N/A | 'Nën-deklarimi i të ardhurave dhe arkëtimet e devijuara' — metoda indirekte vlerësimi të ATK-së ndaj individëve; pa kontroll produkti |
+| 45 (f.33) | Legjislacioni Tatimor | CONTEXT | 'Legjislacioni Tatimor' — hierarkia e burimeve tatimore; kontekst për Register-in, pa kontroll |
+| 46 (f.34) | Administrata Tatimore e Kosovës | N/A | 'Administrata Tatimore e Kosovës' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 47 (f.34) | Organizimi i Administratës Tatimore të Kosovës | N/A | 'Organizimi i Administratës Tatimore të Kosovës' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 48 (f.34) | Përgjegjësitë dhe detyrat e Drejtorit të Përgjithshëm të Administratës | N/A | 'Përgjegjësitë dhe detyrat e Drejtorit të Përgjithshëm të Administratës Tatimore' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 49 (f.35) | Delegimi i kompetencave | N/A | 'Delegimi i kompetencave' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 50 (f.35) | Raportimi i Drejtorit të Përgjithshëm | N/A | 'Raportimi i Drejtorit të Përgjithshëm' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 51 (f.36) | Kriteret për përzgjedhjen dhe emërimin e Drejtorit të Përgjithshëm | N/A | 'Kriteret për përzgjedhjen dhe emërimin e Drejtorit të Përgjithshëm' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 52 (f.37) | Përfundimi i mandatit të Drejtorit të Përgjithshëm | N/A | 'Përfundimi i mandatit të Drejtorit të Përgjithshëm' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 53 (f.38) | Zëvendës Drejtorët e Përgjithshëm të Administratës Tatimore të Kosovës | N/A | 'Zëvendës Drejtorët e Përgjithshëm të Administratës Tatimore të Kosovës' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 54 (f.38) | Kriteret për përzgjedhjen dhe emërimin e Zëvendës Drejtorit të Përgjit | N/A | 'Kriteret për përzgjedhjen dhe emërimin e Zëvendës Drejtorit të Përgjithshëm' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 55 (f.38) | Përfundimi i mandatit të Zëvendës Drejtorit të Përgjithshëm | N/A | 'Përfundimi i mandatit të Zëvendës Drejtorit të Përgjithshëm' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 56 (f.39) | Hetimet Tatimore dhe Inteligjenca | N/A | 'Hetimet Tatimore dhe Inteligjenca' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 57 (f.41) | Ankesat | N/A | 'Ankesat' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 58 (f.41) | Avokati i Tatimpaguesve | N/A | 'Avokati i Tatimpaguesve' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 59 (f.42) | Standardet Profesionale | N/A | 'Standardet Profesionale' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 60 (f.43) | Zyra për Gjoba dhe Ndëshkime Administrative | N/A | 'Zyra për Gjoba dhe Ndëshkime Administrative' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 61 (f.43) | Bordi i Ankesave | N/A | 'Bordi i Ankesave' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 62 (f.44) | Juridiksioni i Bordit | N/A | 'Juridiksioni i Bordit' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 63 (f.44) | Vendimi shpjegues publik | N/A | 'Vendimi shpjegues publik' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 64 (f.44) | Vendimi shpjegues individual | N/A | 'Vendimi shpjegues individual' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 65 (f.45) | Përfaqësuesit e Tatimpaguesit | N/A | 'Përfaqësuesit e Tatimpaguesit' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 66 (f.45) | Konfidencialiteti i informatave tatimore | N/A | 'Konfidencialiteti i informatave tatimore' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 67 (f.47) | Regjimi juridik i marrëdhënies së punës së punonjësit të ATK | N/A | 'Regjimi juridik i marrëdhënies së punës së punonjësit të ATK' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 68 (f.47) | Klasifikimi i vendeve të punës | N/A | 'Klasifikimi i vendeve të punës' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 69 (f.47) | Plani i Rekrutimit | N/A | 'Plani i Rekrutimit' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 70 (f.47) | Konkurrimi | N/A | 'Konkurrimi' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 71 (f.48) | Komisioni për zhvillimin e procedurave të punësimit | N/A | 'Komisioni për zhvillimin e procedurave të punësimit' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 72 (f.48) | Kushtet për pranimin në marrëdhënie pune të zyrtarit tatimor | N/A | 'Kushtet për pranimin në marrëdhënie pune të zyrtarit tatimor' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 73 (f.49) | Kohëzgjatja e akteve të marrëdhënies së punës | N/A | 'Kohëzgjatja e akteve të marrëdhënies së punës' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 74 (f.49) | Periudha provuese | N/A | 'Periudha provuese' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 75 (f.49) | Avancimi në karrierë i zyrtarit tatimor | N/A | 'Avancimi në karrierë i zyrtarit tatimor' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 76 (f.50) | Akti i brendshëm për pranimin dhe karrierën në ATK | N/A | 'Akti i brendshëm për pranimin dhe karrierën në ATK' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 77 (f.50) | Vlerësimi i rezultateve të punës | N/A | 'Vlerësimi i rezultateve të punës' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 78 (f.50) | Emërimet e përkohshme | N/A | 'Emërimet e përkohshme' — organizim/funksionim i brendshëm i ATK-së (kapitulli institucional); pa kontroll produkti |
+| 79 (f.50) | Emërimi dhe mandati i pozitave drejtuese | LINEAGE-PARTIAL | 'Emërimi dhe mandati i pozitave drejtuese' — **79(4),(6) INVALID (K04)**; paragrafët e tjerë AKTIVË por institucionalë (drejtimi i ATK-së); pa kontroll produkti |
+| 80 (f.51) | Transferimi | N/A | 'Transferimi' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 81 (f.52) | Riorganizimi | N/A | 'Riorganizimi' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 82 (f.52) | Orari i punës dhe pushimet | N/A | 'Orari i punës dhe pushimet' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 83 (f.52) | Pezullimi i marrëdhënies së punës | N/A | 'Pezullimi i marrëdhënies së punës' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 84 (f.53) | Përfundimi i marrëdhënies së punës | N/A | 'Përfundimi i marrëdhënies së punës' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 85 (f.53) | Parandalimi i konfliktit të Interesit | N/A | 'Parandalimi i konfliktit të Interesit' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 86 (f.54) | Kufizimi i shfrytëzimit të informatave | N/A | 'Kufizimi i shfrytëzimit të informatave' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 87 (f.54) | Përgjegjësia dhe shkeljet disiplinore | N/A | 'Përgjegjësia dhe shkeljet disiplinore' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 88 (f.54) | Masat disiplinore për shkeljen e detyrave të punës | N/A | 'Masat disiplinore për shkeljen e detyrave të punës' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 89 (f.55) | Shqyrtimi i përgjegjësisë disiplinore dhe mbrojtja e të drejtave nga m | N/A | 'Shqyrtimi i përgjegjësisë disiplinore…' — **89(12) DISMISSED (K03) → AKTIV**; disiplina e brendshme e ATK-së; pa kontroll produkti |
+| 90 (f.56) | Shuarja e masave disiplinore | N/A | 'Shuarja e masave disiplinore' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 91 (f.56) | Akti i brendshëm për disiplinën dhe ankesat e punonjësve të ATK | N/A | 'Akti i brendshëm për disiplinën dhe ankesat e punonjësve të ATK' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 92 (f.56) | Zbatimi i legjislacionit penal | N/A | 'Zbatimi i legjislacionit penal' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 93 (f.56) | Mosraportimi i veprave penale në fushën e tatimeve | N/A | 'Mosraportimi i veprave penale në fushën e tatimeve' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 94 (f.57) | Bashkëpunimi me institucionet për zbatimin e ligjit | N/A | 'Bashkëpunimi me institucionet për zbatimin e ligjit' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 95 (f.57) | Pjesëmarrja e ATK në procedurat gjyqësore | N/A | 'Pjesëmarrja e ATK në procedurat gjyqësore' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 96 (f.57) | Përgjegjësitë e zyrtarëve tatimor | N/A | 'Përgjegjësitë e zyrtarëve tatimor' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 97 (f.57) | Sanksionet për mospërmbushje | N/A | 'Sanksionet për mospërmbushje' — ankesa/shqyrtime/procedura ligjore mes tatimpaguesit dhe ATK-së; pa kërkesë sistemi |
+| 98 (f.57) | Gjoba lidhur me Çertifikatën Fiskale dhe Çertifikatën e Regjistrimit t | SANCTION_CONTEXT | 'Gjoba lidhur me Çertifikatën Fiskale…' — 500€ veprimtari pa certifikatë; ATK lëshon numrin + gjobën; ARBK njoftohet → **bazë: L18** |
+| 99 (f.58) | Gjobat lidhur me mosdeklarim | SANCTION_CONTEXT | 'Gjobat lidhur me mosdeklarim' — 50€ fizik afarist / 150€ juridik / 20€ jo-afarist per deklaratë → **bazë: L08/L21/L22** |
+| 100 (f.58) | Gjobat lidhur me nën deklarimin e tatimit dhe mbi deklarimin e rimburs | SANCTION_CONTEXT | 'Gjobat lidhur me nën deklarimin…' — 15%/25% + 100(3): 25% e qarkullimit të nëndeklaruar (15(17)) → **bazë: L20/L22 + BOOKS** |
+| 101 (f.58) | Sanksionet për mos dorëzim, mos krijim ose mos paraqitje të të dhënave | SANCTION_CONTEXT | 'Sanksionet për mos dorëzim, mos krijim…' — 101(1) 150€/pasqyrë→L08; 101(2) shkallë qarkullimi→L01–L05/L26; 101(5) 150€/ditë→L17; 101(6) mos-kuponi→L05; 101(7) mbyllja 7/15 ditë; 101(8) 150€ mospërditësim; **101(9) pagesat kundër 6.9–6.12→L06/L07/D01** |
+| 102 (f.60) | Gjoba për mos ofrimin e informatave dhe provave | SANCTION_CONTEXT | 'Gjoba për mos ofrimin e informatave…' — 102(1)/(2) 500€ (nenet 9/10); **102(3) 500€/punëtor i padeklaruar → L14** |
+| 103 (f.60) | Gjobat për mos-mbajte të tatimit/kontributit në burim | SANCTION_CONTEXT | 'Gjobat për mos-mbajtje të tatimit/kontributit në burim' — **103(1) withholding tax 25% = MË I GJERË se payroll** (çdo mbajtje në burim); **103(2) kontributet pensionale/tjera 25% = payroll (Faza 1, SSOT v2.17)** → bazat: L13/23(4)/6.13 |
+| 104 (f.60) | Gjobë për mosdorëzim të pasurisë që i nënshtrohet masës së marrjes si  | N/A | 'Gjobë për mosdorëzim të pasurisë që i nënshtrohet masës së marrjes si dhe lënies' — procedurë administrative e ATK-së; pa kontroll produkti |
+| 105 (f.60) | Gjoba për gabime nga përfaqësuesit e tatimpaguesve, këshilltarët tatim | N/A | 'Gjoba për gabime nga përfaqësuesit e tatimpaguesve, këshilltarët tatimor, apo pe' — procedurë administrative e ATK-së; pa kontroll produkti |
+| 106 (f.60) | Gjobat lidhur me mosinstalimin e PEF/SF | SANCTION_CONTEXT | 'Gjoba civile për evazion tatimor' (titulli sipas f.60–61) — konteksti penal/civil i evazionit → bazë: integriteti i L20/BOOKS |
+| 107 (f.61) | Gjobat për Operatorët Ekonomik të autorizuar për furnizim, instalim dh | SANCTION_CONTEXT | 'Gjobat për Operatorët Ekonomik…PEF/SF' — 150€ per shkelje (instalim 15 ditë pune; servisim 48h; të përsëritshme) → **bazë: L16** (nëse regjimi OE aplikohet) |
+| 108 (f.61) | Gjobat lidhur me TVSh | SANCTION_CONTEXT | 'Gjobat lidhur me TVSh' — paragraf-për-paragraf: **108(1)** furnizime pa regjistrim TVSH 15%/25%; **108(2)** faturë TVSH e munguar/e pasaktë 15%/25% (pragjet 1,000€/500€) → L20/V01; **108(3.1)** mos-regjistrim/çregjistrim në prag (përjashtim vetë-iniciativa) → V05/ACC-012; **108(3.2)** mos-paraqitja e kopjes së certifikatës TVSH; **108(4)** përdorimi i certifikatës së tjetrit **5,000€ + Prokuroria** → kontekst keqpërdorimi |
+| 109 (f.62) | Gjoba për mallrat pa dokumentacion | SANCTION_CONTEXT | 'Gjoba për mallrat pa dokumentacion' — 30% e vlerës së tregut; marrja në kujdestari (109(2)) → **bazë: L04 (6.6 dokumentet e origjinës)** |
+| 110 (f.62) | Zbritja e gjobave | CONTEXT | 'Zbritja e gjobave' — vetë-informimi vullnetar ul gjobat (97–108); stimul procedural, pa kontroll sistemi |
+| 111 (f.63) | Ankesat në Administratën Tatimore të Kosovës | N/A | 'Ankesat në Administratën Tatimore të Kosovës' — dispozitë kalimtare/përfundimtare (shfuqizimet → LIN-01); pa kontroll aktiv |
+| 112 (f.64) | Ankesat në Bord | N/A | 'Ankesat në Bord' — dispozitë kalimtare/përfundimtare (shfuqizimet → LIN-01); pa kontroll aktiv |
+| 113 (f.64) | Përmbajtja e ankesës në Bord | N/A | 'Përmbajtja e ankesës në Bord' — dispozitë kalimtare/përfundimtare (shfuqizimet → LIN-01); pa kontroll aktiv |
+| 114 (f.65) | Barra e provës | N/A | 'Barra e provës' — dispozitë kalimtare/përfundimtare (shfuqizimet → LIN-01); pa kontroll aktiv |
+| 115 (f.65) | Procedura e Bordit | N/A | 'Procedura e Bordit' — dispozitë kalimtare/përfundimtare (shfuqizimet → LIN-01); pa kontroll aktiv |
+| 116 (f.66) | Marrëveshja tatimore | N/A | 'Marrëveshja tatimore' — dispozitë kalimtare/përfundimtare (shfuqizimet → LIN-01); pa kontroll aktiv |
+| 117 (f.66) | Obligimi për të paguar detyrimin tatimor gjatë procedurës së ankesave | N/A | 'Obligimi për të paguar detyrimin tatimor gjatë procedurës së ankesave' — dispozitë kalimtare/përfundimtare (shfuqizimet → LIN-01); pa kontroll aktiv |
+| 118 (f.67) | Rregullat ndërkombëtare | N/A | 'Rregullat ndërkombëtare' — dispozitë kalimtare/përfundimtare (shfuqizimet → LIN-01); pa kontroll aktiv |
+| 119 (f.67) | Dispozitat Kalimtare | N/A | 'Dispozitat Kalimtare' — dispozitë kalimtare/përfundimtare (shfuqizimet → LIN-01); pa kontroll aktiv |
+| 120 (f.67) | Plotësimi dhe ndryshimi i Ligji Nr. 08/L-196 për Pagat në Sektorin Pub | N/A | 'Plotësimi dhe ndryshimi i Ligji Nr. 08/L-196 për Pagat në Sektorin Publik' — dispozitë kalimtare/përfundimtare (shfuqizimet → LIN-01); pa kontroll aktiv |
+| 121 (f.68) | Aktet Nënligjore | N/A | 'Aktet Nënligjore' — dispozitë kalimtare/përfundimtare (shfuqizimet → LIN-01); pa kontroll aktiv |
+| 122 (f.68) | Shfuqizimi | N/A | 'Shfuqizimi' — dispozitë kalimtare/përfundimtare (shfuqizimet → LIN-01); pa kontroll aktiv |
+| 123 (f.68) | Hyrja në fuqi | N/A | 'Hyrja në fuqi' — dispozitë kalimtare/përfundimtare (shfuqizimet → LIN-01); pa kontroll aktiv |
 
 ## Interpretimi (i detyrueshëm)
 
@@ -277,15 +286,15 @@
 - **`N/A_LINEAGE`** ruhet anti-regression: materiali i shfuqizuar/i pavlefshëm të mos ripërdoret si ligj aktiv.
 - Fushat `—` = jo në evidence-in e audituar; plotësohen VETËM me verifikim të ri (kurrë me hamendje).
 
-## Crosswalk-u LAPT → ATK-011 (mapping deliverable — mbyllet me merge; JO compliance)
+## Crosswalk-u LAPT → ATK-011 (statusi: **OPEN / PENDING_INDEPENDENT_REVIEW** — builder-i NUK e mbyll vetë)
 
-- **Arts. 6.1–6.13** → L01–L07 + **L09–L13** (libra/software 6.1–2 · retention 6.3.1–4/7/8 · inventari 6.5–6 · kuponi 6.7–8 · cash 6.9–6.12 · **pagat 6.13**) — faqe reale nga PDF-i primar (f.9–11).
+- **Arts. 4–8, 6.1–6.13, 13–14** → L18 (Nr. fiskal/NUIB) · L19 (çregjistrimi/PEF-SF gate) · L01–L07, L09–L13, **L25–L26** (6.3.5/6.3.6 atomikë) · L17 (qasja Art.8) · L20–L22 (faturat reale/afatet/amended returns) — faqe reale nga PDF-i primar (f.8–16).
 - **Arts. 6.11–6.12** → konteksti i kufizimeve cash → **D01 / Vendimi 19/2026** — me caveat-in: **akti i nënshkruar NUK u gjet publikisht** (EXT-04; vetëm njoftimi zyrtar).
-- **Arts. 43.3–43.5** → L08 (librat elektronikë; **sanksioni 101(1) 150€/pasqyrë deri 3,000€**) + **L14 (43.5: njoftimi i punëtorit 1 ditë para; sanksioni 102.3 = 500€/punëtor)** — f.33/58–60.
+- **Arts. 43.1–43.5** → **L23/L24 (barter: vlerë tregu + faturim si cash — 43.1–2)** + L08 (43.3–4; **101(1)**) + L14 (43.5; **102.3**) — f.33/58–60; titulli i plotë i Nenit 43 i regjistruar.
 - **Sanksionet:** Arts. **100, 101 (përfshirë 101(9)) dhe 106** = konteksti i sanksioneve për shkeljet e regjistrimit/kuponit/librave — konteksti i rrezikut ligjor, jo kontrolle produkti më vete.
 - **UA Art.49(2)** — kufiri i shtrirjes së sanksioneve të UA-së: referon te ligji (LAPT), nuk krijon sanksione të reja më vete.
 - **KO159/24 dispozitivi** (K01–K04): Art.9(5–7) **invalid**; Arts.14/16/26 **upheld**; Art.89(12) **dismissed — JO invalid**; Art.79(4) **dhe** (6) **invalid**.
-- **Verifikimi mekanik i crosswalk-ut (kusht i "closes on merge"):** skripti lokal provon që çdo L-row ka **Ref + Faqe reale + Afat/sanksion (ku ekziston)** — plotësuar në v1.1; **shënim:** një pas i targetuar riverifikimi për nene shtesë të LAPT jashtë listës aktuale = i flamuruar si follow-up (jo pretendim exhaustiviteti).
+- **Verifikimi mekanik (mbështetës, jo mbyllës):** skripti lokal provon Ref + Faqe reale + Afat/sanksion per L-row (v1.3) — kusht i domosdoshëm por JO i mjaftueshëm për mbylljen e ATK-011 (shih statusin më lart).
 - **Kufiri:** ky crosswalk mbyll **ATK-011 si mapping deliverable**; **NUK mbyll** implementimin (L01–L08 mbeten PARTIAL/MISSING) as pajtueshmërinë/aplikueshmërinë ligjore (gates e konfirmimit mbeten).
 
 ## Lidhjet
@@ -293,4 +302,4 @@
 `ATK_Source_Register.md` v2.0 (burimet/CORE/EXT/LIN/CONF) · `ATK_Compliance_Gate.md` v2.0 (verdikti + T2-01..T2-10 + gates) · Tracker (`ATK-002`, `ATK-012`, `ATK-013`, `ACC-012`, `PRIV-001`) · `poc/poc5-sef/ANALIZA.md` (korrigjimi post-audit).
 
 ---
-*Historia: v1.0 (2026-07-12) — 94 kontrolle (numëratori HISTORIK i v1.0) nga independent full-corpus audit. · v1.1 (2026-07-12, hardening po në këtë PR) — LAPT i plotësuar nga PDF-i primar (L09–L14; L07/D01 semantika e saktë; sanksionet 101(1)/101(2)/102.3 me faqe); T04 i ndarë (T22); G06 LIVE-harness; kolona `Closure key` + dallimi 4-rows/3-defekte; faqe reale per PDF-row ose arsye eksplicite; G03→CONFIRM_ATK; G01/T10 pointer fix → TOTAL 102, konfirmime 36. · v1.2 (2026-07-12, hardening final) — **Disposition LAPT nen-për-nen 1–123** (kusht i ATK-011); +L15 (6.4)/L16 (Art.7+107 OE)/L17 (Art.8+101(5) qasja); **U23 i ndarë → U27 CONTRADICTS (origjina 48h → T2-08)**; **G07/G08 = rreshta realë për T2-09/T2-10**; sanksionet 101(6)/101(9)/109/107 me faqe; **faqet e KT (44–49) dhe CORE-08 (6–8) nga renderimi**; T22 → CORE-03 (jo CORE-06) → **TOTAL 108 (60/18/17/5/2/6), 38 konfirmime, 40 closure keys; 5 CONTRADICTS-rreshta = 4 defekte unike**. Me aprovimin e Pronarit (PR review = aprovimi).*
+*Historia: v1.0 (2026-07-12) — 94 kontrolle (numëratori HISTORIK i v1.0) nga independent full-corpus audit. · v1.1 (2026-07-12, hardening po në këtë PR) — LAPT i plotësuar nga PDF-i primar (L09–L14; L07/D01 semantika e saktë; sanksionet 101(1)/101(2)/102.3 me faqe); T04 i ndarë (T22); G06 LIVE-harness; kolona `Closure key` + dallimi 4-rows/3-defekte; faqe reale per PDF-row ose arsye eksplicite; G03→CONFIRM_ATK; G01/T10 pointer fix → TOTAL 102, konfirmime 36. · v1.2 (2026-07-12, hardening final) — **Disposition LAPT nen-për-nen 1–123** (kusht i ATK-011); +L15 (6.4)/L16 (Art.7+107 OE)/L17 (Art.8+101(5) qasja); **U23 i ndarë → U27 CONTRADICTS (origjina 48h → T2-08)**; **G07/G08 = rreshta realë për T2-09/T2-10**; sanksionet 101(6)/101(9)/109/107 me faqe; **faqet e KT (44–49) dhe CORE-08 (6–8) nga renderimi**; T22 → CORE-03 (jo CORE-06) → **TOTAL 108 (60/18/17/5/2/6), 38 konfirmime, 40 closure keys; 5 CONTRADICTS-rreshta = 4 defekte unike**. Me aprovimin e Pronarit (PR review = aprovimi). · v1.3 (2026-07-12, correction pass substantiv) — re-review 1–123 kundër tekstit të PLOTË të CORE-01 (hash i riverifikuar para përdorimit): **+L18–L26** (Nr.fiskal/NUIB me përjashtimin ARBK 4(2); çregjistrimi 5 me PEF/SF-gate; faturat reale 13.5; afati ditë-pune 13.7; amended returns 14; barter 43.1–2 atomikë; 6.3.5/6.3.6 atomikë); **arsyetime specifike per-nen** (zero template); **UPHELD=AKTIVE** (14→L22; 16/26 procedurale me arsye); 98/99/103(1)-(2)/108 paragraf-për-paragraf të lidhura me bazat; **ATK-011 → OPEN/PENDING_INDEPENDENT_REVIEW** → **TOTAL 117 (64/21/19/5/2/6), 43 konfirmime, 44 closure keys**. Me aprovimin e Pronarit (PR review = aprovimi).*
