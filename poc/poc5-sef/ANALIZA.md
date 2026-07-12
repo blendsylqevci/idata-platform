@@ -126,7 +126,7 @@ Migrimi **0006** vetëm `poc5_`: `poc5_fiscal_outbox` (business_id NOT NULL; `co
 **PRIVATËSIA E PREFLIGHT-it (e detyrueshme):** ekzekutohet përmes një **wrapper-i lokal** që e lexon `.env.sef.local` **pa echo** (asnjë `cat`/`printenv`/interpolim në komandë). **Asnjë NUI/ID/URL e plotë** nuk shfaqet në output komande, shell history, PR, CI apo evidencë — output-i i lejuar është vetëm **`SET`/`MISSING` per variabël + vlera të maskuara** (p.sh. 2 karakteret e para + "…"). Përgjigja raw e serverit → **vetëm** `evidence-private-local/`/`.sef-local/`. **Tier 2 mbetet i NDALUAR** deri në aprovimin e veçantë të Blendit — PREFLIGHT-i vetë bën pjesë në Tier 2 dhe s'ekzekutohet para atij aprovimi.
 
 Pyetjet (burimi: `docs/canonical/05-sef-atk/Kupon_Print_Spec.md` §9 + Tracker `ATK-005`):
-1. **NUIKF** — burimi/formati (kush e gjeneron; lidhja me `VerificationNo`).
+1. **NUIKF** *(korrigjuar 12.07 — formati DIHET: alfanumerik/pa separatorë/≤16/unik/automatik)*: OPEN vetëm **algoritmi + origjina** + **binding-u me `VerificationNo`**.
 2. **Return** — shenja e shumave (pozitive me Type vs negative).
 3. **Zbritja per-artikull** në PosCoupon (rresht negativ vs çmim neto + `TotalDiscount`).
 4. **QR i kuponit të pafiskalizuar** (offline, para `transaction_id`) — përmbajtja.

@@ -413,7 +413,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 **Prerequisites / Gates**
 
 - PoC-3 offline sync PASS.
-- PoC-5 SEF PASS.
+- PoC-5 SEF PASS *(parakusht i ardhshëm — **NOT MET sot**: Tier 1 PARTIAL/REOPENED, compliance FAIL, Tier 2 NO-GO; Gate v2 + ATK-012)*.
 - ATK-002, ATK-003, ATK-004.
 - ADR-011, ADR-016, ADR-017.
 - HW-001.
