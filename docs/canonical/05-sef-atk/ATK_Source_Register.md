@@ -128,7 +128,7 @@
 
 ## Lidhjet
 
-`ATK_SEF_Requirements_Ledger.md` (94 kontrollet — burimi i statusit) · `ATK_Compliance_Gate.md` v2.0 (verdikti + gates) · `Kupon_Print_Spec.md` · SSOT §7 · Tracker (`ATK-002`, `ATK-005`, `ATK-010`, `ATK-011`, `ATK-012`, `ATK-013`).
+`ATK_SEF_Requirements_Ledger.md` v1.1 (102 source-rows · 37 closure keys — burimi i statusit) · `ATK_Compliance_Gate.md` v2.0 (verdikti + gates) · `Kupon_Print_Spec.md` · SSOT §7 · Tracker (`ATK-002`, `ATK-005`, `ATK-010`, `ATK-011`, `ATK-012`, `ATK-013`).
 
 ---
 *Historia: v1.0 (2026-07-10, PR #18) — regjistri i 7 PDF-ve të portalit + pin C#. · v2.0 (2026-07-12, ky PR) — **source graph i plotë**: CORE-01..08 (+ CORE-08 jashtë enumerimit të portalit), EXT-01..11 me GZ ActIDs, lineage edges LIN-01..06 (përfshirë dispozitivin e KO159/24), pins të 4 repo-ve + Swagger v0.9 me hashes, conflict register CONF-01..10, rregullat e drift-it; baza = independent full-corpus audit cutoff 2026-07-12, riverifikuar FRESH read-only në këtë PR (8/8 CORE MATCH; GZ ×5 HTTP 200; HEADs 4/4 = pins; proto C#=Go=vendored, PHP divergjent, Ruby pa proto; Swagger hashes ekzakte). Me aprovimin e Pronarit (PR review = aprovimi). · v2.1 (2026-07-12, hardening po në këtë PR) — **riparimi i grafit të autoritetit**: CORE-01 primary = GZ ActID 85269 (publikimi 12.01 ↔ fuqia 27.01.2024 të ndara; LIN-01 me aktet 03/L-222+04/L-102+04/L-223); CORE-02 primary = GZ ActID 119286; EXT-02a–d me ActID 102922/107935/108055/16407; EXT-03a/b/d URL zyrtare; EXT-03e i ndarë në e1–e4; EXT-05 me URL/cadence; EXT-10 gap i dokumentuar; CORE-06 affected = VETËM T01/T11/T14; pins me default-branch/data/cadence + lightweight-tag semantics; CONF-03 → TRACKED_DRIFT (C#/Go = implementation evidence, jo hierarki zyrtare); formulimi anti-"exhaustiv".*

@@ -1,7 +1,7 @@
 # ATK Compliance Gate — verdikti + gates (v2.0, post full-corpus re-audit)
 
 **Versioni:** 2.0 · **Cutoff i auditit:** 2026-07-12 · **Repo baseline:** `55126b1b48004e4fba4a5604c9717cd9456722d3` · **Pronari:** Group Owner (Human Gate) · **Statusi:** canonical — effective on merge
-**Burimet:** `ATK_Source_Register.md` v2.0 (grafi CORE/EXT/LIN/CONF) · **burimi EXHAUSTIV i statusit = `ATK_SEF_Requirements_Ledger.md` v1.0 (94 kontrolle)** — ky Gate mban verdiktin, kontratat e korrigjuara dhe gates; NUK dyfishon statuset per-kontroll.
+**Burimet:** `ATK_Source_Register.md` v2.1 (grafi CORE/EXT/LIN/CONF) · **burimi EXHAUSTIV i statusit = `ATK_SEF_Requirements_Ledger.md` v1.1 (102 source-rows · 37 closure keys)** — ky Gate mban verdiktin, kontratat e korrigjuara dhe gates; NUK dyfishon statuset per-kontroll.
 **Gate-t:** **[T2]** = bllokues PARA Tier 2 (thirrjes së parë reale të test-serverit) · **[C]** = bllokues certifikimi · **[G]** = bllokues go-live · **[H]** = hardening.
 
 ---

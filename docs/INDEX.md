@@ -51,7 +51,7 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/05-sef-atk/ATK_SEF_Offline_Faturimi_Findings.md`
 - `docs/canonical/05-sef-atk/ATK_Compliance_Gate.md`
 - `docs/canonical/05-sef-atk/ATK_Source_Register.md` — v2.0 source graph (CORE/EXT/LIN/CONF)
-- `docs/canonical/05-sef-atk/ATK_SEF_Requirements_Ledger.md` — 94 kontrollet (burimi i statusit)
+- `docs/canonical/05-sef-atk/ATK_SEF_Requirements_Ledger.md` — v1.1: 102 source-rows · 37 closure keys (burimi i statusit)
 - `docs/canonical/05-sef-atk/Kupon_Print_Spec.md`
 - `docs/canonical/06-architecture/Reliability_Gate.md`
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
@@ -64,8 +64,8 @@ During implementation, code plus tests become the truth for system behavior.
 1. **Step B — code hardening (`ATK-012`, P0/PRE-TIER2):** T2-01..T2-10 (Gate v2 §4).
 2. **Step C — golden vectors zyrtarë + fake-HTTP/negative tests.**
 3. **Independent re-review** i deltës + gates.
-4. **Private preflight** — vetëm pasi Step B/C kanë prodhuar wrapper/harness evidence-safe (sot s'ekziston).
-5. **Human Gate i veçantë → Tier 2**; certifikimi/go-live = NO-GO më vete.
+4. **HUMAN GATE** — autorizimi për thirrjen e PARË reale (asnjë `/ca/*`, `/pos/*`, `/citizen/*` para tij).
+5. **Private `/ca/verify` PREFLIGHT** (wrapper-i ndërtohet në Step B/C — sot s'ekziston) → vetëm pas suksesit, pjesa tjetër e **Tier 2**; certifikimi/go-live = NO-GO më vete.
 6. **Paralel:** PoC-4b — dita e hardware-it (checklist në `poc/poc4-local-hub/README.md`).
 
 *(Gate historik i split-it — kaluar: pa humbje kërkesash; pa PII/sekrete të promovuara; pending items të trackuara; kontratat jashtë git.)*

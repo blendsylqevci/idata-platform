@@ -49,7 +49,7 @@ Per ambulantin/shitjen ne terren, sistemi duhet te kete:
    - fiskalizuar
    - deshtuar
    - kerkon nderhyrje
-7. Retry automatik kur kthehet interneti.
+7. Retry/dërgim automatik kur kthehet interneti *(kërkesë target — sot vetëm drain MANUAL mock; scheduler production = MISSING/T2-06)*.
 8. Monitorim i afatit 48h.
 9. Alarm per menaxher/kontabilist para shkeljes se afatit.
 10. Raport ditor i kuponave te pafiskalizuar.

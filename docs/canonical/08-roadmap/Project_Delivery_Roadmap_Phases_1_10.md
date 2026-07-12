@@ -60,6 +60,10 @@ Këto janë datat më të vona të pranueshme që ruajnë shansin real për cuto
 | ACC-008 | Sent/Open | Kthime/write-off/note krediti/periudha | Kontabilisti | Faza 2/3/5/8 | 2026-08-05 | lejohet vetëm reversal conservative + approval, jo automation final |
 | Payroll gate | Open | Payroll engine i plotë vs master-data + kontribute | Blend + kontabilisti | Faza 1 | 2026-07-20 | në Faza 1 ndërtohet vetëm master-data + kontribute minimale |
 | ATK-002 | **REOPENED (12.07)** — local regression evidence only (66 PASS/1 LIVE SKIP); **Tier 1 overall PARTIAL/REOPENED; compliance FAIL; Tier 2 NO-GO** (Gate v2 + ATK-012) | SEF PoC teknik me GitHub fiskalizimi | iCode dev | Faza 5 | 2026-08-15 | nuk fillon aplikimi formal; KABI live rrezikohet |
+| ATK-012 | Open — **P0/PRE-TIER2 Gate Schedule** | Step B code hardening: T2-01..T2-10 (Gate v2 §4) | iCode dev | Step B | **DATE TBD — Human Gate** (milestone blocker: PARA çdo preflight/Tier 2) | pa të s'ka thirrje reale; Tier 2 mbetet NO-GO |
+| ATK-013 | Open — P0 Gate Schedule | Paketa ligjore/aplikueshmëria (final-consumer/B2B/mixed/kohortat/Vendimi19/cash) | ATK/jurist/Pronari | para F5 freeze | **DATE TBD — Human Gate** (milestone: para KABI live) | klasifikimi i subjekteve/pagesave i pavendosur → risk ligjor live |
+| ACC-012 | Open — P0 Gate Schedule | Fatura/libra/retention/e-invoice/cash+TVSH umbrella (Ledger V01–V08, L02–L04/L08) | Kontabilisti/jurist | F2 | **DATE TBD — Human Gate** (milestone: para F2 freeze) | faturimi/librat jo-konform → bllokon Accounting Core |
+| PRIV-001 | Open — P0 Gate Schedule | Privacy governance 06/L-082 (P01–P10: ROPA/DPIA/DPO/breach/transfers) | Jurist/AIP + iCode | para certifikimit/go-live | **DATE TBD — Human Gate** (milestone: para go-live; Tier2-blocker vetëm nëse prek privatësinë e Tier 2) | go-live pa bazë ligjore përpunimi → risk AIP |
 | ATK-003 | Open | Aplikim/certifikim final SEF | iCode + ATK | KABI live / PLANET live | 2026-10-15 start | shtyrje e go-live fiskal; as KABI as PLANET nuk dalin live me faturim jo-konform |
 | ATK-004 | Open | Printer hardware vs SEF software + printer termik | iCode + ATK/vendor | Hardware procurement | 2026-08-15 | ndalo blerjen e printerëve/pajisjeve fiskale |
 | HW-001 | Open | Inventar pajisjesh ekzistuese | Klienti | Faza 4/5/7/8 | 2026-08-15 | buxhet/hardware test shtyhet; PoC me pajisje test |
@@ -680,8 +684,8 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 2. **Step B — PRE-Tier2 code hardening (`ATK-012`, P0):** mbyllja e **T2-01..T2-10** (Gate v2 §4).
 3. **Step C — official golden vectors + fake-HTTP/negative tests** (kundër C#/Go @ pins).
 4. **Independent re-review** i deltës + i të gjitha gates të Tier 2.
-5. **Private preflight** — VETËM pasi Step B/C kanë prodhuar **wrapper/harness të testuar evidence-safe** (sot NUK ekziston).
-6. **Human Gate i veçantë** → **Tier 2** (thirrja e parë reale e test-serverit).
+5. **HUMAN GATE** — autorizimi eksplicit i Pronarit **për thirrjen e PARË reale** (asnjë `/ca/*`, `/ca/signcsr`, `/pos/*`, `/citizen/*` para tij).
+6. **Private `/ca/verify` PREFLIGHT** (wrapper evidence-safe i ndërtuar në Step B/C — sot NUK ekziston) → **vetëm pas suksesit vazhdon pjesa tjetër e Tier 2**.
 7. **Certifikimi / go-live = NO-GO më vete** (blockers shtesë — Gate v2 §5).
 8. **Paralel:** PoC-4b ecën i pavarur kur vjen hardware-i.
 
