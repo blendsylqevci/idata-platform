@@ -1,7 +1,7 @@
-# ATK Source Register — grafi i burimeve zyrtare SEF (v2.3)
+# ATK Source Register — grafi i burimeve zyrtare SEF (v2.4)
 
-**Versioni:** 2.4 · **Cutoff i auditit:** 2026-07-12 · **Përditësuar:** 2026-07-12 (v2.3: source-affected map i rifreskuar pas re-review-t 1–123) · **Repo baseline:** `55126b1b48004e4fba4a5604c9717cd9456722d3` · **Pronari:** Group Owner (Human Gate)
-**Statusi:** canonical source register — **v2.3 effective on merge** (supersedes v1.0 si regjistër; v1.0 mbetet histori git-i).
+**Versioni:** 2.4 · **Cutoff i auditit:** 2026-07-12 · **Përditësuar:** 2026-07-13 (v2.4: affected map CORE-01 → L01–L41 + K07 CONTEXT — rreshtat atomikë të neneve 4/8/13/14(8)/15/23; sync me Ledger v1.6) · **Repo baseline:** `55126b1b48004e4fba4a5604c9717cd9456722d3` · **Pronari:** Group Owner (Human Gate)
+**Statusi:** canonical source register — **v2.4 effective on merge** (supersedes v1.0 si regjistër; v1.0 mbetet histori git-i).
 **Kufiri i pretendimit:** *"Bounded REGISTERED / current-known corpus"* (JO "full/exhaustive") — enumerimi/ngrirja e source set-it të dokumentuar me metodën publike të kërkimit, cutoff 2026-07-12 — **≠ complete compliance** dhe **≠ closed-world claim**. **Ky NUK quhet "graf i plotë/exhaustiv"**: çdo rresht pa locator të riprodhueshëm mban `NOT_RECORDED / REOPEN` eksplicit (v2.1 i mbylli locator-ët kryesorë; të mbeturit janë të shënuar per-rresht). Burimi i statusit të produktit = `ATK_SEF_Requirements_Ledger.md`.
 **Baza e këtij versioni:** *independent full-corpus audit, cutoff 2026-07-12* (evidence lokale read-only, jo e commit-uar) + riverifikim FRESH read-only në ditën e këtij PR-i (vetëm GET publik; asnjë thirrje `/ca/*`, `/pos/*`, `/citizen/*`).
 

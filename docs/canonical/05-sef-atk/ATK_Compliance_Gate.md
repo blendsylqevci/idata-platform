@@ -91,7 +91,7 @@ Crosswalk-u LAPT (Arts. 6.1–6.13, 43.3–43.5; sanksionet **100/101(1)/101(2)/
 
 ## 10. BASELINE HISTORIK (etiketë — JO status aktual)
 
-Auditimi 09.07.2026 (PR #17): **278 kërkesa të nxjerra** me granularitet extraction + **nota 7/10** + shpërndarja e atëhershme (ZBATUAR 33 / SPECIFIKUAR 17 / PJESËRISHT 97 / MUNGON 21 / N/A 72) = **HISTORICAL BASELINE me granularitet tjetër** — **NUK është certifikatë aktuale**. Statusi aktual = §1 + ledger-i 94-kontrollesh (pa krahasim mekanik 278↔94 — njësi të ndryshme matëse; shih shpjegimin në ledger).
+Auditimi 09.07.2026 (PR #17): **278 kërkesa të nxjerra** me granularitet extraction + **nota 7/10** + shpërndarja e atëhershme (ZBATUAR 33 / SPECIFIKUAR 17 / PJESËRISHT 97 / MUNGON 21 / N/A 72) = **HISTORICAL BASELINE me granularitet tjetër** — **NUK është certifikatë aktuale**. Statusi aktual = §1 + `ATK_SEF_Requirements_Ledger.md` **v1.6 (132 source-rows të numëruara + K07 CONTEXT jashtë numërimit)** — pa krahasim mekanik 278↔132 (njësi të ndryshme matëse; shih shpjegimin në ledger); **94 mbetet VETËM numëratori HISTORIK i v1.0**, jo status aktual.
 
 ## 11. Sekuenca e radhës (pa cikël)
 

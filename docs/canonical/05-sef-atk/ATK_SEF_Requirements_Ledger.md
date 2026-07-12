@@ -26,7 +26,7 @@
 
 **132 vs 133/117/108/102/94/278:** numrat rillogariten me çdo korrigjim semantik; asnjë numër s'ruhet për raporte të vjetra — asnjë prej numrave të vjetër nuk përshkruan statusin aktual.
 
-## Ledger — kontrollet (117)
+## Ledger — 132 source-rows të numëruara + K07 CONTEXT jashtë numërimit
 
 | ID | Source | Ref | Faqe | Control | Status | Actor/aplikueshmëria | Kategori | Afat/sanksion | Repo evidence | Confirmation | Closure key | Closure owner/gate |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
