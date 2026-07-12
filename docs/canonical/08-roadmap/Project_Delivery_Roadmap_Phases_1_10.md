@@ -45,9 +45,9 @@ Këto janë datat më të vona të pranueshme që ruajnë shansin real për cuto
 | ENG-001 | Open | Boundary NestJS service/repository; controller-i nuk duhet të mbetet varësi direkte për Accounting Core | Tech + Codex | Faza 2 | 2026-07-24 | accounting endpoints mbeten thin/prototype; nuk ngrihet API contract final |
 | ENG-002 | Open | Custom migration runner vs tool standard për migrime production-grade | Tech + Codex | Faza 2 / Faza 9 | 2026-07-24 | custom runner lejohet vetëm për skeleton/PoC; jo për prod migration freeze |
 | ENG-003 | Closed (PR #10, 07.07) | Composite FK cross-tenant, p.sh. `role_permission (business_id, role_id) REFERENCES role (business_id, id)` | Tech | PoC-1 / Faza 1 | 2026-07-18 | PoC-1 nuk kalon PASS; tenant isolation mbetet e paprovuar në DB |
-| ENG-004 | Open | `audit_log` group-level events vs `business_id NOT NULL` skeleton | Blend + Tech | Faza 1 audit model | 2026-07-20 | vazhdohet vetëm me business-scoped audit; group-level events shtyhen si model i veçantë |
-| SEC-DEP | Active / recurring | Dependabot governance: no auto-merge, CI/gitleaks/review, weekly Security tab + `pnpm.overrides` review | Blend + Tech | Security process | Weekly | security alerts nuk mbyllen si “done” pa review; override i vjetër hiqet kur upstream e mbulon |
-| ADR-010 | Open | Hosted vs self-host EU për cloud DB/services | Blend + Tech | Faza 1/PoC infra | 2026-07-15 | përdor Postgres lokal/neutral deri në vendim; s'kyçet cloud vendor në kod |
+| ENG-004 | Open | `audit_log` group-level events vs `business_id NOT NULL` skeleton | Pronari + Tech | Faza 1 audit model | 2026-07-20 | vazhdohet vetëm me business-scoped audit; group-level events shtyhen si model i veçantë |
+| SEC-DEP | Active / recurring | Dependabot governance: no auto-merge, CI/gitleaks/review, weekly Security tab + `pnpm.overrides` review | Pronari + Tech | Security process | Weekly | security alerts nuk mbyllen si “done” pa review; override i vjetër hiqet kur upstream e mbulon |
+| ADR-010 | Open | Hosted vs self-host EU për cloud DB/services | Pronari + Tech | Faza 1/PoC infra | 2026-07-15 | përdor Postgres lokal/neutral deri në vendim; s'kyçet cloud vendor në kod |
 | ADR-011 | Open | Sync engine: PowerSync vs custom sync | Tech + PM | PoC-3, offline, mobile/hub | 2026-07-31 | PoC-3 bëhet me adapter abstraction; nuk kyçet vendor deri në vendim |
 | ADR-014 | Open | Connection pooling strategy | Tech | Faza 1/2 load path | 2026-07-20 | vazhdo me dev pool vetëm për PoC; mos bëj load commitments |
 | ADR-012 | Open | GL posting: DB functions vs NestJS transaction/hybrid | Codex + Tech | PoC-2, Accounting Core | 2026-07-24 | PoC-2 teston të dy variantet minimalisht; pa Accounting Core freeze |
@@ -58,7 +58,7 @@ Këto janë datat më të vona të pranueshme që ruajnë shansin real për cuto
 | ACC-006 | Partially answered | TVSH flat-rate 8% baza ligjore u konfirmua; mbetet posting/libër blerje/autofaturë sign-off | Kontabilisti | Faza 2/4/5 KABI | 2026-07-24 | KABI settlement mbetet draft pa GL/TVSH final |
 | ACC-007 | Sent/Open | COGS valuation/yield/batch costing | Kontabilisti + KABI | Faza 3 | 2026-08-05 | Phase 3 nis me model configurable; COGS production freeze shtyhet |
 | ACC-008 | Sent/Open | Kthime/write-off/note krediti/periudha | Kontabilisti | Faza 2/3/5/8 | 2026-08-05 | lejohet vetëm reversal conservative + approval, jo automation final |
-| Payroll gate | Open | Payroll engine i plotë vs master-data + kontribute | Blend + kontabilisti | Faza 1 | 2026-07-20 | në Faza 1 ndërtohet vetëm master-data + kontribute minimale |
+| Payroll gate | Open | Payroll engine i plotë vs master-data + kontribute | Pronari + kontabilisti | Faza 1 | 2026-07-20 | në Faza 1 ndërtohet vetëm master-data + kontribute minimale |
 | ATK-002 | **REOPENED (12.07)** — local regression evidence only (66 PASS/1 LIVE SKIP); **Tier 1 overall PARTIAL/REOPENED; compliance FAIL; Tier 2 NO-GO** (Gate v2 + ATK-012) | SEF PoC teknik me GitHub fiskalizimi | iCode dev | Faza 5 | 2026-08-15 | nuk fillon aplikimi formal; KABI live rrezikohet |
 | ATK-012 | Open — **P0/PRE-TIER2 Gate Schedule** | Step B code hardening: T2-01..T2-10 (Gate v2 §4) | iCode dev | Step B | **DATE TBD — Human Gate** (milestone blocker: PARA çdo preflight/Tier 2) | pa të s'ka thirrje reale; Tier 2 mbetet NO-GO |
 | ATK-013 | Open — P0 Gate Schedule | Paketa ligjore/aplikueshmëria (final-consumer/B2B/mixed/kohortat/Vendimi19/cash) | ATK/jurist/Pronari | para F5 freeze | **DATE TBD — Human Gate** (milestone: para KABI live) | klasifikimi i subjekteve/pagesave i pavendosur → risk ligjor live |
@@ -678,7 +678,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 ## 6. Rendi aktual i punës (përditësuar 12.07.2026 — pa cikël)
 
-*(**Full-corpus re-audit + harta LAPT = KRYER** me këtë ndryshim — `ATK_Source_Register.md` v2.3 + `ATK_SEF_Requirements_Ledger.md` v1.3 + Gate v2.0; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate).)*
+*(**Full-corpus re-audit + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim — `ATK_Source_Register.md` v2.3 + `ATK_SEF_Requirements_Ledger.md` v1.4 + Gate v2.0; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate).)*
 
 1. **Step A — ky docs correction PR** (kanonizimi i verdiktit + kontratave).
 2. **Step B — PRE-Tier2 code hardening (`ATK-012`, P0):** mbyllja e **T2-01..T2-10** (Gate v2 §4).

@@ -83,7 +83,7 @@
 - Dështimi → status + alert; **fiscal outbox i izoluar nga sync-u i përgjithshëm** (izolimi i provuar deri sot vetëm në mock lokal).
 **FAIL:** "FAILED VERIFICATION", kupon pa `transaction_id` pa alarm, ose outbox i bllokuar.
 **Evidenca:** përgjigjet e test serverit (`transaction_id`) + QR + screenshot statusesh + log alarmi.
-**Pronari:** Claude Code + Blend (ATK). **SSOT:** §7. **Ref:** `06_SEF_Test_Phase_Active.md`.
+**Pronari:** Claude Code + Pronari (ATK). **SSOT:** §7. **Ref:** `06_SEF_Test_Phase_Active.md`.
 
 ---
 

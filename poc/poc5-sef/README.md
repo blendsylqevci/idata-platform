@@ -41,7 +41,7 @@ pnpm --filter @idata/database test   # Tier 1; Tier 2 = SKIPPED me log të qart�
 > **Trupi aktual i testit LIVE = PLACEHOLDER që gjithmonë hedh** (T2-04). Checklist-a NIS me mbylljen e **T2-01..T2-10** (Gate v2 §4 / tracker `ATK-012`) — para tyre asnjë hap live s'ekziston realisht:
 
 - [ ] **Step B:** T2-01 money ×100 · T2-02 QR CitizenCoupon · T2-03 NUIKF gen/valid/unik · T2-04 harness real test-host-only · T2-05 CA onboarding 1 POS + key custody · T2-06 transport hardening · T2-07 P1363/DER explicit + vectors · T2-08 48h nga outage · T2-09 heq business context sintetik · T2-10 zero sensitive në evidence.
-- [ ] **Step C:** golden vectors zyrtarë + fake-HTTP/negative tests; **pastaj** independent review + private preflight (wrapper-i evidence-safe ndërtohet në Step B/C — **sot NUK ekziston**) + Human Gate i veçantë.
+- [ ] **Step C:** golden vectors zyrtarë + fake-HTTP/negative tests; **pastaj rendi i pandryshueshëm:** independent review → **HUMAN GATE (autorizimi i Pronarit për thirrjen e parë reale)** → private `/ca/verify` preflight (wrapper-i evidence-safe ndërtohet në Step B/C — **sot NUK ekziston**) → pjesa tjetër e Tier 2.
 - [ ] Pronari: `.env.sef.local` (nga `.env.sef.example`) + `.sef-local/` — **jashtë chat-it**; konfirmim "done".
 - [ ] Env opt-in: `RUN_SEF_LIVE=1` + `SEF_ENV=test` (URL = vetëm test-serveri; CI gjithmonë skip).
 - [ ] Onboarding PKI: `/ca/verify/{nui}` → CSR (P-256, çelësi në `.sef-local/`) → `/ca/signcsr`.
@@ -59,5 +59,5 @@ pnpm --filter @idata/database test   # Tier 1; Tier 2 = SKIPPED me log të qart�
 - Integrimi i plotë POS + certifikimi i prodhimit = jashtë PoC (kjo është provë teknike e rrugës).
 
 **Inpute për F1 (dizajni real — jo ky PoC):**
-- **`created_at` immutability**: trigger-i rillogarit `deadline_at` nga `created_at`, por vetë `created_at` mbetet i ndryshueshëm — në F1 outbox-i fiskal merr modelin canonical: **payload/identitet/`created_at`/`deadline_at` immutable; DELETE i ndaluar; status transitions vetëm përmes funksionit të kontrolluar; attempt/status-event logs append-only** — që afati të mos zhvendoset dot as përmes `created_at`.
+- **`created_at` immutability**: trigger-i rillogarit `deadline_at` nga `created_at`, por vetë `created_at` mbetet i ndryshueshëm — në F1 outbox-i fiskal merr modelin canonical: **payload/identitet/`created_at`/`deadline_at` immutable; DELETE i ndaluar; status transitions vetëm përmes funksionit të kontrolluar; attempt/status-event logs append-only** — që afati të mos zhvendoset dot as përmes `created_at`; **origjina e afatit 48h në modelin F1 = `outage_started_at`/eventi i ndërprerjes (T2-08), me `created_at` vetëm si fushë auditi**.
 - **Guard dy-drejtimësh i shkallëve**: sot kufiri validon hyrjet (dp-max per shkallë); në F1 shtohet mbrojtje edhe në nivel tipi/lexim (brand types për ×10000 vs cents, konvertime të kryqëzuara të bllokuara në compile-time), që një int i shkallës së gabuar të mos futet dot askund në PosCoupon.

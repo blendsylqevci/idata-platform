@@ -238,6 +238,6 @@ Këto duhet të mbyllen në tracker/ADR/SSOT para fazës ku bllokojnë.
 
 1. Review nga Fable/Claude.
 2. Review kundërshtues nga Codex.
-3. Aprovim nga Blend.
+3. Aprovim nga Pronari.
 4. PR docs në repo.
 5. Përditësim Notion + Slack.

@@ -26,7 +26,7 @@
 
 ## Të hapura (Open — vendosen në Faza 0)
 ### ADR-010 · Supabase: hosted vs self-host EU
-**Konteksti:** kërkohet rezidencë EU (06/L-082) + on-prem hub. **Opsione:** (a) Supabase managed EU; (b) self-host EU (Postgres + GoTrue/Storage). **Rekomandim paraprak:** managed EU për shpejtësi, me plan exit→self-host. **Pronari:** Blend+Claude Code. **Afati:** Faza 0.
+**Konteksti:** kërkohet rezidencë EU (06/L-082) + on-prem hub. **Opsione:** (a) Supabase managed EU; (b) self-host EU (Postgres + GoTrue/Storage). **Rekomandim paraprak:** managed EU për shpejtësi, me plan exit→self-host. **Pronari:** Pronari+Claude Code. **Afati:** Faza 0.
 
 ### ADR-011 · Sync: PowerSync vs custom
 **Konteksti:** offline-first, 60–80 konkurrentë, hub lokal. **Opsione:** PowerSync (gati) vs custom outbox+CDC. **Rekomandim:** vendoset **pas PoC-3**. **Pronari:** Claude Code. **Afati:** pas PoC-3.
@@ -48,10 +48,10 @@ Sistem financiar — recovery i provuar (PITR, RPO/RTO, **restore drill** real) 
 **Opsione:** EAS (managed) vs bare workflow. **Konsiderata:** printer BT, native modules, App Store/Play Store. **Rekomandim:** EAS fillimisht, bare nëse duhen module native të thella. **Afati:** Faza 0.
 
 ### ADR-017 · Printera fiskalë: hardware vs SEF software
-**Konteksti:** Codex listoi drajverë fiskalë (Tremol/Datecs); me SEF software-fiskalizim mund të mjaftojë printer termik + nënshkrim software. **Veprim:** **konfirmo gjatë test phase AKTIVE (kanali SEF u hap), PARA blerjes së pajisjeve.** **Pronari:** Blend→ATK. **Afati:** test phase. (= SSOT pyetja #8)
+**Konteksti:** Codex listoi drajverë fiskalë (Tremol/Datecs); me SEF software-fiskalizim mund të mjaftojë printer termik + nënshkrim software. **Veprim:** **konfirmo gjatë test phase AKTIVE (kanali SEF u hap), PARA blerjes së pajisjeve.** **Pronari:** Pronari→ATK. **Afati:** test phase. (= SSOT pyetja #8)
 
 ### ADR-018 · Emri neutral i repo-s + tooling monorepo
-**Opsione:** emër neutral (jo KABI/PLANET) p.sh. `idata-platform`; tooling pnpm + Turborepo/Nx. **Rekomandim:** `idata-platform` (privat) + pnpm workspaces + Turborepo. **Pronari:** Blend (krijim). **Afati:** Faza 0, dita 1.
+**Opsione:** emër neutral (jo KABI/PLANET) p.sh. `idata-platform`; tooling pnpm + Turborepo/Nx. **Rekomandim:** `idata-platform` (privat) + pnpm workspaces + Turborepo. **Pronari:** Pronari (krijim). **Afati:** Faza 0, dita 1.
 
 ---
 ## Përmbledhje statusi

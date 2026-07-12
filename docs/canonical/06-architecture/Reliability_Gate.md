@@ -86,7 +86,7 @@ Përveç matricës 8-skenarëshe, moduli i fiscal outbox-it (SEF) ka këto krite
 2. **`fiscal_attempt_log`** (per TENTIM dërgimi: kush/kur/rezultat/gabim i pastruar) + **`fiscal_status_event`** (per TRANZICION statusi) — të dyja **append-only**; historia e plotë rindërtohet nga logjet, jo nga rreshti agregat. (F1–F5)
 3. **`technical_event` — regjistri i ndërprerjeve (KT N25.15):** fillimi/fundi i ndërprerjes, shkaku, kohëzgjatja, kuponët e prekur; ushqen raportimin ditor. (F1–F5)
 
-- VETËM me **vendim të shkruar të Blendit**, me:
+- VETËM me **vendim të shkruar të Pronarit**, me:
   - **riskun** e shënuar eksplicit;
   - **afatin** e mbylljes së gap-it;
   - **logim** në SSOT (Decisions log) dhe/ose Outstanding Confirmations Tracker.
@@ -109,7 +109,7 @@ Kur një numër provohet me test të riprodhueshëm, promovohet në SSOT/ADR si 
 
 ## Historia
 
-- v1.0 (2026-07-07) — krijuar me aprovimin e Blendit; formalizon rregullin e qëndrueshmërisë: çdo modul kritik kërkon failure matrix (8 skenarë standardë) + teste + evidencë para se të quhet gati; waiver vetëm me vendim të shkruar të pronarit.
+- v1.0 (2026-07-07) — krijuar me aprovimin e Pronarit; formalizon rregullin e qëndrueshmërisë: çdo modul kritik kërkon failure matrix (8 skenarë standardë) + teste + evidencë para se të quhet gati; waiver vetëm me vendim të shkruar të pronarit.
 - v1.1 (2026-07-08) — shtuar §5.1 "Aplikueshmëria e skenarëve": N/A vetëm me justifikim të shkruar (cili modul/shtresë e mbulon) + pranim eksplicit në review PM #7. *Pse:* precedenti nga PoC-2, ku #1-4/#8 u shënuan N/A me justifikim — rregulli e bën këtë të detyrueshëm, jo opsional.
-- v1.2 (2026-07-09) — shtuar §5.2 kritere specifike për fiscal outbox (payload/identitet/timestamps immutable + controlled status transitions + append-only attempt/status-event logs — KT N25.5.1a · technical_event KT N25.15), nga auditimi ATK/SEF nen-për-nen (PR "ATK compliance hardening", me aprovimin e Blendit).
+- v1.2 (2026-07-09) — shtuar §5.2 kritere specifike për fiscal outbox (payload/identitet/timestamps immutable + controlled status transitions + append-only attempt/status-event logs — KT N25.5.1a · technical_event KT N25.15), nga auditimi ATK/SEF nen-për-nen (PR "ATK compliance hardening", me aprovimin e Pronarit).
 - v1.3 (2026-07-12) — korrigjim post-audit: origjina e afatit 48h = outage start (jo `created_at` per kupon); modeli outage-event/scheduler/lease/poison/timeout/uint64/recovery = PROPOSED targets / ADR inputs (PR "full-corpus canonical correction", me aprovimin e Pronarit).

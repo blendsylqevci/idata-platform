@@ -1,6 +1,6 @@
 # ATK / SEF - Faturimi offline dhe kerkesa per KABI
 
-Status: **Supporting synthesis (historik, 24.06.2026)** — burimet/statuset AKTUALE = `ATK_Source_Register.md` v2.0 + `ATK_SEF_Requirements_Ledger.md` + `ATK_Compliance_Gate.md` v2.0. **Korrigjim konteksti (12.07.2026):** rendi normal = **ONLINE-first** (transmeto→prano→shtyp); offline = **vetëm përjashtimi i Nenit 44**; afati 48h **nis nga momenti i ndërprerjes** (siç e thotë saktë §Neni 44 më poshtë).
+Status: **Supporting synthesis (historik, 24.06.2026)** — burimet/statuset AKTUALE = `ATK_Source_Register.md` v2.3 + `ATK_SEF_Requirements_Ledger.md` v1.4 + `ATK_Compliance_Gate.md` v2.0. **Korrigjim konteksti (12.07.2026):** rendi normal = **ONLINE-first** (transmeto→prano→shtyp); offline = **vetëm përjashtimi i Nenit 44**; afati 48h **nis nga momenti i ndërprerjes** (siç e thotë saktë §Neni 44 më poshtë).
 Data: 2026-06-24
 Burime:
 

@@ -7,7 +7,7 @@
 > PoC-2 **nuk certifikon SEF** dhe **nuk pretendon përputhje 100% me formatet zyrtare Excel të ATK-së**. Prodhon strukturën e brendshme të librave (**header→buckets**) dhe mapping-un e box-eve me **data sintetike**.
 > - Përputhja finale me template-t zyrtare Excel të ATK-së mbyllet në **"ATK VAT Excel Export Compliance Pack"** — deliverable i **Fazës 2**, i validuar me kontabilistin (lidhet me ACC-011).
 > - Gjithçka SEF (ApplicationId, ECDSA, protobuf, kupona, money-scaling ×10000/cents, test-server ATK) = **PoC-5 dhe VETËM PoC-5**.
-> - Parity kundër vlerave reale PRO DATA (ACC-010) **s'bëhet këtu** — vetëm private-local dhe vetëm me kërkesë të veçantë të Blendit; parity i plotë = Faza 2.
+> - Parity kundër vlerave reale PRO DATA (ACC-010) **s'bëhet këtu** — vetëm private-local dhe vetëm me kërkesë të veçantë të Pronarit; parity i plotë = Faza 2.
 
 ## Si riprodhohet
 
