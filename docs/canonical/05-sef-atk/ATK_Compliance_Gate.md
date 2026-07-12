@@ -1,7 +1,7 @@
 # ATK Compliance Gate — verdikti + gates (v2.0, post full-corpus re-audit)
 
 **Versioni:** 2.0 · **Cutoff i auditit:** 2026-07-12 · **Repo baseline:** `55126b1b48004e4fba4a5604c9717cd9456722d3` · **Pronari:** Group Owner (Human Gate) · **Statusi:** canonical — effective on merge
-**Burimet:** `ATK_Source_Register.md` v2.1 (grafi CORE/EXT/LIN/CONF) · **burimi EXHAUSTIV i statusit = `ATK_SEF_Requirements_Ledger.md` v1.1 (102 source-rows · 37 closure keys)** — ky Gate mban verdiktin, kontratat e korrigjuara dhe gates; NUK dyfishon statuset per-kontroll.
+**Burimet:** `ATK_Source_Register.md` v2.2 (bounded registered corpus) · **burimi i statusit = `ATK_SEF_Requirements_Ledger.md` v1.2 (108 source-rows · 40 closure keys · disposition LAPT 1–123)** — ky Gate mban verdiktin, kontratat e korrigjuara dhe gates; NUK dyfishon statuset per-kontroll.
 **Gate-t:** **[T2]** = bllokues PARA Tier 2 (thirrjes së parë reale të test-serverit) · **[C]** = bllokues certifikimi · **[G]** = bllokues go-live · **[H]** = hardening.
 
 ---
@@ -16,15 +16,16 @@
 - **Certification / go-live: NO-GO.**
 - **PoC-5 (PR #16) = evidence historike e mock mechanics — JO compliance PASS.**
 
-**Shpërndarja aktuale (ledger v1.1 — 102 source-rows):** MISSING 57 · PARTIAL 17 · EXTERNAL_GATE 16 · **CONTRADICTS 4 (= 3 defekte unike: money/QR/NUIKF)** · PROVEN_LOCAL 2 · N/A_LINEAGE 6; **36 kërkojnë konfirmim** ATK/kontabilist/jurist/AIP; **37 unique closure keys** (kolona `Closure key`).
+**Shpërndarja aktuale (ledger v1.2 — 108 source-rows):** MISSING 60 · PARTIAL 18 · EXTERNAL_GATE 17 · **CONTRADICTS 5 (= 4 defekte unike: money/QR/NUIKF/origjina-48h)** · PROVEN_LOCAL 2 · N/A_LINEAGE 6; **38 konfirmime**; **40 unique closure keys**; **T2-01..T2-10 të gjithë me rreshta realë** (U27→T2-08; G06→T2-04; G07→T2-09; G08→T2-10).
 
-## 2. `CONTRADICTS`: **4 source-rows = 3 DEFEKTE UNIKE** (+ LIVE placeholder = MISSING/`T2-04`, JO CONTRADICTS)
+## 2. `CONTRADICTS`: **5 source-rows = 4 DEFEKTE UNIKE** (+ LIVE placeholder = MISSING/`T2-04`, JO CONTRADICTS)
 
 | # | Ledger | Kontrata zyrtare | Evidence aktual në repo | Verdikt |
 |---|---|---|---|---|
 | 1 | **T05** | KT 25.4 + builders C#/Go: **unit Price ×10000; item Total ×100 (cents)** | `poc5-money.ts` / `poc5-proto.ts` / `poc5-sef.test.ts` enkodojnë/assert-ojnë **item Total ×10000** | **100× gabim** → `T2-01` |
 | 2 | **G04** (+U20) | QR = **base64(`CitizenCoupon` protobuf) \| base64(firma e TIJ)** | testi firmos **`PosCoupon`** për QR; CitizenCoupon vetëm round-trip | **objekt i gabuar** → `T2-02` |
 | 3 | **T18** (+U20) | **NUIKF**: alfanumerik, **pa separatorë**, **max 16**, unik, automatik | fixture me **viza / 17 karaktere**; zero validator/generator/uniqueness runtime | **invalid** → `T2-03` |
+| 4 | **U27** | UA 44: **afati 48h NIS nga momenti i ndërprerjes** (mbështetje: forma EDI e blloqeve kërkon "Data e fillimit të ndërprerjes" — CORE-08 f.8) | trigger-i `0006` llogarit `created_at + 48h` per kupon | **origjinë e gabuar** → `T2-08` |
 | — | **G06 (MISSING — jo CONTRADICTS)** | Tier 2 = CA onboarding + rrugë reale test-serveri | testi LIVE = **placeholder i skip-uar që gjithmonë hedh** | **NOT IMPLEMENTED** → `T2-04` |
 
 ## 3. KONTRATAT TEKNIKE TË KORRIGJUARA (e vërteta canonical)
@@ -86,7 +87,7 @@ Monorepo mbetet NJË; fiscal-core i izoluar; **fokusi i prezantimit para Komisio
 
 ## 9. `ATK-011` — mbyllet me merge SI MAPPING DELIVERABLE
 
-Crosswalk-u LAPT (Arts. 6.1–6.13, 43.3–43.5; sanksionet **100/101(1)/101(2)/101(9)/102.3/106**; Art.6.11–12 ↔ Vendimi 19/2026 me caveat-in **akti i nënshkruar s'u gjet publikisht**; UA 49(2) scope; KO159/24 dispozitivi) = **i përfunduar në `ATK_SEF_Requirements_Ledger.md` v1.1** (L01–L14 + K01–K04) — **kushti mekanik i "closes on merge" i provuar me skript lokal: çdo L-row ka Ref + Faqe reale (nga PDF-i primar) + Afat/sanksion ku ekziston**. **Mbyllja = VETËM mapping** — implementimi (L-rows PARTIAL/MISSING) dhe aplikueshmëria ligjore (gates) mbeten të hapura. **Step B (code hardening) dhe Step C (golden vectors/tests) mbeten blockers** të sekuencës.
+Crosswalk-u LAPT (Arts. 6.1–6.13, 43.3–43.5; sanksionet **100/101(1)/101(2)/101(9)/102.3/106**; Art.6.11–12 ↔ Vendimi 19/2026 me caveat-in **akti i nënshkruar s'u gjet publikisht**; UA 49(2) scope; KO159/24 dispozitivi) = **i përfunduar në `ATK_SEF_Requirements_Ledger.md` v1.2** (L01–L17 + K01–K04 + **DISPOSITION nen-për-nen 1–123 i PDF-së primare** — IN_SCOPE/SANCTION_CONTEXT/LINEAGE/N-A me arsye per nen; skript lokal: Ref + Faqe reale + Afat/sanksion per L-row; **pa etiketë "exhaustiv" për akte të tjera**). **Mbyllja = VETËM mapping** — implementimi (L-rows PARTIAL/MISSING) dhe aplikueshmëria ligjore (gates) mbeten të hapura. **Step B (code hardening) dhe Step C (golden vectors/tests) mbeten blockers** të sekuencës.
 
 ## 10. BASELINE HISTORIK (etiketë — JO status aktual)
 
@@ -98,7 +99,7 @@ Auditimi 09.07.2026 (PR #17): **278 kërkesa të nxjerra** me granularitet extra
 
 ## Lidhjet
 
-`ATK_Source_Register.md` v2.0 · `ATK_SEF_Requirements_Ledger.md` v1.0 · `Kupon_Print_Spec.md` v1.1 · `Reliability_Gate.md` §5.2 · `PM_REVIEW_PROTOCOL.md` v1.5 · `poc/poc5-sef/ANALIZA.md` (korrigjimi post-audit) · Tracker (`ATK-002` REOPENED, `ATK-005`, `ATK-010`, `ATK-011` closes-on-merge, `ATK-012`, `ATK-013`, `ACC-012`, `PRIV-001`).
+`ATK_Source_Register.md` v2.2 · `ATK_SEF_Requirements_Ledger.md` v1.2 · `Kupon_Print_Spec.md` v1.1 · `Reliability_Gate.md` §5.2 · `PM_REVIEW_PROTOCOL.md` v1.5 · `poc/poc5-sef/ANALIZA.md` (korrigjimi post-audit) · Tracker (`ATK-002` REOPENED, `ATK-005`, `ATK-010`, `ATK-011` closes-on-merge, `ATK-012`, `ATK-013`, `ACC-012`, `PRIV-001`).
 
 ---
-*Historia: v1.0 (2026-07-09, PR #17) — regjistri 278-kërkesësh KT+UA, 8 CRITICAL, nota 7/10. · v1.1 (2026-07-10, PR #18) — amendamenti 22.06, §2e Kushtet, kufiri i certifikimit. · v2.0 (2026-07-12, ky PR) — **full-corpus re-audit i kanonizuar**: verdikti ekzekutiv (Tier 1 PARTIAL/REOPENED, compliance FAIL, Tier 2 NOT IMPLEMENTED/NO-GO, certifikimi NO-GO), 4 CONTRADICTS, kontratat e korrigjuara (money ×100, CitizenCoupon QR, NUIKF, 48h nga outage, P1363/DER OPEN, PKI per-POS), T2-01..T2-10, rerating i overclaims, statusi exhaustiv → Ledger 94; 278/7-10 = baseline historik. Me aprovimin e Pronarit (PR review = aprovimi).*
+*Historia: v1.0 (2026-07-09, PR #17) — regjistri 278-kërkesësh KT+UA, 8 CRITICAL, nota 7/10. · v1.1 (2026-07-10, PR #18) — amendamenti 22.06, §2e Kushtet, kufiri i certifikimit. · v2.0 (2026-07-12, ky PR) — **full-corpus re-audit i kanonizuar**: verdikti ekzekutiv (Tier 1 PARTIAL/REOPENED, compliance FAIL, Tier 2 NOT IMPLEMENTED/NO-GO, certifikimi NO-GO), 4 CONTRADICTS, kontratat e korrigjuara (money ×100, CitizenCoupon QR, NUIKF, 48h nga outage, P1363/DER OPEN, PKI per-POS), T2-01..T2-10, rerating i overclaims, statusi → Ledger (94 në v1.0 — numërator historik); 278/7-10 = baseline historik. · hardening 12.07 (po ky PR): §2 = **5 rreshta / 4 defekte unike** (U27 = origjina 48h); counts → **Ledger v1.2 (108/38/40)**; ATK-011 = disposition 1–123; **rendi: … → Human Gate → private `/ca/verify` preflight → Tier 2**. Me aprovimin e Pronarit (PR review = aprovimi).*

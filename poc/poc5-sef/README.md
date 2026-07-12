@@ -42,10 +42,10 @@ pnpm --filter @idata/database test   # Tier 1; Tier 2 = SKIPPED me log të qart�
 
 - [ ] **Step B:** T2-01 money ×100 · T2-02 QR CitizenCoupon · T2-03 NUIKF gen/valid/unik · T2-04 harness real test-host-only · T2-05 CA onboarding 1 POS + key custody · T2-06 transport hardening · T2-07 P1363/DER explicit + vectors · T2-08 48h nga outage · T2-09 heq business context sintetik · T2-10 zero sensitive në evidence.
 - [ ] **Step C:** golden vectors zyrtarë + fake-HTTP/negative tests; **pastaj** independent review + private preflight (wrapper-i evidence-safe ndërtohet në Step B/C — **sot NUK ekziston**) + Human Gate i veçantë.
-- [ ] Blendi: `.env.sef.local` (nga `.env.sef.example`) + `.sef-local/` — **jashtë chat-it**; konfirmim "done".
+- [ ] Pronari: `.env.sef.local` (nga `.env.sef.example`) + `.sef-local/` — **jashtë chat-it**; konfirmim "done".
 - [ ] Env opt-in: `RUN_SEF_LIVE=1` + `SEF_ENV=test` (URL = vetëm test-serveri; CI gjithmonë skip).
 - [ ] Onboarding PKI: `/ca/verify/{nui}` → CSR (P-256, çelësi në `.sef-local/`) → `/ca/signcsr`.
-- [ ] PosCoupon → `transaction_id` real (**pa FAILED VERIFICATION**; nëse po → playbook-u i debug-ut më lart: #1 P1363↔DER, #2 çfarë-nënshkruhet).
+- [ ] PosCoupon → `transaction_id` real (**pa FAILED VERIFICATION**; nëse po → provo P1363↔DER — konflikti i vetëm real C#↔Go; **axis-i "çfarë-nënshkruhet" HIQET** — të dy shembujt firmosin SHA256(UTF8(base64proto))).
 - [ ] RETURN/CANCEL me ReferenceNo → pranohen; **pa** → refuzim i pritur (dokumento mesazhin).
 - [ ] Dublim i dërgimit (i njëjti kupon ×2) → **dokumento sjelljen REALE** (zëvendëson supozimin e mock-ut te #5).
 - [ ] Crash-pas-send-para-ACK real (modeli #5b) → dokumento resend-in.

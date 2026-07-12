@@ -51,7 +51,7 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/05-sef-atk/ATK_SEF_Offline_Faturimi_Findings.md`
 - `docs/canonical/05-sef-atk/ATK_Compliance_Gate.md`
 - `docs/canonical/05-sef-atk/ATK_Source_Register.md` — v2.0 source graph (CORE/EXT/LIN/CONF)
-- `docs/canonical/05-sef-atk/ATK_SEF_Requirements_Ledger.md` — v1.1: 102 source-rows · 37 closure keys (burimi i statusit)
+- `docs/canonical/05-sef-atk/ATK_SEF_Requirements_Ledger.md` — v1.2: 108 source-rows · 40 closure keys · disposition LAPT 1–123 (burimi i statusit)
 - `docs/canonical/05-sef-atk/Kupon_Print_Spec.md`
 - `docs/canonical/06-architecture/Reliability_Gate.md`
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`

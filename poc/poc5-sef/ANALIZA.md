@@ -4,7 +4,7 @@
 
 > ## ⚠️ KORRIGJIM POST-AUDIT (full-corpus re-audit, cutoff 2026-07-12) — VERDIKTI AKTUAL
 > **Tier 1 overall = PARTIAL / REOPENED · Tier 1 compliance = FAIL · Tier 2 = NOT IMPLEMENTED / NO-GO · Certifikimi = NO-GO.** Auditimi i pavarur gjeti **4 CONTRADICTS** kundër burimeve zyrtare (money `CouponItem.Total` ×100 jo ×10000; QR duhet të firmosë **CitizenCoupon** jo PosCoupon; NUIKF fixture invalid; LIVE = placeholder) — disa pretendime të këtij dokumenti më poshtë janë **SUPERSEDED** dhe shënohen inline. Burimi aktual i së vërtetës: `docs/canonical/05-sef-atk/ATK_Compliance_Gate.md` v2.0 (§3 kontratat) + `ATK_SEF_Requirements_Ledger.md` (94 kontrolle) + `ATK_Source_Register.md` v2.0. **Ky dokument NUK thotë më se `pos-csharp` është i vetmi kanonik dhe NUK pretendon "asnjë kontradiktë"** — org-u zyrtar ka konflikte të regjistruara (CONF-01..04).
-**Rregulli i sekreteve:** ky dokument përmban **ZERO identifikues** (App ID / Fiscalization No / POS ID / NUI / çelësa / QR reale). Vlerat hyjnë vetëm përmes env-it që e mbush Blendi me dorë (`.env.sef.local`, gitignored); agjenti s'i lexon kurrë.
+**Rregulli i sekreteve:** ky dokument përmban **ZERO identifikues** (App ID / Fiscalization No / POS ID / NUI / çelësa / QR reale). Vlerat hyjnë vetëm përmes env-it që e mbush Pronari me dorë (`.env.sef.local`, gitignored); agjenti s'i lexon kurrë.
 
 ---
 
@@ -123,7 +123,7 @@ Migrimi **0006** vetëm `poc5_`: `poc5_fiscal_outbox` (business_id NOT NULL; `co
 
 **HAPI I RI I PLAYBOOK-ut — PREFLIGHT:** para ÇDO dërgimi kuponi real, ekzekuto **VETËM `POST /ca/verify/{nui}`** me env-in real — konfirmon lidhjen, identifikuesit dhe statusin e regjistrimit **pa prodhuar asnjë kupon**. Vetëm pas PREFLIGHT OK vazhdohet me CSR/signcsr dhe `/pos/coupon`.
 
-**PRIVATËSIA E PREFLIGHT-it (kërkesë DIZAJNI — wrapper-i = NOT IMPLEMENTED sot; ndërtohet në Step B/C; ky paragraf NUK është udhëzim ekzekutimi):** ekzekutohet përmes një **wrapper-i lokal** që e lexon `.env.sef.local` **pa echo** (asnjë `cat`/`printenv`/interpolim në komandë). **Asnjë NUI/ID/URL e plotë** nuk shfaqet në output komande, shell history, PR, CI apo evidencë — output-i i lejuar është vetëm **`SET`/`MISSING` per variabël + vlera të maskuara** (p.sh. 2 karakteret e para + "…"). Përgjigja raw e serverit → **vetëm** `evidence-private-local/`/`.sef-local/`. **Tier 2 mbetet i NDALUAR** deri në aprovimin e veçantë të Blendit — PREFLIGHT-i vetë bën pjesë në Tier 2 dhe s'ekzekutohet para atij aprovimi.
+**PRIVATËSIA E PREFLIGHT-it (kërkesë DIZAJNI — wrapper-i = NOT IMPLEMENTED sot; ndërtohet në Step B/C; ky paragraf NUK është udhëzim ekzekutimi):** ekzekutohet përmes një **wrapper-i lokal** që e lexon `.env.sef.local` **pa echo** (asnjë `cat`/`printenv`/interpolim në komandë). **Asnjë NUI/ID/URL e plotë** nuk shfaqet në output komande, shell history, PR, CI apo evidencë — output-i i lejuar është VETËM **`SET`/`MISSING` per variabël — ZERO fragmente vlerash, as të maskuara** (fragmenti i maskuar rrjedh nga identifikues real). Përgjigja raw e serverit → **vetëm** `evidence-private-local/`/`.sef-local/`. **Tier 2 mbetet i NDALUAR** deri në aprovimin e veçantë të Pronarit — PREFLIGHT-i vetë bën pjesë në Tier 2 dhe s'ekzekutohet para atij aprovimi.
 
 Pyetjet (burimi: `docs/canonical/05-sef-atk/Kupon_Print_Spec.md` §9 + Tracker `ATK-005`):
 1. **NUIKF** *(korrigjuar 12.07 — formati DIHET: alfanumerik/pa separatorë/≤16/unik/automatik)*: OPEN vetëm **algoritmi + origjina** + **binding-u me `VerificationNo`**.

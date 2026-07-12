@@ -55,7 +55,7 @@ Kuponi duhet të jetë **i lexueshëm** (KT N25.18.4a).
 - **UA N39.4:** QR = **element përbërës i ÇDO kuponi** — print, PDF, apo elektronik; **përmbajtja = base64(`CitizenCoupon` proto) | base64(firma e CitizenCoupon)** (Gate v2 §3.5). Test i detyrueshëm (F5+): *asnjë kupon s'del pa QR*.
 - **Rendi ONLINE-first (KT N26.5a):** transmeto → ATK pranon → `transaction_id` **persistohet** → **PASTAJ shtyp/dorëzo**. Offline = **vetëm përjashtim** (Neni 44, 48h; kushtet e hard gate-it te §2) — shih §7.
 - **Print Preview (KT N25.18 par.1):** para shtypjes ofrohet preview me **QR të skanueshëm pa shtypje**.
-- **Dërgimi elektronik (e-kupon) — i KUFIZUAR, jo alternativë universale:** lejohet **vetëm** për furnizime elektronike/në distancë dhe rastet që i lejon ATK, me **pëlqimin/kushtet përkatëse** të konsumatorit; për të gjitha rastet e tjera **printimi/dorëzimi fizik mbetet gate**. **Scope-i i "shitjes në distancë / e-kupon" = vendim OPEN** (SSOT v2.22, pronari: Blend).
+- **Dërgimi elektronik (e-kupon) — i KUFIZUAR, jo alternativë universale:** lejohet **vetëm** për furnizime elektronike/në distancë dhe rastet që i lejon ATK, me **pëlqimin/kushtet përkatëse** të konsumatorit; për të gjitha rastet e tjera **printimi/dorëzimi fizik mbetet gate**. **Scope-i i "shitjes në distancë / e-kupon" = vendim OPEN** (SSOT v2.22, pronari: Pronari/Human Gate).
 
 ## 4. Elementet grafike (KT Shtojca SEF)
 
