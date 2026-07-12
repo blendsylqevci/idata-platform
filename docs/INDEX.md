@@ -59,7 +59,7 @@ During implementation, code plus tests become the truth for system behavior.
 
 ## Next gate (rendi aktual — 12.07.2026, post full-corpus re-audit)
 
-*(**Re-audit-i + harta LAPT = KRYER** me këtë ndryshim; `ATK-011` mbyllet me merge si mapping only. **Verdikti: Tier 1 PARTIAL/REOPENED · compliance FAIL · Tier 2 NOT IMPLEMENTED/NO-GO** — Gate v2.0.)*
+*(**Re-audit-i + harta LAPT = KRYER** me këtë ndryshim; `ATK-011` mbyllet me merge si mapping only. **Verdikti: regression lokale 66 PASS/1 LIVE SKIP · Tier 1 PARTIAL/REOPENED · compliance FAIL · Tier 2 NOT IMPLEMENTED/NO-GO** — Gate v2.0.)*
 
 1. **Step B — code hardening (`ATK-012`, P0/PRE-TIER2):** T2-01..T2-10 (Gate v2 §4).
 2. **Step C — golden vectors zyrtarë + fake-HTTP/negative tests.**
