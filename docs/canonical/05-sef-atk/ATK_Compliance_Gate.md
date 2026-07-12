@@ -16,16 +16,16 @@
 - **Certification / go-live: NO-GO.**
 - **PoC-5 (PR #16) = evidence historike e mock mechanics — JO compliance PASS.**
 
-**Shpërndarja aktuale e 94 kontrolleve** (ledger): MISSING 49 · PARTIAL 17 · EXTERNAL_GATE 16 · **CONTRADICTS 4** · PROVEN_LOCAL 2 · N/A_LINEAGE 6. **32 kërkojnë konfirmim ATK/kontabilist/jurist/AIP.**
+**Shpërndarja aktuale (ledger v1.1 — 102 source-rows):** MISSING 57 · PARTIAL 17 · EXTERNAL_GATE 16 · **CONTRADICTS 4 (= 3 defekte unike: money/QR/NUIKF)** · PROVEN_LOCAL 2 · N/A_LINEAGE 6; **36 kërkojnë konfirmim** ATK/kontabilist/jurist/AIP; **37 unique closure keys** (kolona `Closure key`).
 
-## 2. KATËR `CONTRADICTS` (implementimi aktual kundërshton burimin zyrtar)
+## 2. `CONTRADICTS`: **4 source-rows = 3 DEFEKTE UNIKE** (+ LIVE placeholder = MISSING/`T2-04`, JO CONTRADICTS)
 
 | # | Ledger | Kontrata zyrtare | Evidence aktual në repo | Verdikt |
 |---|---|---|---|---|
 | 1 | **T05** | KT 25.4 + builders C#/Go: **unit Price ×10000; item Total ×100 (cents)** | `poc5-money.ts` / `poc5-proto.ts` / `poc5-sef.test.ts` enkodojnë/assert-ojnë **item Total ×10000** | **100× gabim** → `T2-01` |
 | 2 | **G04** (+U20) | QR = **base64(`CitizenCoupon` protobuf) \| base64(firma e TIJ)** | testi firmos **`PosCoupon`** për QR; CitizenCoupon vetëm round-trip | **objekt i gabuar** → `T2-02` |
 | 3 | **T18** (+U20) | **NUIKF**: alfanumerik, **pa separatorë**, **max 16**, unik, automatik | fixture me **viza / 17 karaktere**; zero validator/generator/uniqueness runtime | **invalid** → `T2-03` |
-| 4 | — (teknik) | Tier 2 = CA onboarding + rrugë reale test-serveri | testi LIVE = **placeholder i skip-uar që gjithmonë hedh** | **NOT IMPLEMENTED** → `T2-04` |
+| — | **G06 (MISSING — jo CONTRADICTS)** | Tier 2 = CA onboarding + rrugë reale test-serveri | testi LIVE = **placeholder i skip-uar që gjithmonë hedh** | **NOT IMPLEMENTED** → `T2-04` |
 
 ## 3. KONTRATAT TEKNIKE TË KORRIGJUARA (e vërteta canonical)
 
@@ -86,7 +86,7 @@ Monorepo mbetet NJË; fiscal-core i izoluar; **fokusi i prezantimit para Komisio
 
 ## 9. `ATK-011` — mbyllet me merge SI MAPPING DELIVERABLE
 
-Crosswalk-u LAPT (Arts. 6.1–12, 43.3–4; sanksionet 100/101(9)/106; Art.6.11–12 ↔ Vendimi 19/2026 me caveat-in **akti i nënshkruar s'u gjet publikisht**; UA 49(2) scope; KO159/24 dispozitivi) = **i përfunduar në `ATK_SEF_Requirements_Ledger.md`** (L01–L08 + K01–K04). **Mbyllja = VETËM mapping** — implementimi (L-rows PARTIAL/MISSING) dhe aplikueshmëria ligjore (gates) mbeten të hapura. **Step B (code hardening) dhe Step C (golden vectors/tests) mbeten blockers** të sekuencës.
+Crosswalk-u LAPT (Arts. 6.1–6.13, 43.3–43.5; sanksionet **100/101(1)/101(2)/101(9)/102.3/106**; Art.6.11–12 ↔ Vendimi 19/2026 me caveat-in **akti i nënshkruar s'u gjet publikisht**; UA 49(2) scope; KO159/24 dispozitivi) = **i përfunduar në `ATK_SEF_Requirements_Ledger.md` v1.1** (L01–L14 + K01–K04) — **kushti mekanik i "closes on merge" i provuar me skript lokal: çdo L-row ka Ref + Faqe reale (nga PDF-i primar) + Afat/sanksion ku ekziston**. **Mbyllja = VETËM mapping** — implementimi (L-rows PARTIAL/MISSING) dhe aplikueshmëria ligjore (gates) mbeten të hapura. **Step B (code hardening) dhe Step C (golden vectors/tests) mbeten blockers** të sekuencës.
 
 ## 10. BASELINE HISTORIK (etiketë — JO status aktual)
 
@@ -94,7 +94,7 @@ Auditimi 09.07.2026 (PR #17): **278 kërkesa të nxjerra** me granularitet extra
 
 ## 11. Sekuenca e radhës (pa cikël)
 
-**Step A (ky PR docs)** → **Step B** PRE-Tier2 code hardening (T2-01..T2-10, `ATK-012`) → **Step C** official golden vectors + fake-HTTP/negative tests → **independent re-review** i deltës + gates → **private PREFLIGHT** (vetëm pasi Step B/C kanë prodhuar wrapper/harness të testuar evidence-safe) → **Human Gate i veçantë** → **Tier 2**. Certifikimi/go-live = NO-GO më vete (§5). PoC-4b paralel.
+**Step A (ky PR docs)** → **Step B** PRE-Tier2 code hardening (T2-01..T2-10, `ATK-012`) → **Step C** official golden vectors + fake-HTTP/negative tests → **independent re-review** → **HUMAN GATE (autorizimi për thirrjen e PARË reale)** → **private `/ca/verify` PREFLIGHT** (wrapper evidence-safe i ndërtuar në Step B/C) → **vetëm pas suksesit të preflight-it vazhdon pjesa tjetër e Tier 2**. **Asnjë `/ca/verify`, `/ca/signcsr`, `/pos/*` ose `/citizen/*` para Human Gate.** Certifikimi/go-live = NO-GO më vete (§5). PoC-4b paralel.
 
 ## Lidhjet
 

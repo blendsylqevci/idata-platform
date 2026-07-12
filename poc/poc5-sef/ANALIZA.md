@@ -85,10 +85,10 @@ Onboarding-u i plotë: gjenero çelës **ECDSA P-256** → `POST /ca/verify/{nui
 
 1. Serializo proto → bytes. 2. `base64Proto = Base64(bytes)`. 3. **Firma = ECDSA P-256 mbi SHA-256(UTF8(base64Proto))** → `base64Sig`. 4. **QR = `base64(CitizenCoupon proto)|base64(firma e CitizenCoupon)`** — **[korrigjuar 12.07: QR ndërtohet/firmoset mbi `CitizenCoupon`, JO PosCoupon** — implementimi aktual firmos PosCoupon = CONTRADICTS G04/T2-02**]**. Për `/pos/coupon`: `details=base64Proto(PosCoupon)`, `signature=base64Sig(PosCoupon)`; fushat e përbashkëta PosCoupon↔CitizenCoupon duhet të rakordojnë.
 
-**KODIMI I FIRMËS — EKSPLICIT (amendament pas review-t PM):** referenca `pos-csharp` = **.NET**, ku `ECDsa.SignData` prodhon **raw r||s = IEEE P1363** (EKZAKT **64 byte** për P-256); **Node default = DER** (ASN.1, ~70-72 byte) → pa `dsaEncoding` eksplicit firmat NUK përputhen. **Kodimi praktik për PoC = `ieee-p1363`** (default-i ynë eksplicit; DER mbahet për debug). **[Korrigjim 12.07: C# zyrtar = P1363, por Go zyrtar = ASN.1 DER → shembujt zyrtarë KONFLIKTOJNË (CONF-02); P1363 lokal = KANDIDAT, JO kontratë finale — encoding bëhet explicit/configurable (T2-07) dhe konfirmohet nga serveri.]**
+**KODIMI I FIRMËS — EKSPLICIT (korrigjuar 12.07):** `pos-csharp` përdor **`SignHash` MBI `SHA256(UTF8(base64(proto)))`** (JO `SignData` mbi raw bytes) dhe prodhon **raw r||s = IEEE P1363** (64 byte për P-256); **`pos-golang` përdor TË NJËJTIN hash-input por ASN.1 DER** → shembujt zyrtarë KONFLIKTOJNË vetëm në ENCODING, jo në hash-input; **Node default = DER** → pa `dsaEncoding` eksplicit firmat s'përputhen me C#. **Kodimi praktik për PoC = `ieee-p1363`** (default-i ynë eksplicit; DER mbahet për debug). **[Korrigjim 12.07: C# zyrtar = P1363, por Go zyrtar = ASN.1 DER → shembujt zyrtarë KONFLIKTOJNË (CONF-02); P1363 lokal = KANDIDAT, JO kontratë finale — encoding bëhet explicit/configurable (T2-07) dhe konfirmohet nga serveri.]**
 > **Playbook i debug-ut në Tier 2** (nëse kuponi i parë real → *FAILED VERIFICATION*):
-> **#1 = formati i firmës (P1363 vs DER)** — provo alternativën PARA çdo gjëje tjetër.
-> **#2 = ÇFARË nënshkruhet:** `SHA256(UTF8(base64Proto))` (rruga jonë, nga pos-csharp) vs **raw proto bytes** — provo edhe këtë axis nëse swap-i P1363↔DER s'e rregullon.
+> **#1 = formati i firmës (P1363 vs DER)** — i vetmi konflikt real mes C#/Go; provo alternativën.
+> *(Axis-i i dikurshëm "raw proto bytes" HIQET — të dy shembujt zyrtarë aktualë firmosin `SHA256(UTF8(base64(proto)))`; s'ka mbështetje për raw-proto fallback.)*
 
 ## 7. ZGJEDHJA E DEP-it PROTOBUF (saktësisht NJË)
 
@@ -117,13 +117,13 @@ Migrimi **0006** vetëm `poc5_`: `poc5_fiscal_outbox` (business_id NOT NULL; `co
 - `CouponItem.Type="TT"` — semantikë e padokumentuar (ndiqet shembulli zyrtar).
 - `CouponItem.Quantity` është `float` në proto (jo para — sasi; paraja mbetet i64 e shkallëzuar; shënohet si vëzhgim, qty catch-weight → kujdes në F5).
 - Sjellja REALE e serverit ndaj dërgimit të dyfishtë të të njëjtit kupon (`CouponId` i njëjtë ×2) — e padokumentuar; **dokumentohet empirikisht në Tier 2** (modeli #5b).
-- `VerificationNo` (string 16-shifror në shembuj) — burimi/gjenerimi i vlerës reale sqarohet në onboarding Tier 2.
+- `VerificationNo` — **formati i NUIKF dihet: alfanumerik, PA separatorë, max 16, unik, automatik** (KT 26.10/UA 39.5); **OPEN mbeten vetëm binding-u NUIKF↔`VerificationNo`, algoritmi dhe origjina** (onboarding/Tier 2).
 
 ## 11. Pyetje për test-serverin (Tier 2) — nga auditimi ATK nen-për-nen (v2.22)
 
 **HAPI I RI I PLAYBOOK-ut — PREFLIGHT:** para ÇDO dërgimi kuponi real, ekzekuto **VETËM `POST /ca/verify/{nui}`** me env-in real — konfirmon lidhjen, identifikuesit dhe statusin e regjistrimit **pa prodhuar asnjë kupon**. Vetëm pas PREFLIGHT OK vazhdohet me CSR/signcsr dhe `/pos/coupon`.
 
-**PRIVATËSIA E PREFLIGHT-it (e detyrueshme):** ekzekutohet përmes një **wrapper-i lokal** që e lexon `.env.sef.local` **pa echo** (asnjë `cat`/`printenv`/interpolim në komandë). **Asnjë NUI/ID/URL e plotë** nuk shfaqet në output komande, shell history, PR, CI apo evidencë — output-i i lejuar është vetëm **`SET`/`MISSING` per variabël + vlera të maskuara** (p.sh. 2 karakteret e para + "…"). Përgjigja raw e serverit → **vetëm** `evidence-private-local/`/`.sef-local/`. **Tier 2 mbetet i NDALUAR** deri në aprovimin e veçantë të Blendit — PREFLIGHT-i vetë bën pjesë në Tier 2 dhe s'ekzekutohet para atij aprovimi.
+**PRIVATËSIA E PREFLIGHT-it (kërkesë DIZAJNI — wrapper-i = NOT IMPLEMENTED sot; ndërtohet në Step B/C; ky paragraf NUK është udhëzim ekzekutimi):** ekzekutohet përmes një **wrapper-i lokal** që e lexon `.env.sef.local` **pa echo** (asnjë `cat`/`printenv`/interpolim në komandë). **Asnjë NUI/ID/URL e plotë** nuk shfaqet në output komande, shell history, PR, CI apo evidencë — output-i i lejuar është vetëm **`SET`/`MISSING` per variabël + vlera të maskuara** (p.sh. 2 karakteret e para + "…"). Përgjigja raw e serverit → **vetëm** `evidence-private-local/`/`.sef-local/`. **Tier 2 mbetet i NDALUAR** deri në aprovimin e veçantë të Blendit — PREFLIGHT-i vetë bën pjesë në Tier 2 dhe s'ekzekutohet para atij aprovimi.
 
 Pyetjet (burimi: `docs/canonical/05-sef-atk/Kupon_Print_Spec.md` §9 + Tracker `ATK-005`):
 1. **NUIKF** *(korrigjuar 12.07 — formati DIHET: alfanumerik/pa separatorë/≤16/unik/automatik)*: OPEN vetëm **algoritmi + origjina** + **binding-u me `VerificationNo`**.
