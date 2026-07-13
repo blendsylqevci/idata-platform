@@ -68,10 +68,10 @@ jobs:
             echo "## GOV-001 integrity-linter (advisory, jo-required)"
             echo '```'
             # Raporti është i sanitizuar në burim (reporter.ts): pa matched text, pa path privat.
-            if [ -f linter-report.txt ]; then
+            if [ -s linter-report.txt ]; then
               tail -n 200 linter-report.txt
             else
-              echo "scan nuk prodhoi raport (engine/config error — shih step-in e scan-it)"
+              echo "scan nuk prodhoi raport ose raporti është bosh (engine/config error — shih step-in e scan-it; job-i mbetet i kuq)"
             fi
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

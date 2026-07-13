@@ -96,6 +96,16 @@ export class GitCliReader implements GitReader {
       for (const ch of path) {
         const c = ch.codePointAt(0) ?? 0;
         if (c < 0x20 || c === 0x7f) throw new ScanError("PATH_CONTROL_CHARS");
+        // bidi override / zero-width / format chars — vektorë spoofing-u të path-it
+        if (
+          (c >= 0x200b && c <= 0x200f) || (c >= 0x202a && c <= 0x202e) ||
+          (c >= 0x2066 && c <= 0x2069) || c === 0xfeff
+        ) {
+          throw new ScanError("PATH_FORMAT_CHARS");
+        }
+      }
+      if (path.startsWith("-") || path.startsWith(":")) {
+        throw new ScanError("PATH_SUSPICIOUS_PREFIX");
       }
       entries.push({ oldMode, newMode, oldOid, newOid, status: statusFull, path });
       i = pathEnd + 1;
@@ -112,8 +122,10 @@ export class GitCliReader implements GitReader {
   }
 
   addedContent(sha: string, path: string): AddedContent {
+    // --no-ext-diff / --no-textconv: asnjë driver i jashtëm ose textconv nuk
+    // ekzekutohet kurrë (edhe kur .gitattributes e kërkon) — provohet me fixture.
     const buf = this.git("show-diff", [
-      "show", sha, "--format=", "--unified=0", "--no-renames", "--", path,
+      "show", sha, "--format=", "--unified=0", "--no-renames", "--no-ext-diff", "--no-textconv", "--", path,
     ]);
     const text = decodeStrictUtf8(buf, "DIFF_CONTENT_ENCODING");
     return parseUnifiedAddedLines(text);
@@ -124,14 +136,11 @@ export class GitCliReader implements GitReader {
   }
 
   hasFile(ref: string, path: string): boolean {
-    // KONTRATË: ref-i duhet të jetë validuar më parë me revParse();
-    // atëherë dështimi i vetëm i mundshëm këtu = path-i mungon në atë ref.
-    try {
-      this.git("cat-file-exists", ["cat-file", "-e", `${ref}:${path}`]);
-      return true;
-    } catch {
-      return false;
-    }
+    // KONTRATË (§4): dallon "path realisht mungon" (ls-tree OK me output bosh →
+    // false) nga dështimi operacional i Git-it (ls-tree exit ≠ 0 → ScanError →
+    // exit 2). Asnjë catch-all → false.
+    const out = this.git("ls-tree", ["ls-tree", "-z", "--name-only", ref, "--", path]);
+    return out.length > 0;
   }
 }
 

@@ -35,8 +35,9 @@ export function sortFindings(findings: Finding[]): Finding[] {
 export function toTextReport(result: ScanResult): string {
   const lines: string[] = [];
   lines.push(`integrity-linter mode=${result.mode}`);
-  for (const ev of [...result.evaluations].sort((a, b) => a.profile.localeCompare(b.profile))) {
-    lines.push(`profile ${ev.profile} status=${ev.profileStatus} evaluation=${ev.status}${ev.reason ? ` reason=${sanitizeLocator(ev.reason)}` : ""}`);
+  for (const ev of sortEvaluations(result.evaluations)) {
+    const checkPart = ev.check !== undefined ? ` check=${sanitizeLocator(ev.check)}` : "";
+    lines.push(`profile ${ev.profile}${checkPart} status=${ev.profileStatus} evaluation=${ev.status}${ev.reason ? ` reason=${sanitizeLocator(ev.reason)}` : ""}`);
   }
   for (const f of sortFindings(result.findings)) {
     const commitPart = f.commit ? ` ${f.commit} ·` : "";
@@ -48,12 +49,12 @@ export function toTextReport(result: ScanResult): string {
 }
 
 export function toJsonReport(result: ScanResult): string {
-  const evaluations = [...result.evaluations]
-    .sort((a, b) => a.profile.localeCompare(b.profile))
+  const evaluations = sortEvaluations(result.evaluations)
     .map((ev: ProfileEvaluation) => ({
       profile: ev.profile,
       profileStatus: ev.profileStatus,
       evaluation: ev.status,
+      ...(ev.check !== undefined ? { check: sanitizeLocator(ev.check) } : {}),
       ...(ev.reason !== undefined ? { reason: sanitizeLocator(ev.reason) } : {}),
     }));
   const findings = sortFindings(result.findings).map((f) => ({
@@ -66,6 +67,15 @@ export function toJsonReport(result: ScanResult): string {
     ...(f.commit !== undefined ? { commit: f.commit } : {}),
   }));
   return JSON.stringify({ mode: result.mode, evaluations, findings, totals: countBySeverity(result.findings) }, null, 2) + "\n";
+}
+
+/** Renditje deterministike: profile → check → evaluation/status. */
+export function sortEvaluations(evs: ProfileEvaluation[]): ProfileEvaluation[] {
+  return [...evs].sort((a, b) => {
+    const ka = [a.profile, a.check ?? "", a.status].join("\u0000");
+    const kb = [b.profile, b.check ?? "", b.status].join("\u0000");
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
 }
 
 export function countBySeverity(findings: Finding[]): { ERROR: number; WARNING: number; REVIEW: number } {

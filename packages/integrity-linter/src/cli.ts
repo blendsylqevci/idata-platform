@@ -19,7 +19,7 @@
  * body, SHA 40-hex, përputhje e detyrueshme me --base/--head kur jepen të dyja.
  */
 
-import { lstatSync, readFileSync } from "node:fs";
+import { closeSync, constants as fsConstants, fstatSync, openSync, readSync } from "node:fs";
 import { GitCliReader } from "./git-repository.js";
 import { runScan } from "./engine.js";
 import { toJsonReport, toTextReport, countBySeverity } from "./reporter.js";
@@ -37,6 +37,8 @@ interface CliArgs {
   docsRef: string;
   format: "text" | "json" | "both";
   cwd: string;
+  /** Lexim eksplicit i event file lokalisht — env-i NUK lexohet implicit (§8). */
+  eventFile?: string;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
@@ -67,31 +69,46 @@ export function parseArgs(argv: string[]): CliArgs {
         break;
       }
       case "--cwd": args.cwd = next(); break;
+      case "--event-file": args.eventFile = next(); break;
       default: throw new ConfigError("ARG_UNKNOWN");
     }
   }
   return args;
 }
 
-/** Lexim i forcuar i PR event-it — input i jashtëm, i pabesuar. */
+/**
+ * Lexim i forcuar i PR event-it — input i jashtëm, i pabesuar (§8):
+ *  - O_NOFOLLOW + fstat mbi FD (TOCTOU-safe; symlink → error);
+ *  - regular file only; size cap fiks; lexim nga i njëjti FD;
+ *  - `pull_request` null/mungues → EVENT_MALFORMED (kur leximi është kërkuar).
+ */
 export function readPullRequestEvent(eventPath: string | undefined): PullRequestEvent | undefined {
   if (eventPath === undefined || eventPath === "") return undefined;
-  let st;
+  let fd: number;
   try {
-    st = lstatSync(eventPath);
+    fd = openSync(eventPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
   } catch {
-    throw new ConfigError("EVENT_UNREADABLE");
+    throw new ConfigError("EVENT_NOT_REGULAR_FILE"); // symlink ose i palexueshëm
   }
-  if (!st.isFile() || st.isSymbolicLink()) throw new ConfigError("EVENT_NOT_REGULAR_FILE");
-  if (st.size > MAX_EVENT_BYTES) throw new ConfigError("EVENT_OVERSIZE");
+  let raw: string;
+  try {
+    const st = fstatSync(fd);
+    if (!st.isFile()) throw new ConfigError("EVENT_NOT_REGULAR_FILE");
+    if (st.size > MAX_EVENT_BYTES) throw new ConfigError("EVENT_OVERSIZE");
+    const buf = Buffer.alloc(Number(st.size));
+    readSync(fd, buf, 0, buf.length, 0);
+    raw = buf.toString("utf8");
+  } finally {
+    closeSync(fd);
+  }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(eventPath, "utf8"));
+    parsed = JSON.parse(raw);
   } catch {
     throw new ConfigError("EVENT_MALFORMED");
   }
-  const pr = (parsed as { pull_request?: { base?: { sha?: unknown }; head?: { sha?: unknown }; body?: unknown } }).pull_request;
-  if (pr === undefined) return undefined;
+  const pr = (parsed as { pull_request?: { base?: { sha?: unknown }; head?: { sha?: unknown }; body?: unknown } | null }).pull_request;
+  if (pr === undefined || pr === null) throw new ConfigError("EVENT_MALFORMED");
   const ev: PullRequestEvent = {};
   if (pr.base?.sha !== undefined) {
     if (typeof pr.base.sha !== "string" || !SHA40.test(pr.base.sha)) throw new ConfigError("EVENT_SHA_INVALID");
@@ -124,7 +141,12 @@ export function main(argv: string[], env: NodeJS.ProcessEnv): number {
   try {
     const args = parseArgs(argv);
     format = args.format;
-    const event = readPullRequestEvent(env["GITHUB_EVENT_PATH"]);
+    // §8 TRUST BOUNDARY: GITHUB_EVENT_PATH lexohet AUTOMATIKISHT vetëm brenda
+    // GitHub Actions me event pull_request; çdo event tjetër INJOROHET (kontratë
+    // e dokumentuar). Lokalisht përdoret vetëm flag-u eksplicit --event-file.
+    const inActionsPr = env["GITHUB_ACTIONS"] === "true" && env["GITHUB_EVENT_NAME"] === "pull_request";
+    const eventPath = args.eventFile ?? (inActionsPr ? env["GITHUB_EVENT_PATH"] : undefined);
+    const event = readPullRequestEvent(eventPath);
     enforceRangeConsistency(args, event);
     const config: ScanConfig = {
       mode: args.mode as ScanConfig["mode"], // validohet në engine (required → refuzim)
