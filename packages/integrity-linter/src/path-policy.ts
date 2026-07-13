@@ -19,6 +19,7 @@ function escapeRe(s: string): string {
 
 /** Direktori/rrënjë të bllokuara (kudo në path). */
 const BLOCKED_DIRS: string[] = [
+  frag(".", "claude"),
   frag("00", "_raw"),
   frag("docs", "-private"),
   frag("private", "-sensitive"),
@@ -103,9 +104,13 @@ export function evaluatePath(path: string): PathVerdict {
   const ext = basenameLower.includes(".") ? basenameLower.slice(basenameLower.lastIndexOf(".") + 1) : "";
   if (BLOCKED_EXTENSIONS.includes(ext)) return "BLOCKED";
 
-  // 5) stema/nën-stringje basename owner-only
+  // 4b) *.secret.md — klasë kudo, çfarëdo case/nesting
+  if (basenameLower.endsWith(frag(".", "secret", ".md"))) return "BLOCKED";
+
+  // 5) stema owner-only KUDO në basename (me kufi fjale majtas — jo vetëm startsWith)
   for (const stem of BLOCKED_BASENAME_STEMS) {
-    if (basenameLower.startsWith(stem.toLowerCase())) return "BLOCKED";
+    const re = new RegExp(`(^|[^a-zë])${stem.toLowerCase().replace(/[.*+?^${}()|[\]\\/]/g, (c) => "\\" + c)}`, "i");
+    if (re.test(basenameLower)) return "BLOCKED";
   }
   for (const sub of BLOCKED_BASENAME_SUBSTRINGS) {
     if (basenameLower.includes(sub.toLowerCase())) return "BLOCKED";
