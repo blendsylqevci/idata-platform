@@ -1,6 +1,6 @@
 # PRO DATA — Source→Target Closure v2 (iData+)
 
-**Versioni:** 2.3 · **Data:** 12 Korrik 2026 · **Pronari:** Group Owner (Human Gate) · **Statusi:** canonical/effective upon merge of this change (supersedes v1.1 — VETËM për interpretimin target/migrim/maturity, shih §9)
+**Versioni:** 2.3 · **Data:** 13 Korrik 2026 · **Pronari:** Group Owner (Human Gate) · **Statusi:** canonical/effective upon merge of this change (supersedes v1.1 — VETËM për interpretimin target/migrim/maturity, shih §9)
 **Burimi i këtij versioni:** canonical docs aktuale (SSOT, tracker, roadmap, `05_Decision_Gates_ADR.md`/ADR-003, `04_Data_Model_Draft.md`, `02_RBAC_Matrix.md`, `03_Accounting_Compatibility_Matrix.md`) + **kodi/migrimet/testet tracked** + **metadata e evidence paths**. **Zero content-read nga depoja e injoruar e evidence-it private-local (ignored private-local evidence store), backup-e, MDF/LDF, DB e restauruar apo evidence tjetër private-local në këtë version** — evidence historike trajtohet si **opaque reference** (§7).
 **Historia:** v2.2 — Documentation & Compliance Integrity Linter u zgjerua në 16 profile platform-wide; fazat u regjistruan; HG-LINTER-BUILD u aprovua; implementimi nuk ka nisur; required-CI mbetet gated. · v2.3 (13.07.2026, effective on merge të PR-së tooling GOV-001) — **engine + `DOC-CORE` + `HISTORY-PRIV` = IMPLEMENTED_ADVISORY** (`packages/integrity-linter` + workflow advisory jo-required); **14 profilet e tjera = NOT_IMPLEMENTED**; output i redaktuar për path sensitivë (`[REDACTED_PATH]`, zero matched content); acceptance sipas fazimit të profilit; required-CI gate i paprekur.
 
@@ -264,4 +264,4 @@ Fillimisht ekzekutohet si **advisory check**. Bëhet **required CI** vetëm pas 
 
 Acceptance matet vetëm me fixtures/tests reale — pa vlerësime ilustruese në canonical. **Acceptance-i zbatohet sipas FAZIMIT të profilit:** klasat e mësipërme mbulohen nga fixtures sintetike të baseline-it advisory aty ku profili përkatës është implementuar; **fixtures/rregullat specifike `SEF-ATK` dorëzohen me profilin `SEF-ATK` (gjatë Step B, para mbylljes së tij)** — baseline-i nuk pretendon implementimin e tyre. Linter-i kontrollon strukturë dhe konsistencë; semantika ligjore mbetet review njerëzor + Human Gate.
 
-*(Ky seksion vetëm regjistron kontrollin e planifikuar canonical. Asnjë script, config, workflow ose test nuk implementohet nga ky ndryshim dokumentimi.)*
+*(**HISTORICAL — vlen për v2.2:** "Ky seksion vetëm regjistron kontrollin e planifikuar canonical. Asnjë script, config, workflow ose test nuk implementohet nga ky ndryshim dokumentimi." — **superseded nga v2.3:** engine + `DOC-CORE` + `HISTORY-PRIV` = IMPLEMENTED_ADVISORY në PR-në tooling GOV-001; 14 profilet e tjera mbeten NOT_IMPLEMENTED.)*
