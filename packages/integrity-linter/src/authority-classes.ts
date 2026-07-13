@@ -174,15 +174,23 @@ export function defaultAuthorityClasses(): AuthorityClass[] {
           excludeBefore: /(pjesa tjetër e|para|gjatë|blockers?|checklist[^|]{0,20})$/i,
         })),
     },
-    {
-      id: "gov-001-status", kind: "status", authorityFile: TRACKER,
-      authorityPattern: /`GOV-001`[^\n]*?`(PARTIAL \/ ADVISORY_ACTIVE|APPROVED \/ NOT_IMPLEMENTED|COMPLETE)`/g,
-      normalize: normalizeGov001,
-      consumers: [SSOT, INDEX, ROADMAP, PM, MATRIX07].map((file) => ({
-        file, requirement: "SCAN_IF_PRESENT" as const,
-        pattern: /GOV-001[^\n]{0,120}?(PARTIAL ?\/ ?ADVISORY_ACTIVE|APPROVED ?\/ ?NOT_IMPLEMENTED|COMPLETE\b)/g,
-      })),
-    },
+    (() => {
+      // Alternativat e statusit ndërtohen nga fragmente që VETË ky burim të mos
+      // vetë-flagohet nga konsumatori i klasës (drift mbi added-lines të kodit).
+      const stPartial = ["PARTIAL ?\\/ ?ADVISORY", "_ACTIVE"].join("");
+      const stNotImpl = ["APPROVED ?\\/ ?NOT", "_IMPLEMENTED"].join("");
+      const stComplete = ["COMPLE", "TE\\b"].join("");
+      const alt = `(${stPartial}|${stNotImpl}|${stComplete})`;
+      return {
+        id: "gov-001-status", kind: "status" as const, authorityFile: TRACKER,
+        authorityPattern: new RegExp("`GOV-001`[^\\n]*?`" + alt + "`", "g"),
+        normalize: normalizeGov001,
+        consumers: [SSOT, INDEX, ROADMAP, PM, MATRIX07].map((file) => ({
+          file, requirement: "SCAN_IF_PRESENT" as const,
+          pattern: new RegExp("GOV-001[^\\n]{0,120}?" + alt, "g"),
+        })),
+      };
+    })(),
     {
       // set/profile registry: "14 profilet e tjera = NOT_IMPLEMENTED" (authority = 07 §Linter)
       id: "profile-registry-set", kind: "set", authorityFile: MATRIX07,

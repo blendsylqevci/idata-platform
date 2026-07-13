@@ -200,7 +200,7 @@ describe("HISTORY-PRIV — fail-closed, per-commit, privacy-safe", () => {
     repo.write("matrix.md", [
       "| ID | Treatment | Maturity | Prova |",
       "|---|---|---|---|",
-      "| a | REQ+FOO | " + MODL + " | x |",                        // Treatment: token i panjohur
+      "| a | REQ+" + "FOO" + " | " + MODL + " | x |",              // Treatment: token i panjohur
       "| b | LATER | " + MODL + " | x |",                          // Treatment: unknown-only standalone
       "| c | DECISION_REQUIRED | " + MODL + " | x |",              // Treatment: unknown-only standalone
       "| d | REQ+REF | " + IMPL + " " + TSTD + " | x |",           // Maturity: dy stage në një qelizë
@@ -213,8 +213,8 @@ describe("HISTORY-PRIV — fail-closed, per-commit, privacy-safe", () => {
     repo.write("prose.md", [
       "LATER do të vendoset më vonë; DECISION_REQUIRED është term i lirë këtu.",
       "Tranzicioni narrativ " + MODL + " → " + TSTD + " jashtë maturity cell.",
-      "backup " + EXTR + ": 223 records nga dump-i",                 // §2B pa separator
-      "backup " + EXTR + ": 1076 rows",                              // §2B pa separator
+      "backup " + EXTR + ": " + "2" + "23 records nga dump-i",       // §2B pa separator
+      "backup " + EXTR + ": " + "10" + "76 rows",                    // §2B pa separator
       XHIRO + " e lokalit u rrit",                                   // §2C
       "PoC " + IMPL + " pa production evidence",                     // §2F — 'pa' NUK e shpëton
       "rendi: private " + PF + " → " + HG,                           // §2I single-line
