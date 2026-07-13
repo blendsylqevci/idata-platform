@@ -1,10 +1,11 @@
 /**
  * GOV-001 Documentation & Compliance Integrity Linter — tipet bazë.
  *
- * Kufij të fortë (shih 07_PRODATA §Linter):
+ * Kufij të fortë (07_PRODATA §Linter):
  *  - findings NUK mbajnë kurrë matched text / raw content / path privat;
  *  - statuset e profileve janë machine-readable dhe të mbyllura;
- *  - engine-i është deterministik dhe fail-closed.
+ *  - engine-i është deterministik dhe FAIL-CLOSED: skanim i paplotë = exit 2;
+ *  - gabimet mbajnë vetëm KODE FIKSE — kurrë raw git message/argv/ref/path.
  */
 
 export type ProfileId =
@@ -28,13 +29,13 @@ export type ProfileId =
 /** Statuset e vetme machine-readable të lejuara për një profil. */
 export type ProfileStatus = "NOT_IMPLEMENTED" | "IMPLEMENTED_ADVISORY" | "REQUIRED";
 
-/** Modaliteti i ekzekutimit; `required` refuzohet derisa HG-LINTER-REQUIRED të aprovohet. */
+/** Modaliteti; `required` refuzohet derisa HG-LINTER-REQUIRED të aprovohet. */
 export type ScanMode = "advisory";
 
 export type Severity = "ERROR" | "WARNING" | "REVIEW";
 
-/** Vlerësimi i një profili/rregulli që NUK u ekzekutua — kurrë PASS i fabrikuar. */
-export type EvaluationStatus = "EVALUATED" | "NOT_EVALUATED" | "NOT_IMPLEMENTED" | "INCOMPLETE_SCAN";
+/** Vlerësimi i një (nën)kontrolli — kurrë PASS i fabrikuar. */
+export type EvaluationStatus = "EVALUATED" | "NOT_EVALUATED" | "NOT_IMPLEMENTED";
 
 export interface Finding {
   profile: ProfileId;
@@ -42,12 +43,9 @@ export interface Finding {
   severity: Severity;
   ruleId: string;
   category: string;
-  /**
-   * Locator i sigurt: `tracked-file:line`, `tracked-file`, ose `[REDACTED_PATH]`.
-   * KURRË matched line/body/identifier; KURRË path privat real.
-   */
+  /** `tracked-file:line` · `tracked-file` · `[REDACTED_PATH]` — kurrë content/path privat. */
   locator: string;
-  /** SHA i shkurtër i commit-it (vetëm për rregullat per-commit). */
+  /** SHA i shkurtër (vetëm rregullat per-commit). */
   commit?: string;
 }
 
@@ -55,7 +53,9 @@ export interface ProfileEvaluation {
   profile: ProfileId;
   profileStatus: ProfileStatus;
   status: EvaluationStatus;
-  /** Arsye e sigurt (pa content), p.sh. "missing GITHUB_EVENT_PATH". */
+  /** Nën-kontrolli të cilit i referohet vlerësimi (p.sh. "pr-body", "scope"); pa `check` = agregati i profilit. */
+  check?: string;
+  /** Kod/arsye e sigurt — kurrë content. */
   reason?: string;
 }
 
@@ -65,50 +65,58 @@ export interface ScanResult {
   findings: Finding[];
 }
 
-/** Gabim konfigurimi/inputi — engine-i del me exit code 2 (fail-closed). */
+/** Gabim konfigurimi/inputi → exit 2. Mban vetëm kod fiks të sanitizuar. */
 export class ConfigError extends Error {
   override readonly name = "ConfigError";
+  constructor(public readonly code: string) {
+    super(code);
+  }
 }
 
-/** Gabim git/range/scan i paplotë — engine-i del me exit code 2 (fail-closed). */
+/** Gabim git/range/parser/skanim i paplotë → exit 2. Mban vetëm kod fiks. */
 export class ScanError extends Error {
   override readonly name = "ScanError";
+  constructor(public readonly code: string) {
+    super(code);
+  }
 }
 
-/** Një hyrje e ndryshuar në një commit (nga git diff-tree --raw). */
-export interface ChangedEntry {
-  /** A/M/D/R/C/T (statusi i parë; R100 -> R). */
-  status: string;
-  /** Mode i ri (p.sh. "120000" = symlink). */
+/** Një hyrje raw e diff-tree PA rename detection (rename = D + A). */
+export interface RawEntry {
+  oldMode: string;
   newMode: string;
-  /** SHA e blob-it të ri ("0000..." kur fshihet). */
-  newBlob: string;
+  oldOid: string;
+  newOid: string;
+  /** A/M/D/T/U/X — një karakter (pa R/C sepse --no-renames). */
+  status: string;
   path: string;
-  /** Path-i i vjetër për rename/copy. */
-  oldPath?: string;
+}
+
+export interface AddedContent {
+  /** true = blob binar; asnjë rresht nuk lexohet/publikohet. */
+  binary: boolean;
+  /** Rreshtat e SHTUAR me numër REAL rreshti të target file-it. */
+  lines: Array<{ line: number; text: string }>;
 }
 
 /**
- * Lexues Git i injektueshëm — i vetmi kanal i lejuar drejt përmbajtjes.
- * Vetëm Git objects të tracked; ASNJË filesystem walk, ASNJË network.
+ * Lexues Git i injektueshëm — i vetmi kanal drejt përmbajtjes.
+ * Vetëm Git objects të tracked; asnjë filesystem walk; asnjë network.
  */
 export interface GitReader {
   revParse(ref: string): string;
   isShallow(): boolean;
   mergeBase(a: string, b: string): string;
-  /** Commits në (baseExclusive, head], të renditur nga më i vjetri. */
   revList(baseExclusive: string, head: string): string[];
   parents(sha: string): string[];
-  changedEntries(sha: string): ChangedEntry[];
-  /** Rreshtat e SHTUAR të një file-i në një commit (unified=0). Refuzon UTF-8 invalid. */
-  addedLines(sha: string, path: string): string[];
-  /** Paths të prekur si BINARË në commit (nga numstat "-"), pa lexuar përmbajtje. */
-  binaryPaths(sha: string): Set<string>;
-  /** Madhësia e blob-it në byte për `<sha>:<path>`. */
-  blobSize(sha: string, path: string): number;
-  /** Përmbajtja e një file-i të tracked në një ref (git show ref:path). */
+  /** Metadata të plota PA rename detection dhe PA lexim blob-i. */
+  rawEntries(sha: string): RawEntry[];
+  /** Madhësia e blob-it me OBJECT-ID (pa path). */
+  blobSizeByOid(oid: string): number;
+  /** Added-lines me numra realë; thirret VETËM për paths të aprovuara nga policy. */
+  addedContent(sha: string, path: string): AddedContent;
   showFile(ref: string, path: string): string;
-  /** A ekziston file-i i tracked në ref. */
+  /** Kërkon ref të VALIDUAR më parë; false = path-i mungon në atë ref. */
   hasFile(ref: string, path: string): boolean;
 }
 
@@ -121,7 +129,6 @@ export interface PullRequestEvent {
 export interface ScanConfig {
   mode: ScanMode;
   profiles: ProfileId[];
-  /** Ref-i ku lexohen dokumentet canonical (default: HEAD). */
   docsRef: string;
   baseSha?: string;
   headSha?: string;

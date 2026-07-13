@@ -22,21 +22,24 @@ export interface EngineOptions {
 
 export function validateMode(mode: string): asserts mode is "advisory" {
   if (mode !== "advisory") {
-    throw new ConfigError(
-      `mode "${mode}" refuzohet: vetëm "advisory" lejohet — HG-LINTER-REQUIRED nuk është aprovuar`,
-    );
+    throw new ConfigError("MODE_NOT_ALLOWED"); // vetëm advisory — HG-LINTER-REQUIRED i paaprovuar
   }
 }
 
 export function runScan(reader: GitReader, config: ScanConfig, options: EngineOptions = {}): ScanResult {
   validateMode(config.mode);
-  if (config.profiles.length === 0) throw new ConfigError("no profiles requested");
+  if (config.profiles.length === 0) throw new ConfigError("NO_PROFILES");
   for (const p of config.profiles as string[]) {
-    if (!isProfileId(p)) throw new ConfigError(`unknown profile: ${p}`);
+    if (!isProfileId(p)) throw new ConfigError("UNKNOWN_PROFILE");
   }
 
   const findings: Finding[] = [];
   const evaluations: ProfileEvaluation[] = [];
+
+  // docsRef validohet NJË herë para çdo skanimi (invalid ref → exit 2, jo WARNING+0)
+  if (config.profiles.some((p) => p === "DOC-CORE")) {
+    reader.revParse(config.docsRef);
+  }
 
   for (const profile of config.profiles) {
     const status = profileStatus(profile);

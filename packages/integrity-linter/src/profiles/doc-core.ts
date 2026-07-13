@@ -16,6 +16,7 @@
  */
 
 import type { Finding, GitReader, ProfileEvaluation, PullRequestEvent } from "../types.js";
+import { ScanError } from "../types.js";
 import { profileStatus } from "../profile-registry.js";
 
 const P = "DOC-CORE" as const;
@@ -69,7 +70,7 @@ export function defaultSurfaces(): DocCoreSurfaces {
         authorityPattern: /\*\*Versioni:\*\* (\d+\.\d+)/,
         consumers: ledgerConsumers.map((file) => ({
           file,
-          pattern: /(?:Requirements_)?Ledger(?:\.md`?)? v(\d+\.\d+)/g,
+          pattern: /(?:Requirements_)?Ledger(?:\.md)?`?\*{0,2}\s*(?:[—–:])?\s*\*{0,2}v(\d+\.\d+)/g,
         })),
       },
       {
@@ -88,7 +89,10 @@ export function defaultSurfaces(): DocCoreSurfaces {
         id: "ledger-confirmations",
         authorityFile: LEDGER,
         authorityPattern: /\*\*(\d+) kontrolle\*\* me `CONFIRM/,
-        consumers: ledgerConsumers.map((file) => ({ file, pattern: /(\d+) konfirmime/g })),
+        consumers: [
+          ...ledgerConsumers.map((file) => ({ file, pattern: /(\d+) konfirmime/g })),
+          ...ledgerConsumers.map((file) => ({ file, pattern: /(\d+) CONFIRM_/g })),
+        ],
       },
       {
         id: "register-version",
@@ -96,7 +100,7 @@ export function defaultSurfaces(): DocCoreSurfaces {
         authorityPattern: /\*\*Versioni:\*\* (\d+\.\d+)/,
         consumers: [GATE, SSOT, INDEX, ROADMAP, ANALIZA, FINDINGS, LEDGER].map((file) => ({
           file,
-          pattern: /Source_Register(?:\.md`?\*?\*?)? +v?(\d+\.\d+)/g,
+          pattern: /(?:Source_)?Register(?:\.md)?`?\*{0,2}\s*(?:[—–:])?\s*\*{0,2}v(\d+\.\d+)/g,
         })),
       },
       {
@@ -144,38 +148,31 @@ export function runDocCore(
   const status = profileStatus(P);
   const findings: Finding[] = [];
   const evaluations: ProfileEvaluation[] = [];
-  const fileCache = new Map<string, string | undefined>();
-  const readDoc = (path: string): string | undefined => {
-    if (!fileCache.has(path)) {
-      fileCache.set(path, reader.hasFile(docsRef, path) ? reader.showFile(docsRef, path) : undefined);
+  // FAIL-CLOSED: çdo surface e konfiguruar është REQUIRED — mungesa e file-it
+  // në docsRef (ref i validuar më parë nga engine-i) = skanim i paplotë → exit 2.
+  const fileCache = new Map<string, string>();
+  const readDoc = (path: string): string => {
+    const cached = fileCache.get(path);
+    if (cached !== undefined) return cached;
+    if (!reader.hasFile(docsRef, path)) {
+      throw new ScanError("INCOMPLETE_SCAN:SURFACE_MISSING");
     }
-    return fileCache.get(path);
+    const text = reader.showFile(docsRef, path);
+    fileCache.set(path, text);
+    return text;
   };
 
   // ---- 1) authority → consumers drift (version/count/status; old-value drift) ----
   for (const rule of surfaces.authorities) {
     const authorityText = readDoc(rule.authorityFile);
-    if (authorityText === undefined) {
-      findings.push({
-        profile: P, profileStatus: status, severity: "WARNING",
-        ruleId: "DC-AUTHORITY-MISSING", category: "drift",
-        locator: rule.authorityFile,
-      });
-      continue;
-    }
     const m = rule.authorityPattern.exec(authorityText);
     if (!m || m[1] === undefined) {
-      findings.push({
-        profile: P, profileStatus: status, severity: "WARNING",
-        ruleId: "DC-AUTHORITY-UNREADABLE", category: "drift",
-        locator: `${rule.authorityFile} (${rule.id})`,
-      });
-      continue;
+      // authority ekziston por vlera s'lexohet dot → skanim i paplotë, jo heshtje
+      throw new ScanError("INCOMPLETE_SCAN:AUTHORITY_UNREADABLE");
     }
     const currentValue = m[1];
     for (const consumer of rule.consumers) {
       const text = readDoc(consumer.file);
-      if (text === undefined) continue;
       const lines = text.split("\n");
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i] ?? "";
@@ -198,7 +195,6 @@ export function runDocCore(
   // ---- 2) rendi invariant i zinxhirit SEF (per paragraf; historikët përjashtohen) ----
   for (const file of surfaces.orderSurfaces) {
     const text = readDoc(file);
-    if (text === undefined) continue;
     const paragraphs = text.split(/\n\s*\n/);
     let lineNo = 1;
     for (const para of paragraphs) {
@@ -258,17 +254,14 @@ export function runDocCore(
   // ---- 3) milestone/gate në tracker që mungon nga sipërfaqet e rendit ----
   if (surfaces.trackerFile !== undefined) {
     const tracker = readDoc(surfaces.trackerFile);
-    if (tracker !== undefined) {
+    {
       const ids = new Set<string>();
       for (const mm of tracker.matchAll(/\b(GOV-\d{3}|HG-[A-Z][A-Z0-9-]{2,})\b/g)) {
         const id = mm[1];
         if (id !== undefined) ids.add(id);
       }
       for (const id of [...ids].sort()) {
-        const presentSomewhere = surfaces.milestoneSurfaces.some((f) => {
-          const t = readDoc(f);
-          return t !== undefined && t.includes(id);
-        });
+        const presentSomewhere = surfaces.milestoneSurfaces.some((f) => readDoc(f).includes(id));
         if (!presentSomewhere) {
           findings.push({
             profile: P, profileStatus: status, severity: "WARNING",
@@ -301,7 +294,6 @@ export function runDocCore(
   // ---- 5) pretendime absolute — kontekstuale per-rresht, me kualifikues ----
   for (const file of [...surfaces.orderSurfaces, ...(surfaces.trackerFile ? [surfaces.trackerFile] : [])]) {
     const text = readDoc(file);
-    if (text === undefined) continue;
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] ?? "";
@@ -325,13 +317,12 @@ export function runDocCore(
   if (event?.body === undefined) {
     evaluations.push({
       profile: P, profileStatus: status, status: "NOT_EVALUATED",
-      reason: "pr-body checks: missing PR event/body",
+      check: "pr-body", reason: "missing PR event/body",
     });
   } else {
     const bodyLines = event.body.split("\n");
     for (const rule of surfaces.authorities) {
       const authorityText = readDoc(rule.authorityFile);
-      if (authorityText === undefined) continue;
       const m = rule.authorityPattern.exec(authorityText);
       const currentValue = m?.[1];
       if (currentValue === undefined) continue;

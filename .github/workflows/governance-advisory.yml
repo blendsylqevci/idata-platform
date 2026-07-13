@@ -44,21 +44,34 @@ jobs:
       - name: Unit tests (integrity-linter)
         run: pnpm --filter @idata/integrity-linter test
 
+      # FAIL-CLOSED: pa pipeline exit-sensitive — exit 2 i CLI-së e kthen step-in
+      # (dhe job-in) të kuq. Raporti mbetet runner-local; ZERO artifact upload.
       - name: Advisory scan (DOC-CORE + HISTORY-PRIV)
+        shell: bash
         run: |
+          set -euo pipefail
           node packages/integrity-linter/dist/cli.js \
             --profiles DOC-CORE,HISTORY-PRIV \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}" \
-            --format text | tee linter-report.txt
+            --format text > linter-report.txt
+          cat linter-report.txt
 
+      # Summary lexohet edhe kur scan-i dështon (if: always()), por NUK e kthen
+      # job-in jeshil dhe NUK maskon exit code-in e step-it të scan-it.
       - name: Summary (vetëm counts + safe locators — zero matched content, zero raw body)
         if: always()
+        shell: bash
         run: |
+          set -euo pipefail
           {
             echo "## GOV-001 integrity-linter (advisory, jo-required)"
             echo '```'
             # Raporti është i sanitizuar në burim (reporter.ts): pa matched text, pa path privat.
-            tail -n 200 linter-report.txt 2>/dev/null || echo "scan nuk prodhoi raport"
+            if [ -f linter-report.txt ]; then
+              tail -n 200 linter-report.txt
+            else
+              echo "scan nuk prodhoi raport (engine/config error — shih step-in e scan-it)"
+            fi
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
