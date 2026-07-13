@@ -198,7 +198,7 @@ describe("HISTORY-PRIV — fail-closed, per-commit, privacy-safe", () => {
     const PF = frag("PRE", "FLIGHT");
     const HG = frag("HUMAN", " ", "GATE");
     repo.write("table.md", [
-      "| a | REQ+FOO | b | c |",                                        // 5) treatment invalid
+      ["| a | REQ+", "FOO", " | b | c |"].join(""),                     // 5) treatment invalid
       `| PoC-9 simulator | ${IMPL}/${TSTD} | x | y |`,                    // 6) poc promotion
       `| cap | ${MODL} | ${TSTD} njëkohësisht | z |`,                     // 7) mixed maturity
       "| id | | b | c |",                                                 // 8) qelizë bosh

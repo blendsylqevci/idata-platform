@@ -87,7 +87,7 @@ export function buildContentRules(): ContentRule[] {
       },
     },
 
-    // ── 6) PoC/simulator i promovuar në IMPLEMENTED/TESTED (policy-history class) ─
+    // ── 6) PoC/simulator i promovuar në statusin e implementuar/testuar (policy-history class) ─
     (() => {
       // fjalët e maturity-t ndërtohen nga fragmente që ky burim të mos vetë-flagohet
       const impl = frag("IMPLE", "MENTED");
