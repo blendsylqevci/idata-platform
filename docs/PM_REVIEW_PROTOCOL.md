@@ -47,6 +47,8 @@ Skano diff-in për: emra realë personash (pronarët e bizneseve përmenden VET�
 - Asgjë nga lista "mos e ngri në kod pa konfirmim" (Tracker §5: TVSH per produkt KABI, fermerë/box 51, COGS final, settlement PLANET, RESORT, printera fiskalë) s'guxon të jetë e ngurtësuar.
 - Vendim i ri arkitekture pa ADR = flamur.
 
+**Governance prerequisite para Step B:** **GOV-001** — linter engine + `DOC-CORE` + `HISTORY-PRIV` përfundon në **PR tooling advisory para hapjes së PR-së së parë Step B**. Ky prerequisite është **jashtë zinxhirit invariant SEF** (Step B → Step C → review → Human Gate → preflight → Tier 2 mbetet i pandryshuar); required-CI mbetet gated nga `HG-LINTER-REQUIRED`.
+
 ### 6. Higjiena
 - Commit-e të vogla me mesazhe të sakta; **pa `--no-verify`**.
 - Pa dependency të reja të pa-aprovuara (kontrollo diff-in e `package.json`/`pnpm-lock.yaml`).

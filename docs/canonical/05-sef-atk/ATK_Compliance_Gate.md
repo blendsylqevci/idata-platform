@@ -97,6 +97,8 @@ Auditimi 09.07.2026 (PR #17): **278 kërkesa të nxjerra** me granularitet extra
 
 **Step A (ky PR docs)** → **Step B** PRE-Tier2 code hardening (T2-01..T2-10, `ATK-012`) → **Step C** official golden vectors + fake-HTTP/negative tests → **independent re-review** → **HUMAN GATE (autorizimi për thirrjen e PARË reale)** → **private `/ca/verify` PREFLIGHT** (wrapper evidence-safe i ndërtuar në Step B/C) → **vetëm pas suksesit të preflight-it vazhdon pjesa tjetër e Tier 2**. **Asnjë `/ca/verify`, `/ca/signcsr`, `/pos/*` ose `/citizen/*` para Human Gate.** Certifikimi/go-live = NO-GO më vete (§5). PoC-4b paralel.
 
+**Governance prerequisite jashtë zinxhirit SEF:** pas merge-it të PR #20 dhe **para hapjes së PR-së së parë Step B** përfundon **GOV-001** — linter engine + `DOC-CORE` + `HISTORY-PRIV` në **advisory mode** (`HG-LINTER-BUILD` approved; required-CI gated nga `HG-LINTER-REQUIRED`). Ky prerequisite **nuk është hallkë e zinxhirit invariant SEF** dhe nuk ecën njëkohësisht me PR-në e parë Step B.
+
 ## Lidhjet
 
 `ATK_Source_Register.md` v2.4 · `ATK_SEF_Requirements_Ledger.md` v1.6 · `Kupon_Print_Spec.md` v1.1 · `Reliability_Gate.md` §5.2 · `PM_REVIEW_PROTOCOL.md` v1.5 · `poc/poc5-sef/ANALIZA.md` (korrigjimi post-audit) · Tracker (`ATK-002` REOPENED, `ATK-005`, `ATK-010`, `ATK-011` OPEN/PENDING_INDEPENDENT_REVIEW, `ATK-012`, `ATK-013`, `ACC-012`, `PRIV-001`).
