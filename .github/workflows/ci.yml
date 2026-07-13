@@ -56,14 +56,14 @@ jobs:
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
-      - name: Build (5 workspaces)
+      - name: Build (6 workspaces)
         run: pnpm build
 
       - name: Migrate database (nga zero në DB-në e pastër të CI-së)
         run: pnpm --filter @idata/database migrate
 
-      - name: Typecheck (5 workspaces)
+      - name: Typecheck (6 workspaces)
         run: pnpm typecheck
 
-      - name: Test (5 workspaces; api/web/database prekin Postgres)
+      - name: Test (6 workspaces; api/web/database prekin Postgres)
         run: pnpm test
