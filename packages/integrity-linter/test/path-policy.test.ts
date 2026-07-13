@@ -59,6 +59,12 @@ describe("path-policy — parity me .gitignore + guard + PROJECT_RULES", () => {
       "keys/store.keystore",
       "keys/store.jks",
       ".ssh/id_rsa",
+      // Hardening II §3:
+      "notes.secret.md",
+      "docs/nested/Deep.SECRET.md",
+      frag(".", "claude") + "/session.json",
+      "x/prefix_" + frag("Ofer", "ta") + "_synthetic.pdf",   // stem KUDO në basename
+      "y/re_" + frag("Kontra", "t") + "a_x.docx",
     ];
     for (const p of cases) {
       expect(evaluatePath(p), p).toBe("BLOCKED");

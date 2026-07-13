@@ -4,24 +4,24 @@ import { GitCliReader } from "../src/git-repository.js";
 import { runDocCore, defaultSurfaces, type DocCoreSurfaces } from "../src/profiles/doc-core.js";
 import { ScanError } from "../src/types.js";
 
-function syntheticSurfaces(): DocCoreSurfaces {
+function syntheticSurfaces(rowCountRequirement: "REQUIRED_CURRENT" | "SCAN_IF_PRESENT" = "REQUIRED_CURRENT"): DocCoreSurfaces {
   return {
     orderSurfaces: ["index.md"],
     trackerFile: "tracker.md",
     milestoneSurfaces: ["index.md", "roadmap.md"],
-    approvedRoleTokens: ["Pronari", "PM"],
+    approvedRoleWords: ["pronari", "pm"],
     authorities: [
       {
-        id: "ledger-version",
+        id: "ledger-version", kind: "version",
         authorityFile: "ledger.md",
-        authorityPattern: /\*\*Versioni:\*\* (\d+\.\d+)/,
-        consumers: [{ file: "index.md", pattern: /Ledger(?:\.md)?`?\*{0,2}\s*(?:[—–:])?\s*\*{0,2}v(\d+\.\d+)/g }],
+        authorityPattern: /\*\*Versioni:\*\* (\d+\.\d+)/g,
+        consumers: [{ file: "index.md", requirement: "REQUIRED_CURRENT", pattern: /Ledger(?:\.md)?`?\*{0,2}\s*(?:[—–:·])?\s*\*{0,2}v(\d+\.\d+)/g }],
       },
       {
-        id: "row-count",
+        id: "row-count", kind: "count",
         authorityFile: "ledger.md",
-        authorityPattern: /TOTAL: (\d+)/,
-        consumers: [{ file: "index.md", pattern: /(\d{2,3}) source-rows/g }],
+        authorityPattern: /TOTAL: (\d+)/g,
+        consumers: [{ file: "index.md", requirement: rowCountRequirement, pattern: /(\d+) source-rows/g, excludeBefore: /CONTRADICTS[^0-9]{0,12}$/ }],
       },
     ],
   };
@@ -138,6 +138,82 @@ describe("DOC-CORE — fail-closed + drift/order/milestone/claims/pr-body", () =
     expect(vocab).toHaveLength(1);
     expect(vocab[0]?.severity).toBe("REVIEW");
     expect(JSON.stringify(r)).not.toContain("Filan");
+  });
+
+  it("§1 inverse: required consumer PA referencë → DC-CURRENT-VALUE-MISSING; optional pa referencë → clean", () => {
+    const repo = makeTempRepo();
+    repo.write("ledger.md", "**Versioni:** 1.6\nTOTAL: 132\n");
+    repo.write("index.md", "asnjë referencë ledger këtu\n");
+    repo.write("tracker.md", "| `GOV-001` | x | y | Pronari | z |\n");
+    repo.write("roadmap.md", "GOV-001\n");
+    repo.commitAll("docs");
+    const r = runDocCore(new GitCliReader(repo.dir), "HEAD", syntheticSurfaces(), { body: "" });
+    const missing = r.findings.filter((f) => f.ruleId === "DC-CURRENT-VALUE-MISSING").map((f) => f.locator);
+    expect(missing.some((l) => l.includes("ledger-version"))).toBe(true);
+    expect(missing.some((l) => l.includes("row-count"))).toBe(true);
+    // optional (SCAN_IF_PRESENT) → clean
+    const rOpt = runDocCore(new GitCliReader(repo.dir), "HEAD", syntheticSurfaces("SCAN_IF_PRESENT"), { body: "" });
+    expect(rOpt.findings.filter((f) => f.locator.includes("row-count"))).toHaveLength(0);
+  });
+
+  it("§1: current + stale bashkë → vetëm stale finding; etiketa historike në rresht TJETËR nuk e mbron stale-in", () => {
+    const repo = makeTempRepo();
+    const V = (a: string, b: string) => ["v", a, ".", b].join("");
+    writeBase(repo, [
+      "aktuale: Ledger v1.6 me 132 source-rows",
+      "Historia e vjetër është SUPERSEDED këtu poshtë:",     // etiketë në rresht TJETËR
+      `stale aktive: Ledger ${V("1", "5")}`,                  // NUK mbrohet nga rreshti i mësipërm
+    ].join("\n") + "\n");
+    const r = runDocCore(new GitCliReader(repo.dir), "HEAD", syntheticSurfaces(), { body: "" });
+    const drift = r.findings.filter((f) => f.ruleId === "DC-OLD-VALUE-DRIFT");
+    expect(drift).toHaveLength(1);
+    expect(drift[0]?.locator).toContain("index.md:3");
+    expect(r.findings.filter((f) => f.ruleId === "DC-CURRENT-VALUE-MISSING")).toHaveLength(0);
+  });
+
+  it("§1: rresht i etiketuar historik me vlerën CURRENT nuk e plotëson REQUIRED_CURRENT", () => {
+    const repo = makeTempRepo();
+    writeBase(repo, "Historia: Ledger v1.6 (SUPERSEDED wording) me 132 source-rows\n");
+    const r = runDocCore(new GitCliReader(repo.dir), "HEAD", syntheticSurfaces(), { body: "" });
+    expect(r.findings.some((f) => f.ruleId === "DC-CURRENT-VALUE-MISSING" && f.locator.includes("ledger-version"))).toBe(true);
+    expect(r.findings.some((f) => f.locator.includes("[vetëm stale/historike]"))).toBe(true);
+  });
+
+  it("§1: authority AMBIGUOUS (dy vlera të ndryshme) → exit-2 path (ScanError)", () => {
+    const repo = makeTempRepo();
+    repo.write("ledger.md", "**Versioni:** 1.6\n**Versioni:** 1.5\nTOTAL: 132\n");
+    repo.write("index.md", "Ledger v1.6 · 132 source-rows\n");
+    repo.write("tracker.md", "| `GOV-001` | x | y | Pronari | z |\n");
+    repo.write("roadmap.md", "GOV-001\n");
+    repo.commitAll("docs");
+    expect(() => runDocCore(new GitCliReader(repo.dir), "HEAD", syntheticSurfaces(), { body: "" }))
+      .toThrow("INCOMPLETE_SCAN:AUTHORITY_AMBIGUOUS");
+  });
+
+  it("§4: hasFile fail-injection (reader hedh) → propagon exit-2, kurrë skip+EVALUATED", () => {
+    const repo = makeTempRepo();
+    writeBase(repo, "Ledger v1.6 me 132 source-rows\n");
+    const real = new GitCliReader(repo.dir);
+    const failing = new Proxy(real, {
+      get(target, prop, receiver) {
+        if (prop === "hasFile") return () => { throw new ScanError("GIT_OP_FAILED:ls-tree"); };
+        return Reflect.get(target, prop, receiver);
+      },
+    });
+    expect(() => runDocCore(failing as GitCliReader, "HEAD", syntheticSurfaces(), { body: "" }))
+      .toThrow("GIT_OP_FAILED:ls-tree");
+  });
+
+  it("§7 role tokenized: rol i aprovuar si substring NUK mjafton (word-boundary)", () => {
+    const repo = makeTempRepo();
+    writeBase(repo, "Ledger v1.6 me 132 source-rows\n",
+      "| `ACC-902` | x | y | Pronari / PM | z |\n| `ACC-903` | x | y | Xpronarix | z |\n| `ACC-904` | x | y | Emri Sintetik + Pronari | z |\n");
+    const r = runDocCore(new GitCliReader(repo.dir), "HEAD", syntheticSurfaces(), { body: "" });
+    const vocab = r.findings.filter((f) => f.ruleId === "DC-ROLE-VOCAB").map((f) => f.locator);
+    expect(vocab).toHaveLength(2); // ACC-903 (substring bypass) + ACC-904 (token i panjohur)
+    expect(vocab.some((l) => l.endsWith(":2"))).toBe(true);
+    expect(vocab.some((l) => l.endsWith(":3"))).toBe(true);
+    expect(JSON.stringify(r)).not.toContain("Sintetik"); // kandidati s'publikohet
   });
 
   it("defaultSurfaces + repo kanonik sintetik i PLOTË: zero findings; stale INDEX → drift", () => {

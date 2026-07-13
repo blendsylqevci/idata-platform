@@ -146,6 +146,41 @@ describe("§9 EVENT hardening — input i jashtëm i pabesuar", () => {
     expect(() => enforceRangeConsistency({}, ev)).not.toThrow();
   });
 
+  it("§8 trust boundary: env NUK lexohet pa GITHUB_ACTIONS+pull_request; --event-file eksplicit funksionon; wrong event name injorohet", () => {
+    const repo = makeTempRepo();
+    writeFullCanonicalRepo(repo);
+    const p = writeEvent({ pull_request: { body: "x" } });
+    // env i vendosur POR jo në Actions → NUK lexohet (scan OK pa event)
+    const r1 = runCli(["--profiles", "DOC-CORE", "--format", "json"], repo.dir, { GITHUB_EVENT_PATH: p });
+    expect(r1.status).toBe(0);
+    const doc1 = JSON.parse(r1.stdout) as { evaluations: Array<{ check?: string; evaluation: string }> };
+    expect(doc1.evaluations.some((e) => e.check === "pr-body" && e.evaluation === "NOT_EVALUATED")).toBe(true);
+    // Actions + event i GABUAR (push) → injorohet
+    const r2 = runCli(["--profiles", "DOC-CORE", "--format", "json"], repo.dir,
+      { GITHUB_EVENT_PATH: p, GITHUB_ACTIONS: "true", GITHUB_EVENT_NAME: "push" });
+    expect(r2.status).toBe(0);
+    // Actions + pull_request → lexohet
+    const r3 = runCli(["--profiles", "DOC-CORE", "--format", "json"], repo.dir,
+      { GITHUB_EVENT_PATH: p, GITHUB_ACTIONS: "true", GITHUB_EVENT_NAME: "pull_request" });
+    expect(r3.status).toBe(0);
+    const doc3 = JSON.parse(r3.stdout) as { evaluations: Array<{ check?: string }> };
+    expect(doc3.evaluations.some((e) => e.check === "pr-body")).toBe(false); // body u lexua
+    // --event-file eksplicit lokalisht ✓
+    const r4 = runCli(["--profiles", "DOC-CORE", "--format", "json", "--event-file", p], repo.dir, {});
+    expect(r4.status).toBe(0);
+  });
+
+  it("§8 boundary: body limit ekzakt OK; limit+1 → EVENT_BODY_OVERSIZE; pull_request null → EVENT_MALFORMED", () => {
+    const exact = writeEvent({ pull_request: { body: "a".repeat(65_536) } });
+    expect(readPullRequestEvent(exact)?.body?.length).toBe(65_536);
+    const plus1 = writeEvent({ pull_request: { body: "a".repeat(65_537) } });
+    expect(() => readPullRequestEvent(plus1)).toThrow("EVENT_BODY_OVERSIZE");
+    const nullPr = writeEvent({ pull_request: null });
+    expect(() => readPullRequestEvent(nullPr)).toThrow("EVENT_MALFORMED");
+    const noPr = writeEvent({ something_else: 1 });
+    expect(() => readPullRequestEvent(noPr)).toThrow("EVENT_MALFORMED");
+  });
+
   it("event i pranishëm live (proces real): scope block i vlefshëm → zero HP-SCOPE findings", () => {
     const repo = makeTempRepo();
     writeFullCanonicalRepo(repo);
@@ -155,9 +190,9 @@ describe("§9 EVENT hardening — input i jashtëm i pabesuar", () => {
     const body = ["<!-- integrity-linter:scope", "allowed-paths:", "- docs/", "-->"].join("\n");
     const p = writeEvent({ pull_request: { base: { sha: base }, head: { sha: head }, body } });
     const { status, stdout } = runCli(
-      ["--profiles", "HISTORY-PRIV", "--base", base, "--head", head, "--format", "json"],
+      ["--profiles", "HISTORY-PRIV", "--base", base, "--head", head, "--format", "json", "--event-file", p],
       repo.dir,
-      { GITHUB_EVENT_PATH: p },
+      {},
     );
     expect(status).toBe(0);
     const doc = JSON.parse(stdout) as { findings: Array<{ ruleId: string }> };

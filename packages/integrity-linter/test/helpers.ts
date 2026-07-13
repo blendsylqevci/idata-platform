@@ -91,21 +91,47 @@ export function writeFullCanonicalRepo(repo: TempRepo, opts?: { staleIndexLedger
   const POC5README = "poc/poc5-sef/README.md";
   const FINDINGS = "docs/canonical/05-sef-atk/ATK_SEF_Offline_Faturimi_Findings.md";
 
-  repo.write(LEDGER, "**Versioni:** 1.6\nSource-requirement rows: 132**\nclosure/product keys: 46**\n**45 kontrolle** me `CONFIRM_X`\nRegister v2.4 sync\n");
+  repo.write(LEDGER, [
+    "**Versioni:** 1.6",
+    "Source-requirement rows: 132**",
+    "closure/product keys: 46**",
+    "**45 kontrolle** me `CONFIRM_X`",
+    "CONTRADICTS: 5 source-rows = 4 defekte",
+    "Register v2.4 sync",
+  ].join("\n") + "\n");
   repo.write(REGISTER, "**Versioni:** 2.4\nLedger v1.6 pointer · 132 source-rows · 46 closure keys · 45 konfirmime\n");
-  repo.write(GATE, "Ledger v1.6 · Register v2.4 · 132 source-rows · 46 closure keys · 45 konfirmime\nGOV-001 HG-LINTER-BUILD HG-LINTER-REQUIRED\n");
-  repo.write(SSOT, "Ledger v1.6 (**132 source-rows · 46 closure keys · 45 konfirmime**) · Register **v2.4** · 45 CONFIRM_ rreshta\n");
-  repo.write(TRACKER, "| `GOV-001` | governance | linter | Pronari | `PARTIAL` | HIGH | x | y |\n");
+  repo.write(GATE, [
+    "Ledger v1.6 · Register v2.4 · 132 source-rows · 46 closure keys · 45 konfirmime",
+    "ATK-011 OPEN / PENDING_INDEPENDENT_REVIEW",
+    "Tier 2** NOT IMPLEMENTED/NO-GO — replika: Tier 2 NOT IMPLEMENTED/NO-GO",
+    "GOV-001 HG-LINTER-BUILD HG-LINTER-REQUIRED gated",
+  ].join("\n") + "\n");
+  repo.write(SSOT, [
+    "Ledger v1.6 (**132 source-rows · 46 closure keys · 45 konfirmime**) · Register **v2.4** · 45 CONFIRM_ rreshta",
+    "ATK-011 OPEN / PENDING_INDEPENDENT_REVIEW · Tier 2 NOT IMPLEMENTED/NO-GO",
+  ].join("\n") + "\n");
+  repo.write(TRACKER, [
+    "| `GOV-001` | governance | linter | Pronari | `PARTIAL / ADVISORY_ACTIVE` | HIGH | 07_PRODATA_Evidence_Closure_Parity_Matrix.md` v2.3 | y |",
+    "| `ATK-011` | SEF | Harta LAPT — statusi: OPEN / PENDING_INDEPENDENT_REVIEW | Pronari | `open` | P0 | x | y |",
+  ].join("\n") + "\n");
   const staleLine = [
     frag("Ledger v1", ".", "5"), " · ", frag("11", "7"), " source-rows · ", frag("4", "4"),
     " closure keys · ", frag("4", "3"), " konfirmime · ", frag("Register — v2", ".", "3"),
   ].join("");
-  repo.write(INDEX, opts?.staleIndexLedger === true
-    ? staleLine + "\nGOV-001 hapi 0\n"
-    : "Ledger v1.6 · 132 source-rows · 46 closure keys · 45 konfirmime · Register — v2.4\nGOV-001 hapi 0\n");
+  const indexOk = [
+    "Ledger v1.6 · 132 source-rows · 46 closure keys · 45 konfirmime · Register — v2.4",
+    "ATK-011 OPEN / PENDING_INDEPENDENT_REVIEW · Tier 2 NOT IMPLEMENTED/NO-GO",
+    "GOV-001 hapi 0",
+  ].join("\n") + "\n";
+  const indexStale = staleLine + "\nATK-011 OPEN / PENDING_INDEPENDENT_REVIEW · Tier 2 NOT IMPLEMENTED/NO-GO\nGOV-001 hapi 0\n";
+  repo.write(INDEX, opts?.staleIndexLedger === true ? indexStale : indexOk);
   repo.write(ROADMAP, "Step B → Step C → independent review → HUMAN GATE → private PREFLIGHT → Tier 2\nLedger v1.6 · Register v2.4 · 132 source-rows · 46 closure keys · 45 konfirmime\nGOV-001 1a\n");
   repo.write(PM, "GOV-001 scope; Ledger v1.6 · 132 source-rows\n");
-  repo.write(MATRIX07, "**Versioni:** 2.3\nlinter section\n");
+  repo.write(MATRIX07, [
+    "**Versioni:** 2.3",
+    "linter section — 14 profilet e tjera = NOT_IMPLEMENTED",
+    "HG-LINTER-REQUIRED, i paaprovuar",
+  ].join("\n") + "\n");
   repo.write(ANALIZA, "Ledger v1.6 (132 source-rows · 46 closure keys) · Register v2.4 · 45 konfirmime\n");
   repo.write(POC5README, "Step B → Step C → independent review → HUMAN GATE → private PREFLIGHT → Tier 2\n");
   repo.write(FINDINGS, "Register v2.4 + Ledger v1.6 · 132 source-rows · 46 closure keys · 45 konfirmime\n");

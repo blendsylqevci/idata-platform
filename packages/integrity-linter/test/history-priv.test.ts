@@ -187,45 +187,80 @@ describe("HISTORY-PRIV — fail-closed, per-commit, privacy-safe", () => {
     expect(r2.findings.some((f) => f.ruleId === "HP-SCOPE-BLOCK")).toBe(true);
   });
 
-  it("§6 klasat canonical (pozitive + negative): treatment/poc-promotion/mixed/empty-cell/evidence/operational/gate-order", () => {
+  it("§6 klasat canonical (pozitive + negative + column-aware)", () => {
     const { repo, base } = repoWithBase();
     const IMPL = frag("IMPLE", "MENTED");
     const TSTD = frag("TES", "TED");
     const MODL = frag("MOD", "ELED");
     const XHIRO = frag("xhiro", "ja ditore");
     const EXTR = frag("extrac", "tion");
-    const METRIC = frag("12,", "345 rows");
     const PF = frag("PRE", "FLIGHT");
     const HG = frag("HUMAN", " ", "GATE");
-    repo.write("table.md", [
-      ["| a | REQ+", "FOO", " | b | c |"].join(""),                     // 5) treatment invalid
-      `| PoC-9 simulator | ${IMPL}/${TSTD} | x | y |`,                    // 6) poc promotion
-      `| cap | ${MODL} | ${TSTD} njëkohësisht | z |`,                     // 7) mixed maturity
-      "| id | | b | c |",                                                 // 8) qelizë bosh
-      `backup ${EXTR}: ${METRIC} nga dump-i`,                             // 3) evidence metric
-      `${XHIRO} e lokalit u rrit`,                                        // 4) operational claim
-      `rendi: private ${PF} → ${HG}`,                                     // 10) gate order
+    // tabelë REALE me header Treatment + Maturity (column-aware §2D/§2E/§2G)
+    repo.write("matrix.md", [
+      "| ID | Treatment | Maturity | Prova |",
+      "|---|---|---|---|",
+      "| a | REQ+FOO | " + MODL + " | x |",                        // Treatment: token i panjohur
+      "| b | LATER | " + MODL + " | x |",                          // Treatment: unknown-only standalone
+      "| c | DECISION_REQUIRED | " + MODL + " | x |",              // Treatment: unknown-only standalone
+      "| d | REQ+REF | " + IMPL + " " + TSTD + " | x |",           // Maturity: dy stage në një qelizë
+      "| e | REQ | GAP " + MODL + " | x |",                         // Maturity: GAP + MODELED mixed
+      "| f | REQ | " + MODL + " | x |",                             // valid single-stage → clean
+      "| g | REQ+MD | PROVEN-PoC " + MODL + " | x |",               // qualifier + stage → clean
+      "| h | REQ | " + MODL + " |  |",                              // qelizë mandatory bosh (kolona e fundit)
+    ].join("\n") + "\n");
+    // jashtë tabele/kolone: zero FP
+    repo.write("prose.md", [
+      "LATER do të vendoset më vonë; DECISION_REQUIRED është term i lirë këtu.",
+      "Tranzicioni narrativ " + MODL + " → " + TSTD + " jashtë maturity cell.",
+      "backup " + EXTR + ": 223 records nga dump-i",                 // §2B pa separator
+      "backup " + EXTR + ": 1076 rows",                              // §2B pa separator
+      XHIRO + " e lokalit u rrit",                                   // §2C
+      "PoC " + IMPL + " pa production evidence",                     // §2F — 'pa' NUK e shpëton
+      "rendi: private " + PF + " → " + HG,                           // §2I single-line
       "",
-      "negativë (s'duhet të japin findings):",
+      "negativë:",
       "| a | REQ+REF | b | c |",
-      `| PoC-9 | JO-${TSTD} feasibility | x | y |`,
-      "| id | — | b | c |",
-      `Historia: ${XHIRO} (HISTORICAL)`,
-      `rendi i saktë: ${HG} → private ${PF}`,
+      "PoC feasibility-only, JO-" + TSTD + ".",
+      "Historia: " + XHIRO + " (HISTORICAL)",
+      "rendi i saktë: " + HG + " → private " + PF,
+      "vetëm 223 records pa kontekst këtu (near-miss)",               // near-miss → s'ka context-fjalë
+    ].join("\n") + "\n");
+    // §2I multiline: lista e shpërndarë në rreshta të njëpasnjëshëm
+    repo.write("order.md", [
+      "1. private " + PF + " së pari",
+      "2. " + HG + " më pas",
+      "3. Tier 2 në fund",
     ].join("\n") + "\n");
     const head = repo.commitAll("canonical classes");
     const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined);
     const ids = r.findings.map((f) => f.ruleId);
-    expect(ids).toContain("HP-TREATMENT-VOCAB");
-    expect(ids).toContain("HP-POC-PROMOTION");
-    expect(ids).toContain("HP-MIXED-MATURITY");
-    expect(ids).toContain("HP-EMPTY-MANDATORY-CELL");
-    expect(ids).toContain("HP-EVIDENCE-METRIC");
-    expect(ids).toContain("HP-OPERATIONAL-CLAIM");
-    expect(ids).toContain("HP-GATE-ORDER");
-    expect(ids.filter((i) => i === "HP-TREATMENT-VOCAB")).toHaveLength(1);
-    expect(ids.filter((i) => i === "HP-POC-PROMOTION")).toHaveLength(1);
-    expect(ids.filter((i) => i === "HP-GATE-ORDER")).toHaveLength(1);
+    expect(ids.filter((i) => i === "HP-TREATMENT-VOCAB")).toHaveLength(3); // FOO/LATER/DECISION_REQUIRED
+    expect(ids.filter((i) => i === "HP-MIXED-MATURITY")).toHaveLength(2);  // d + e
+    expect(ids.filter((i) => i === "HP-EMPTY-MANDATORY-CELL")).toHaveLength(1);
+    expect(ids.filter((i) => i === "HP-EVIDENCE-METRIC")).toHaveLength(2); // 223 + 1076
+    expect(ids.filter((i) => i === "HP-OPERATIONAL-CLAIM")).toHaveLength(1);
+    expect(ids.filter((i) => i === "HP-POC-PROMOTION")).toHaveLength(1);   // 'pa' s'e shpëton
+    expect(ids.filter((i) => i === "HP-GATE-ORDER").length).toBeGreaterThanOrEqual(2); // single + multiline
+  });
+
+  it("§2A: regulated IDs kontekstualë — 9-shifror me etiketë → finding; 7-shifror pa kontekst → clean", () => {
+    const { repo, base } = repoWithBase();
+    const nine = frag("1234", "56789");
+    const seven = frag("765", "4321");
+    const label = frag("N", "UI");
+    const vat = frag("TV", "SH");
+    repo.write("ids.md", [
+      `${label}: ${nine} (sintetik-format, jo vlerë reale)`,
+      `${vat} nr ${frag("8765", "4321")}`,
+      `thjesht numri ${seven} pa etiketë`,
+    ].join("\n") + "\n");
+    const head = repo.commitAll("ids");
+    const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined);
+    const ctx = r.findings.filter((f) => f.ruleId === "HP-REGULATED-ID-CONTEXT");
+    expect(ctx).toHaveLength(2);
+    const json = toJsonReport({ mode: "advisory", evaluations: r.evaluations, findings: r.findings });
+    expect(json).not.toContain(nine); // vlera KURRË në output
   });
 
   it("§6.9: version drift PER-COMMIT kundër snapshot-it tracked të po atij commit-i", () => {
@@ -235,14 +270,41 @@ describe("HISTORY-PRIV — fail-closed, per-commit, privacy-safe", () => {
     repo.write("docs/note.md", ["shih Ledger.md` — v1", ".", "5 për detajet\n"].join(""));
     const head = repo.commitAll("stale consumer");
     const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined);
-    const drift = r.findings.filter((f) => f.ruleId === "HP-VERSION-DRIFT");
+    const drift = r.findings.filter((f) => f.ruleId === "HP-DRIFT-VERSION");
     expect(drift).toHaveLength(1);
-    expect(drift[0]?.locator).toBe("docs/note.md:1");
+    expect(drift[0]?.locator).toContain("docs/note.md:1");
     // negative: konsumator korrekt + etiketë historike
     repo.write("docs/note2.md", "Ledger v1.6 aktual\nHistoria: Ledger v1.5 (SUPERSEDED)\n");
     const head2 = repo.commitAll("ok consumer");
     const r2 = runHistoryPriv(new GitCliReader(repo.dir), head, head2, undefined);
-    expect(r2.findings.filter((f) => f.ruleId === "HP-VERSION-DRIFT")).toHaveLength(0);
+    expect(r2.findings.filter((f) => f.ruleId === "HP-DRIFT-VERSION")).toHaveLength(0);
+  });
+
+  it("§2H: phase/status/count/set drift per-commit me klasa të injektuara (engine generik)", () => {
+    const { repo, base } = repoWithBase();
+    repo.write("auth.md", "PHASE: F5\nSTATUS: NO-GO\nCOUNT: 132\n");
+    repo.commitAll("authorities");
+    repo.write("cons.md", [
+      "faza aktive: PHASE F4 këtu",             // phase drift
+      "verdikti: STATUS GO tani",                // status drift
+      "totali: COUNT 117 rreshta",               // count drift
+      "ok: PHASE F5 · STATUS NO-GO · COUNT 132", // current → clean
+    ].join("\n") + "\n");
+    const head = repo.commitAll("consumers");
+    const classes = [
+      { id: "syn-phase", kind: "status" as const, authorityFile: "auth.md", authorityPattern: /PHASE: (F\d+)/g,
+        consumers: [{ file: "cons.md", requirement: "SCAN_IF_PRESENT" as const, pattern: /PHASE (F\d+)/g }] },
+      { id: "syn-status", kind: "status" as const, authorityFile: "auth.md", authorityPattern: /STATUS: (NO-GO|GO)/g,
+        consumers: [{ file: "cons.md", requirement: "SCAN_IF_PRESENT" as const, pattern: /STATUS (NO-GO|(?<!NO-)GO)/g }] },
+      { id: "syn-count", kind: "count" as const, authorityFile: "auth.md", authorityPattern: /COUNT: (\d+)/g,
+        consumers: [{ file: "cons.md", requirement: "SCAN_IF_PRESENT" as const, pattern: /COUNT (\d+)/g }] },
+    ];
+    const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined, { driftClasses: classes });
+    const ids = r.findings.map((f) => `${f.ruleId}|${f.locator}`);
+    expect(ids.some((x) => x.startsWith("HP-DRIFT-STATUS") && x.includes("syn-phase"))).toBe(true);
+    expect(ids.some((x) => x.startsWith("HP-DRIFT-STATUS") && x.includes("syn-status"))).toBe(true);
+    expect(ids.some((x) => x.startsWith("HP-DRIFT-COUNT") && x.includes("syn-count"))).toBe(true);
+    expect(r.findings.filter((f) => f.locator.includes("cons.md:4"))).toHaveLength(0); // current clean
   });
 
   it("locator i content-finding = numër rreshti REAL i file-it", () => {
