@@ -1,12 +1,13 @@
 # Faza 0 — Plani i Ekzekutimit (iData+)
 
-**Versioni:** 1.2 · **Data:** 28 Qershor 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.5
+**Versioni:** 1.2 (HISTORIK — plani origjinal i Fazës 0) · **Data:** 28 Qershor 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.5
+**Shënim statusi (12.07.2026):** ky dokument = **plan/histori**; statusi AKTUAL i punës = roadmap §4/§6 + `ATK_SEF_Requirements_Ledger.md` + Gate v2.0 — **asnjë pretendim "100% gati" nuk rrjedh nga ky plan** (PoC-5 compliance = FAIL/REOPENED; Tier 2 = NO-GO).
 **Parim kryesor:** Faza 0 = **dokumentim + provë + setup**, **PA kod prodhimi**. Asnjë feature pa status; asnjë vendim pa pronar + afat.
 
 ---
 
 ## 1. Objektivi
-Të çojmë projektin nga "~85–90% gati" në **100% gati për Fazën 1 (Foundation)** duke mbyllur paketën organizative dhe teknike: repo + board + plan + 5 PoC + RBAC + parity kontabël + data model + decision gates + nisja e SEF sandbox. Në fund të Fazës 0 dimë **me prova** se arkitektura qëndron.
+Të çojmë projektin nga "~85–90% gati" në **100% gati për Fazën 1 (Foundation)** *(objektiv HISTORIK i planit — statusi real sot = roadmap/ledger)* duke mbyllur paketën organizative dhe teknike: repo + board + plan + 5 PoC + RBAC + parity kontabël + data model + decision gates + nisja e SEF sandbox. Në fund të Fazës 0 dimë **me prova** se arkitektura qëndron.
 
 ## 2. Kohëzgjatja & ritmi
 - **1–2 javë.** Pa kod biznesi. Lejohet vetëm kod "**Walking Skeleton**" (aplikacione bosh që dërgojnë "ping" nga mobili → hub → cloud) dhe PoC të izoluar.
@@ -16,13 +17,13 @@ Të çojmë projektin nga "~85–90% gati" në **100% gati për Fazën 1 (Founda
 
 | # | Workstream | Përmbajtja | Pronari |
 |---|---|---|---|
-| A | Repo & CI | repo privat, emër neutral, monorepo, scaffold, CI bazë, branch protection | Blend (krijim) + Claude Code (skeleti) |
-| B | Board & Docs | Notion/board me swimlanes; SSOT në repo; regjistrat | Blend (krijim) + Claude Code (përmbajtja) |
+| A | Repo & CI | repo privat, emër neutral, monorepo, scaffold, CI bazë, branch protection | Pronari (krijim) + Claude Code (skeleti) |
+| B | Board & Docs | Notion/board me swimlanes; SSOT në repo; regjistrat | Pronari (krijim) + Claude Code (përmbajtja) |
 | C | 5 PoC | specifikimet + ekzekutimi + evidenca | Claude Code + Codex (verifikim) |
-| D | SEF/ATK | **test phase AKTIV** → analizo github.com/fiskalizimi + Swagger; onboarding PKI (TEST); printer hw vs sw | Blend + Claude Code |
+| D | SEF/ATK | **test phase AKTIV** → analizo github.com/fiskalizimi + Swagger; onboarding PKI (TEST); printer hw vs sw | Pronari + Claude Code |
 | E | Parity kontabël | Accounting Compatibility Matrix vs PRO DATA | Claude Code + Kontabilisti (validim) |
 | F | RBAC & Data Model | matrica RBAC + drafti i modelit | Claude Code + Codex |
-| G | Decision gates | regjistri ADR + vendimet ku mundemi | Codex + Blend |
+| G | Decision gates | regjistri ADR + vendimet ku mundemi | Codex + Pronari |
 | H | Mjedisi | Node 24 LTS (`.nvmrc`), pnpm, Docker, GH CLI, Expo, `.env.example` | Claude Code |
 
 ## 4. Deliverables (checklist)
@@ -38,7 +39,7 @@ Të çojmë projektin nga "~85–90% gati" në **100% gati për Fazën 1 (Founda
 | Feature Status Register | `Feature_Status_Register.md` | ✅ |
 | Repo scaffold | `scaffold/README.md`, `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md` | ✅ |
 | SEF test phase (intern) | `06_SEF_Test_Phase_Active.md` | ✅ AKTIV |
-| Repo privat + board | GitHub + Notion | ⏳ Blend |
+| Repo privat + board | GitHub + Notion | ⏳ Pronari |
 | SEF "Testim para Aplikimit" | ATK | ✅ PRANUAR 28.06.2026 |
 | 5 PoC të kaluar me evidencë | repo `/poc` + raport | ⏳ Faza 0 |
 
@@ -49,12 +50,12 @@ Faza 0 **mbyllet** kur:
 3. **5 PoC të kaluar** me evidencë (ose dështimi i dokumentuar + korrigjim arkitekture).
 4. **SEF test phase AKTIV** + GitHub Fiskalizimi i analizuar + onboarding/PoC në TEST të përgatitur.
 5. Accounting Compatibility Matrix e plotësuar + e validuar nga kontabilisti për kolonat kyçe.
-6. RBAC matrix + Data Model draft të aprovuara nga Blend/Codex.
+6. RBAC matrix + Data Model draft të aprovuara nga Pronari/Codex.
 7. Të gjitha decision gates kanë **status** (mbyllur / në pritje me afat).
 8. Mjedisi i fiksuar (`.nvmrc`, pnpm, Docker, `.env.example`).
 
 ## 6. Sekuenca (rruga e propozuar)
-1. **Repo privat + SSOT brenda repo-s** (Blend krijon; Claude Code shton scaffold).
+1. **Repo privat + SSOT brenda repo-s** (Pronari krijon; Claude Code shton scaffold).
 2. **Board** + import i tasks/pyetjeve të hapura.
 3. **Decision Gates + Data Model + RBAC + Accounting Matrix** (dokumentet — gati këtu).
 4. **SEF (test phase AKTIV):** analizo `github.com/fiskalizimi` + `models.proto` + Swagger → onboarding PKI në TEST → PoC-5.
@@ -64,7 +65,7 @@ Faza 0 **mbyllet** kur:
 ## 7. Rolet
 - **Claude Code:** ndërton (scaffold, PoC, skeleton).
 - **Codex:** PM / arkitekt / quality-gate (rishikon PR, teste, evidencë).
-- **Blend:** porta njerëzore (SEF/GL/migrim/siguri), krijon repo/board/llogari, dërgon te ATK.
+- **Pronari:** porta njerëzore (SEF/GL/migrim/siguri), krijon repo/board/llogari, dërgon te ATK.
 - **Kontabilisti / ATK / Fabrika:** përgjigjen pyetjeve përkatëse (swimlanes).
 
 ## 8. Rreziqet & zbutja

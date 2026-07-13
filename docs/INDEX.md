@@ -50,21 +50,24 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/04-planet-finance/Finance_Operations_Workflow_Spec_2026-06-29.md`
 - `docs/canonical/05-sef-atk/ATK_SEF_Offline_Faturimi_Findings.md`
 - `docs/canonical/05-sef-atk/ATK_Compliance_Gate.md`
-- `docs/canonical/05-sef-atk/ATK_Source_Register.md`
+- `docs/canonical/05-sef-atk/ATK_Source_Register.md` — v2.4 source graph (CORE/EXT/LIN/CONF, bounded registered corpus)
+- `docs/canonical/05-sef-atk/ATK_SEF_Requirements_Ledger.md` — v1.6: 132 source-rows · 46 closure keys · disposition substantiv 1–123 (burimi i statusit)
 - `docs/canonical/05-sef-atk/Kupon_Print_Spec.md`
 - `docs/canonical/06-architecture/Reliability_Gate.md`
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
 - `docs/canonical/08-roadmap/Cutover_Rollback_Runbook.md`
 
-## Next gate (rendi aktual — 10.07.2026)
+## Next gate (rendi aktual — 12.07.2026, post full-corpus re-audit)
 
-*(**PRO DATA Source→Target Closure v2 = kryer** me merge të këtij ndryshimi — `07_PRODATA_Evidence_Closure_Parity_Matrix.md` v2.0.)*
+*(**Re-audit-i + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate). **Verdikti: regression lokale 66 PASS/1 LIVE SKIP · Tier 1 PARTIAL/REOPENED · compliance FAIL · Tier 2 NOT IMPLEMENTED/NO-GO** — Gate v2.0.)*
 
-1. **ATK full-corpus/LAPT closure (P0 / PRE-TIER2):** full-corpus re-audit i `ATK_Compliance_Gate.md` kundrejt `ATK_Source_Register.md` + harta LAPT (`ATK-011`).
-   *Blockers PRE-TIER2 = PRO DATA Closure v2 (kryer) + re-audit + ATK-011.* `ATK-005` triagjohet/**fiksohet** para Tier 2 (përgjigjet server-dependent merren GJATË Tier 2); `ATK-006`/`ATK-010` = certification gates të trackuara — **jo blockers automatikë** të Tier 2 (përveç nëse përgjigjja ndryshon scope-in/sigurinë).
-2. **PREFLIGHT privat** (wrapper i maskuar — pjesë e Tier 2, i gated).
-3. **PoC-5 Tier 2 LIVE** — VETËM pas hapave 1–2 + aprovimit të veçantë të Pronarit (Human Gate).
-4. **Paralel:** PoC-4b — dita e hardware-it (checklist në `poc/poc4-local-hub/README.md`).
+0. **GOVERNANCE PREREQUISITE — GOV-001:** PR tooling për linter engine + `DOC-CORE` + `HISTORY-PRIV`, advisory. **Duhet të përfundojë para hapjes së PR-së së parë Step B.** `HG-LINTER-BUILD` = APPROVED; required-CI mbetet gated nga `HG-LINTER-REQUIRED`. *(Prerequisite governance JASHTË zinxhirit SEF — nuk është hallkë e tij.)*
+1. **Step B — code hardening (`ATK-012`, P0/PRE-TIER2):** T2-01..T2-10 (Gate v2 §4).
+2. **Step C — golden vectors zyrtarë + fake-HTTP/negative tests.**
+3. **Independent re-review** i deltës + gates.
+4. **HUMAN GATE** — autorizimi për thirrjen e PARË reale (asnjë `/ca/*`, `/pos/*`, `/citizen/*` para tij).
+5. **Private `/ca/verify` PREFLIGHT** (wrapper-i ndërtohet në Step B/C — sot s'ekziston) → vetëm pas suksesit, pjesa tjetër e **Tier 2**; certifikimi/go-live = NO-GO më vete.
+6. **Paralel:** PoC-4b — dita e hardware-it (checklist në `poc/poc4-local-hub/README.md`).
 
 *(Gate historik i split-it — kaluar: pa humbje kërkesash; pa PII/sekrete të promovuara; pending items të trackuara; kontratat jashtë git.)*
 

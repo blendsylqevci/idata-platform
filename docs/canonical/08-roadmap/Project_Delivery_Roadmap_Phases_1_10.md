@@ -45,9 +45,9 @@ Këto janë datat më të vona të pranueshme që ruajnë shansin real për cuto
 | ENG-001 | Open | Boundary NestJS service/repository; controller-i nuk duhet të mbetet varësi direkte për Accounting Core | Tech + Codex | Faza 2 | 2026-07-24 | accounting endpoints mbeten thin/prototype; nuk ngrihet API contract final |
 | ENG-002 | Open | Custom migration runner vs tool standard për migrime production-grade | Tech + Codex | Faza 2 / Faza 9 | 2026-07-24 | custom runner lejohet vetëm për skeleton/PoC; jo për prod migration freeze |
 | ENG-003 | Closed (PR #10, 07.07) | Composite FK cross-tenant, p.sh. `role_permission (business_id, role_id) REFERENCES role (business_id, id)` | Tech | PoC-1 / Faza 1 | 2026-07-18 | PoC-1 nuk kalon PASS; tenant isolation mbetet e paprovuar në DB |
-| ENG-004 | Open | `audit_log` group-level events vs `business_id NOT NULL` skeleton | Blend + Tech | Faza 1 audit model | 2026-07-20 | vazhdohet vetëm me business-scoped audit; group-level events shtyhen si model i veçantë |
-| SEC-DEP | Active / recurring | Dependabot governance: no auto-merge, CI/gitleaks/review, weekly Security tab + `pnpm.overrides` review | Blend + Tech | Security process | Weekly | security alerts nuk mbyllen si “done” pa review; override i vjetër hiqet kur upstream e mbulon |
-| ADR-010 | Open | Hosted vs self-host EU për cloud DB/services | Blend + Tech | Faza 1/PoC infra | 2026-07-15 | përdor Postgres lokal/neutral deri në vendim; s'kyçet cloud vendor në kod |
+| ENG-004 | Open | `audit_log` group-level events vs `business_id NOT NULL` skeleton | Pronari + Tech | Faza 1 audit model | 2026-07-20 | vazhdohet vetëm me business-scoped audit; group-level events shtyhen si model i veçantë |
+| SEC-DEP | Active / recurring | Dependabot governance: no auto-merge, CI/gitleaks/review, weekly Security tab + `pnpm.overrides` review | Pronari + Tech | Security process | Weekly | security alerts nuk mbyllen si “done” pa review; override i vjetër hiqet kur upstream e mbulon |
+| ADR-010 | Open | Hosted vs self-host EU për cloud DB/services | Pronari + Tech | Faza 1/PoC infra | 2026-07-15 | përdor Postgres lokal/neutral deri në vendim; s'kyçet cloud vendor në kod |
 | ADR-011 | Open | Sync engine: PowerSync vs custom sync | Tech + PM | PoC-3, offline, mobile/hub | 2026-07-31 | PoC-3 bëhet me adapter abstraction; nuk kyçet vendor deri në vendim |
 | ADR-014 | Open | Connection pooling strategy | Tech | Faza 1/2 load path | 2026-07-20 | vazhdo me dev pool vetëm për PoC; mos bëj load commitments |
 | ADR-012 | Open | GL posting: DB functions vs NestJS transaction/hybrid | Codex + Tech | PoC-2, Accounting Core | 2026-07-24 | PoC-2 teston të dy variantet minimalisht; pa Accounting Core freeze |
@@ -58,8 +58,12 @@ Këto janë datat më të vona të pranueshme që ruajnë shansin real për cuto
 | ACC-006 | Partially answered | TVSH flat-rate 8% baza ligjore u konfirmua; mbetet posting/libër blerje/autofaturë sign-off | Kontabilisti | Faza 2/4/5 KABI | 2026-07-24 | KABI settlement mbetet draft pa GL/TVSH final |
 | ACC-007 | Sent/Open | COGS valuation/yield/batch costing | Kontabilisti + KABI | Faza 3 | 2026-08-05 | Phase 3 nis me model configurable; COGS production freeze shtyhet |
 | ACC-008 | Sent/Open | Kthime/write-off/note krediti/periudha | Kontabilisti | Faza 2/3/5/8 | 2026-08-05 | lejohet vetëm reversal conservative + approval, jo automation final |
-| Payroll gate | Open | Payroll engine i plotë vs master-data + kontribute | Blend + kontabilisti | Faza 1 | 2026-07-20 | në Faza 1 ndërtohet vetëm master-data + kontribute minimale |
-| ATK-002 | **Tier 1 PASS / Tier 2 LIVE pending** (PR #16; Tier 2 i gated) | SEF PoC teknik me GitHub fiskalizimi | iCode dev | Faza 5 | 2026-08-15 | nuk fillon aplikimi formal; KABI live rrezikohet |
+| Payroll gate | Open | Payroll engine i plotë vs master-data + kontribute | Pronari + kontabilisti | Faza 1 | 2026-07-20 | në Faza 1 ndërtohet vetëm master-data + kontribute minimale |
+| ATK-002 | **REOPENED (12.07)** — local regression evidence only (66 PASS/1 LIVE SKIP); **Tier 1 overall PARTIAL/REOPENED; compliance FAIL; Tier 2 NO-GO** (Gate v2 + ATK-012) | SEF PoC teknik me GitHub fiskalizimi | iCode dev | Faza 5 | 2026-08-15 | nuk fillon aplikimi formal; KABI live rrezikohet |
+| ATK-012 | Open — **P0/PRE-TIER2 Gate Schedule** | Step B code hardening: T2-01..T2-10 (Gate v2 §4) | iCode dev | Step B | **DATE TBD — Human Gate** (milestone blocker: PARA çdo preflight/Tier 2) | pa të s'ka thirrje reale; Tier 2 mbetet NO-GO |
+| ATK-013 | Open — P0 Gate Schedule | Paketa ligjore/aplikueshmëria (final-consumer/B2B/mixed/kohortat/Vendimi19/cash) | ATK/jurist/Pronari | para F5 freeze | **DATE TBD — Human Gate** (milestone: para KABI live) | klasifikimi i subjekteve/pagesave i pavendosur → risk ligjor live |
+| ACC-012 | Open — P0 Gate Schedule | Fatura/libra/retention/e-invoice/cash+TVSH umbrella (Ledger V01–V08, L02–L04/L08) | Kontabilisti/jurist | F2 | **DATE TBD — Human Gate** (milestone: para F2 freeze) | faturimi/librat jo-konform → bllokon Accounting Core |
+| PRIV-001 | Open — P0 Gate Schedule | Privacy governance 06/L-082 (P01–P10: ROPA/DPIA/DPO/breach/transfers) | Jurist/AIP + iCode | para certifikimit/go-live | **DATE TBD — Human Gate** (milestone: para go-live; Tier2-blocker vetëm nëse prek privatësinë e Tier 2) | go-live pa bazë ligjore përpunimi → risk AIP |
 | ATK-003 | Open | Aplikim/certifikim final SEF | iCode + ATK | KABI live / PLANET live | 2026-10-15 start | shtyrje e go-live fiskal; as KABI as PLANET nuk dalin live me faturim jo-konform |
 | ATK-004 | Open | Printer hardware vs SEF software + printer termik | iCode + ATK/vendor | Hardware procurement | 2026-08-15 | ndalo blerjen e printerëve/pajisjeve fiskale |
 | HW-001 | Open | Inventar pajisjesh ekzistuese | Klienti | Faza 4/5/7/8 | 2026-08-15 | buxhet/hardware test shtyhet; PoC me pajisje test |
@@ -110,7 +114,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - **PoC-2 Accounting Posting — PASS sipas kritereve të PoC-ut** (koncept i provuar; PR #12)
 - **PoC-3 Offline Sync — PASS sipas kritereve të PoC-ut** (koncept i provuar; PR #14)
 - **PoC-4 Local Hub — PARTIAL** (4a semantika ✅ PR #15; **4b hardware pending**)
-- **PoC-5 SEF — Tier 1 PASS** (PR #16); **Tier 2 LIVE pending** (i gated nga aprovimi i veçantë i Pronarit — Human Gate)
+- **PoC-5 SEF — post-audit 12.07.2026:** PR #16 = **evidence historike mock** (regression 66 PASS/1 LIVE SKIP); **Tier 1 overall PARTIAL/REOPENED · compliance FAIL** (5 CONTRADICTS-rreshta = 4 defekte unike) · **Tier 2 NOT IMPLEMENTED/NO-GO**. **"PoC-5 PASS" = parakusht i ardhshëm, EKSPLICITISHT NOT MET sot** (Gate v2.0 + Ledger; Step B/C para çdo hapi live)
 - **Production-readiness ≠ PoC PASS:** arrihet përmes **gates F1–F10** (jo automatikisht me F1+) — follow-ups të regjistruara (`ATK_Compliance_Gate.md` §4, `Reliability_Gate.md` §5.2) + gates e certifikimit (Gate §2e/§3).
 
 **Rregull:** PoC-të nuk janë demo UI. Janë prova teknike me test/evidencë. Nëse një PoC dështon, faza që varet prej tij nuk kalon në implementim të plotë.
@@ -413,7 +417,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 **Prerequisites / Gates**
 
 - PoC-3 offline sync PASS.
-- PoC-5 SEF PASS.
+- PoC-5 SEF PASS *(parakusht i ardhshëm — **NOT MET sot**: Tier 1 PARTIAL/REOPENED, compliance FAIL, Tier 2 NO-GO; Gate v2 + ATK-012)*.
 - ATK-002, ATK-003, ATK-004.
 - ADR-011, ADR-016, ADR-017.
 - HW-001.
@@ -672,14 +676,18 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 ---
 
-## 6. Rendi aktual i punës (përditësuar 10.07.2026)
+## 6. Rendi aktual i punës (përditësuar 12.07.2026 — pa cikël)
 
-*(**PRO DATA Source→Target Closure v2 = kryer** me merge të këtij ndryshimi — `07_PRODATA_Evidence_Closure_Parity_Matrix.md` v2.0.)*
+*(**Full-corpus re-audit + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim — `ATK_Source_Register.md` v2.4 + `ATK_SEF_Requirements_Ledger.md` v1.6 + Gate v2.0; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate).)*
 
-1. **ATK full-corpus/LAPT closure (P0 / PRE-TIER2):** re-audit i regjistrit 278-rreshtor kundrejt corpus-it të plotë (`ATK_Source_Register.md`) + harta LAPT nen-për-nen (`ATK-011`).
-   - **Blockers PRE-TIER2 (përkufizim pa cikël):** **PRO DATA Closure v2 (kryer) + full-corpus re-audit + `ATK-011`** — vetëm këto. `ATK-005` **triagjohet/fiksohet para Tier 2**; përgjigjet që varen nga serveri merren **GJATË** Tier 2. `ATK-006`/`ATK-010` = **certification gates të trackuara — JO blockers automatikë të Tier 2** (bëhen blockers vetëm nëse përgjigjja ndryshon scope-in/sigurinë).
-2. **PREFLIGHT privat** (wrapper i maskuar; pjesë e Tier 2 — i gated).
-3. **Tier 2 LIVE** — VETËM pas hapave 1–2 + aprovimit të Pronarit (Human Gate).
-4. **Paralel:** PoC-4b ecën i pavarur kur vjen hardware-i.
+1. **Step A — ky docs correction PR** (kanonizimi i verdiktit + kontratave).
+1a. **GOVERNANCE PREREQUISITE — GOV-001** *(jashtë zinxhirit SEF)*: linter engine + `DOC-CORE` + `HISTORY-PRIV`, advisory, në **PR tooling të veçantë**; **përfundon para hapjes së PR-së së parë Step B** (nuk ecën njëkohësisht me të). Required-CI mbetet gated (`HG-LINTER-REQUIRED`).
+2. **Step B — PRE-Tier2 code hardening (`ATK-012`, P0):** mbyllja e **T2-01..T2-10** (Gate v2 §4).
+3. **Step C — official golden vectors + fake-HTTP/negative tests** (kundër C#/Go @ pins).
+4. **Independent re-review** i deltës + i të gjitha gates të Tier 2.
+5. **HUMAN GATE** — autorizimi eksplicit i Pronarit **për thirrjen e PARË reale** (asnjë `/ca/*`, `/ca/signcsr`, `/pos/*`, `/citizen/*` para tij).
+6. **Private `/ca/verify` PREFLIGHT** (wrapper evidence-safe i ndërtuar në Step B/C — sot NUK ekziston) → **vetëm pas suksesit vazhdon pjesa tjetër e Tier 2**.
+7. **Certifikimi / go-live = NO-GO më vete** (blockers shtesë — Gate v2 §5).
+8. **Paralel:** PoC-4b ecën i pavarur kur vjen hardware-i.
 
 *(Rendi origjinal i 07.07.2026 — HISTORIK: review Fable/Codex → aprovim → PR docs → 5 PoC-të me radhë. Sekuenca është ekzekutuar; statusi final është te §4 "Statusi real": **PoC-4b dhe PoC-5 Tier 2 mbeten pending**.)*

@@ -17,14 +17,16 @@
 | ADR-008 | **Ndarje rolesh + iCode Support = break-glass** | 27.06 | §9 |
 | ADR-009 | **Konsignacion = shitje direkte me të drejtë kthimi** (qumështore) | 27.06 | njohja kontabël → pending |
 | ADR-019 | **SEF Test Phase AKTIV** — "Testim para Aplikimit" pranuar; test server `fiskalizimi-test.atk-ks.org` | 28.06 | §7 / file 06 |
-| ADR-020 | **Fiskalizimi GitHub = referencë e detyrueshme** (github.com/fiskalizimi: `models.proto`, ECDSA P-256, QR, **tax A/C/D/E**, **money per-field** items €0.0001/totals cents, **CouponType Sale=1/Cancel=2/Return=3**); **PoC SEF s'nis pa analizë** | 28.06 | file 06 |
+| ADR-020 | **Fiskalizimi GitHub = referencë e detyrueshme** (github.com/fiskalizimi: `models.proto`, ECDSA P-256, QR, **tax A/C/D/E**, **money per-field** items €0.0001/totals cents, **CouponType Sale=1/Cancel=2/Return=3**); **PoC SEF s'nis pa analizë** | 28.06 | file 06 · **shih shënimin korrigjues 12.07.2026 më poshtë** |
 | ADR-021 | **Secret management** — secrets store; asnjë sekret/SEF-ID/çelës në repo; audit redaction | 28.06 | §9 |
 | ADR-022 | **Branch protection + GitHub 2FA** (PR-based, review i detyrueshëm, pa force-push) | 28.06 | §9 |
 | ADR-023 | **Backup / PITR / restore drill** i detyrueshëm para Fazës 1 (promovon ADR-015) | 28.06 | §2 |
 
+**Shënim korrigjues i datuar (12.07.2026 — full-corpus re-audit; NUK rishkruhet historia e ADR-020):** formulimi origjinal "items €0.0001/totals cents" është **i pasaktë për `CouponItem.Total`** — kontrata e saktë: **unit `Price` = ×10000; item `Total` + coupon totals/payments/tax = ×100 (cents)** (Gate v2.0 §3; T2-01). Gjithashtu **org-u zyrtar ka konflikte të regjistruara**: firma **C# P1363 vs Go ASN.1 DER** (CONF-02 — encoding = OPEN deri në server evidence); **PHP proto i vjetër inkompatibil**; **Ruby pa proto**; **Swagger v0.9 vs main pas tag-ut** (CONF-03/04) — **asnjë implementim i vetëm s'është kanonik në heshtje**; referenca e plotë = `../05-sef-atk/ATK_Source_Register.md` §4–§5.
+
 ## Të hapura (Open — vendosen në Faza 0)
 ### ADR-010 · Supabase: hosted vs self-host EU
-**Konteksti:** kërkohet rezidencë EU (06/L-082) + on-prem hub. **Opsione:** (a) Supabase managed EU; (b) self-host EU (Postgres + GoTrue/Storage). **Rekomandim paraprak:** managed EU për shpejtësi, me plan exit→self-host. **Pronari:** Blend+Claude Code. **Afati:** Faza 0.
+**Konteksti:** kërkohet rezidencë EU (06/L-082) + on-prem hub. **Opsione:** (a) Supabase managed EU; (b) self-host EU (Postgres + GoTrue/Storage). **Rekomandim paraprak:** managed EU për shpejtësi, me plan exit→self-host. **Pronari:** Pronari+Claude Code. **Afati:** Faza 0.
 
 ### ADR-011 · Sync: PowerSync vs custom
 **Konteksti:** offline-first, 60–80 konkurrentë, hub lokal. **Opsione:** PowerSync (gati) vs custom outbox+CDC. **Rekomandim:** vendoset **pas PoC-3**. **Pronari:** Claude Code. **Afati:** pas PoC-3.
@@ -46,10 +48,10 @@ Sistem financiar — recovery i provuar (PITR, RPO/RTO, **restore drill** real) 
 **Opsione:** EAS (managed) vs bare workflow. **Konsiderata:** printer BT, native modules, App Store/Play Store. **Rekomandim:** EAS fillimisht, bare nëse duhen module native të thella. **Afati:** Faza 0.
 
 ### ADR-017 · Printera fiskalë: hardware vs SEF software
-**Konteksti:** Codex listoi drajverë fiskalë (Tremol/Datecs); me SEF software-fiskalizim mund të mjaftojë printer termik + nënshkrim software. **Veprim:** **konfirmo gjatë test phase AKTIVE (kanali SEF u hap), PARA blerjes së pajisjeve.** **Pronari:** Blend→ATK. **Afati:** test phase. (= SSOT pyetja #8)
+**Konteksti:** Codex listoi drajverë fiskalë (Tremol/Datecs); me SEF software-fiskalizim mund të mjaftojë printer termik + nënshkrim software. **Veprim:** **konfirmo gjatë test phase AKTIVE (kanali SEF u hap), PARA blerjes së pajisjeve.** **Pronari:** Pronari→ATK. **Afati:** test phase. (= SSOT pyetja #8)
 
 ### ADR-018 · Emri neutral i repo-s + tooling monorepo
-**Opsione:** emër neutral (jo KABI/PLANET) p.sh. `idata-platform`; tooling pnpm + Turborepo/Nx. **Rekomandim:** `idata-platform` (privat) + pnpm workspaces + Turborepo. **Pronari:** Blend (krijim). **Afati:** Faza 0, dita 1.
+**Opsione:** emër neutral (jo KABI/PLANET) p.sh. `idata-platform`; tooling pnpm + Turborepo/Nx. **Rekomandim:** `idata-platform` (privat) + pnpm workspaces + Turborepo. **Pronari:** Pronari (krijim). **Afati:** Faza 0, dita 1.
 
 ---
 ## Përmbledhje statusi

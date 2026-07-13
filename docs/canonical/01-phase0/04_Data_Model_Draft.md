@@ -1,6 +1,6 @@
 # Faza 0 — Data Model Draft (iData+)
 
-**Versioni:** 2.2.1 · **Data:** 5 Korrik 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.17 §13 + `03-kabi/KABI_Operational_Evidence_Update_2026-07-05.md` + `03-kabi/Accountant_Confirmation_TVSH_e_Sheshte_Fermere_KABI_2026-07-05.md`
+**Versioni:** 2.2.2 · **Data:** 12 Korrik 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.17 §13 + `03-kabi/KABI_Operational_Evidence_Update_2026-07-05.md` + `03-kabi/Accountant_Confirmation_TVSH_e_Sheshte_Fermere_KABI_2026-07-05.md`
 **Statusi:** draft i fortë (jo DDL final) — pas tri raundeve review kundërshtues të Codex (v2.1 + v2.2 + v2.2.1). Emrat/vlerat reale mbeten private-local.
 **Rishikime v2.0:** posting infra; `tax_book_entry`→header+buckets; shlyerja KABI; payroll Faza 1; lifecycle; posting hooks; matricë gjurmueshmërie.
 **Rishikime v2.1 (Codex review):** `business_id` rregull eksplicit; ndarë `farmer_settlement_line` vs `finance_settlement_line`; `farmer` = subtype i `partner` (partner_id kudo në AP/AR); autofaturë fermeri lidhet me `invoice` (jo rrugë paralele); flat-rate 8% posting = pending sign-off; shtuar `tank`/`tank_movement`/`milk_pool_contribution`, `pasteurization_log`, versionim recete, product master i plotë, van-sales i zgjeruar, returns lifecycle; sqaruar `lab_analysis` vs `production_quality_test`, `tax_code` × `tax_treatment`.
@@ -10,7 +10,7 @@
 ## Konventa globale
 - **Multi-tenant (RREGULL):** ÇDO tabelë tenant-scoped ka `business_id` **direkt** (FK→business) — e detyrueshme për tabelat operative/financiare/offline/audit/GL-posting (`journal_line`, `tax_book_bucket`, `payment_allocation`, `stock_balance`, `recipe_line`, `invoice_line`, `order_item`, `kitchen_ticket`, `fiscal_coupon`, `fiscal_outbox`, `payslip`, çdo `*_line`). Composite-FK parent-based lejohet **vetëm si vendim eksplicit i dokumentuar**, jo i nënkuptuar. Jo në tabela globale/reference. **v2.2: të gjitha child/leaf-et e listuara e mbajnë `business_id` DIREKT (denormalizuar për RLS/offline/partitioning) → rregulli == modeli, pa përjashtime të fshehura.**
 - **Çelësat:** `id` = UUID (gjenerohet edhe në pajisje për offline).
-- **Para:** `numeric` për GL (precizion i lartë); **SEF money scale PER-FIELD** — `CouponItem.Price/Total` = €0.0001 (×10000); coupon `Total`/`Payment.Amount`/`TaxGroup.*`/`TotalTax`/`TotalNoTax`/`TotalDiscount` = cents (×100); decimal në TS; tabular-nums në UI. Kurrë float.
+- **Para:** `numeric` për GL (precizion i lartë); **SEF money scale PER-FIELD (korrigjuar 12.07.2026 — Gate v2 §3):** `CouponItem.Price` = ×10000 (€0.0001); **`CouponItem.Total` = ×100 (cents)**; coupon `Total`/`Payment.Amount`/`TaxGroup.*`/`TotalTax`/`TotalNoTax`/`TotalDiscount` = cents (×100); golden: €1.50×3 → Price=15000, Total=450; decimal në TS; tabular-nums në UI. Kurrë float.
 - **Audit redaction:** PII + sekretet SEF + çelësat **maskohen** në `audit_log`/eksporte.
 - **SEF secrets:** private key, `fiscalization_no`, `application_id`, certifikata → **secrets store** (jo tabela të zakonshme/log); akses vetëm me break-glass.
 - **Kohë:** `created_at`, `updated_at`, + `event_at` (koha reale e veprimit në terren) për offline.
@@ -129,8 +129,8 @@
 ## H. SEF / Fiskalizimi
 - **device** — id, business_id, pos_id, pki_ref, certificate_id, status.
 - **fiscal_coupon** — id, business_id, invoice_id, fic, nivf, qr, status(offline/pritje/fiskalizuar/dështuar/ndërhyrje), signed_at, sent_at.
-- **fiscal_outbox** — id, business_id, coupon_id, attempts, next_retry_at, deadline_48h (i ndarë nga sync_outbox).
-- **certificate** — id, business_id, device_id, valid_from, valid_to, alert_before.
+- **fiscal_outbox** — id, business_id, coupon_id, attempts, next_retry_at, deadline sipas **origjinës së ndërprerjes** (i ndarë nga sync_outbox). **TARGET (jo i implementuar):** afati 48h lidhet me **outage-event** (fillimi i ndërprerjes — UA 44), JO me krijimin per-kupon; modeli i eventit = PROPOSED/ADR input (T2-08).
+- **certificate** — id, business_id, device_id, valid_from, valid_to, alert_before. **TARGET (jo i implementuar):** certifikatë + keypair **per instalim/POS** (çelësi privat s'largohet nga makina — Gate v2 §3.9/T2-05).
 
 ## I. Sync & Konflikte
 - **sync_outbox** — id, business_id, entity, payload, uuid, idempotency_key, status, event_at.

@@ -1,7 +1,8 @@
 # PRO DATA — Source→Target Closure v2 (iData+)
 
-**Versioni:** 2.0 · **Data:** 10 Korrik 2026 · **Pronari:** Group Owner (Human Gate) · **Statusi:** canonical/effective upon merge of this change (supersedes v1.1 — VETËM për interpretimin target/migrim/maturity, shih §9)
+**Versioni:** 2.2 · **Data:** 12 Korrik 2026 · **Pronari:** Group Owner (Human Gate) · **Statusi:** canonical/effective upon merge of this change (supersedes v1.1 — VETËM për interpretimin target/migrim/maturity, shih §9)
 **Burimi i këtij versioni:** canonical docs aktuale (SSOT, tracker, roadmap, `05_Decision_Gates_ADR.md`/ADR-003, `04_Data_Model_Draft.md`, `02_RBAC_Matrix.md`, `03_Accounting_Compatibility_Matrix.md`) + **kodi/migrimet/testet tracked** + **metadata e evidence paths**. **Zero content-read nga depoja e injoruar e evidence-it private-local (ignored private-local evidence store), backup-e, MDF/LDF, DB e restauruar apo evidence tjetër private-local në këtë version** — evidence historike trajtohet si **opaque reference** (§7).
+**Historia:** v2.2 — Documentation & Compliance Integrity Linter u zgjerua në 16 profile platform-wide; fazat u regjistruan; HG-LINTER-BUILD u aprovua; implementimi nuk ka nisur; required-CI mbetet gated.
 
 ---
 
@@ -69,7 +70,7 @@ Përmbledhja Wave 1–3 (struktura/DDL; accounting/costing/fiscal/setup; restaur
 | Artikuj / njësi / tipe | `tblArtikujt*`, `tblNjesiteMatese`, `tblTipetMalli` | `article`, `uom`, `category` | `MD+REQ` | **MODELED** | — | `04_Data_Model_Draft.md` §B; katalogët zyrtarë SEF 31/53 → `ATK_Compliance_Gate.md` §2b (follow-up F1/F5) | **F3** (article/product master) · **F9** (migrimi MD) | migrimi real i MD = delivery gate ADR-003 (mapping/cleansing/dedup) |
 | Banka / vite fiskale | `tblBankat`, `tblFiscalYears` | `bank_account`, `fiscal_period` | `MD` | **MODELED** | **PO** (`fiscal_period`+period-lock si feasibility në 0003 = **PoC-2**; invarianti production i period-lock **JO i implementuar ende**) | `04_Data_Model_Draft.md` §C; 0003 (**PoC-2**) | F2 + F9 | period-lock production (F2) + migrimi MD në cutover |
 | Saldo hapëse | `tblDocBeginningBalance*` | saldo hapëse në cutover **1 Jan 2027** | `OB` | **SPECIFIED** | — | ADR-003; `Cutover_Rollback_Runbook.md` §3–4 | F9 (cutover) | delivery gates: mapping/cleansing/dedup/freeze/dry-run/reconciliation/sign-off |
-| Fiskalizim / SEF | `tblFiscalisedDocuments` | `fiscal_coupon`, fiscal outbox | `REQ+REF+NO` | **SPECIFIED** | **PO** (PoC-5 **Tier 1 PASS**, PR #16; 0006 = **PoC-5**, tabela `poc5_*`; Tier 2 LIVE pending — i gated) | SSOT §7; `ATK_Compliance_Gate.md` | F5 | outbox production (Gate §4.2) + Tier 2 + print layer |
+| Fiskalizim / SEF | `tblFiscalisedDocuments` | `fiscal_coupon`, fiscal outbox | `REQ+REF+NO` | **SPECIFIED** | **PO** (PR #16 = **evidence historike mock**; 0006 = **PoC-5**, tabela `poc5_*`) — **post-audit 12.07: Tier 1 overall PARTIAL/REOPENED · compliance FAIL (5 CONTRADICTS-rreshta = 4 defekte unike) · Tier 2 NOT IMPLEMENTED/NO-GO** | SSOT §7; `ATK_Compliance_Gate.md` v2.0 + Ledger | F5 | Step B (T2-01..10, `ATK-012`) → Step C → Tier 2; print layer |
 | POS — porosi/tavolina | `tblTMPRestShitjet`, `tblDocPorositeShitjet*`, `tblRestTavolinat`(X/Y) | `table`(pos_x/y), `table_session`, `order`, `order_item` | `REQ+REF+NO` | **MODELED** | — | `04_Data_Model_Draft.md` §G | **F7 (bazë) / F8 (POS i plotë)** | implementim POS |
 | KDS — kuzhinë | `tblTMPRestShitjetKuzhina`, `tblRestDailyPorosiaCount` | `kitchen_ticket`, `kds_station` | `REQ+REF+NO` | **MODELED** | — | `04_Data_Model_Draft.md` §G | F8 | implementim KDS |
 | Barazim arke/kamarieri | `tblDocPOSBarazimi*` | `cash_shift`, `worker_settlement` | `REQ+REF+NO` (capability e kërkuar; source vetëm referencë; historia s'migrohet — modeli ynë **net-new**) | **MODELED** | — | `04_Data_Model_Draft.md` §G | F8 | implementim + reconciliation ditore (runbook §9) |
@@ -162,26 +163,105 @@ Rregull: **nuk hapen, nuk editohen, nuk citohen vlera/rreshta prej tyre, nuk ris
 
 ADR-003 + delivery gates → `05_Decision_Gates_ADR.md` · saldo/cutover → `Cutover_Rollback_Runbook.md` · box-maps → `03_Accounting_Compatibility_Matrix.md` · RBAC → `02_RBAC_Matrix.md` · entitetet → `04_Data_Model_Draft.md` · statuset e PoC-ve → roadmap §4 · `ACC-004` (answered — parity scope) / `ACC-010` (closed) / `OPS-001` (OPEN) → tracker.
 
-## Mundësi GOLD — Source→Target Closure Lint
+## Kontroll i planifikuar — Linter i Integritetit të Dokumentacionit dhe Pajtueshmërisë
 
-**Status: APPROVED FOR PLANNING · NOT IMPLEMENTED · NON-BLOCKING për Tier 2** — implementimi kërkon **PR të veçantë tooling/code pas PR #19**. **Prioriteti: HIGH-ROI.**
+**Emri funksional:** `Documentation & Compliance Integrity Linter`
 
-**Qëllimi (linter docs-only mbi këtë dokument + docs e sinkronizuara):** validon vocabulary-n **Treatment** (vetëm REQ/MD/OB/REF/NO + kombinime); **ndalon IMPLEMENTED/TESTED kur proof-i është PoC/simulator**; zbulon qeliza të detyrueshme bosh; kontrollon stage të përzier/overclaim; kontrollon phase references kundër roadmap-it; kontrollon version/status drift ndërmjet SSOT/roadmap/PM/INDEX; kontrollon ekzistencën e **7 delivery gates** (mapping/cleansing/dedup/freeze/dry-run/reconciliation/sign-off); **nuk lexon asnjë evidence private**.
+**Status:** **APPROVED FOR IMPLEMENTATION (Human Gate, 2026-07-12) · IMPLEMENTATION NOT STARTED · NON-BLOCKING derisa profili përkatës të promovohet veçmas në required CI**
 
-**Problemi që zgjidh:** manual review lejoi PoC→production overclaim, phase drift, missing `dedup` dhe version drift.
+**Prioriteti:** **HIGH-ROI**
 
-**Kosto/kompleksitet:** mesatare; zero ndikim runtime; risku kryesor = false positives nëse parser-i bëhet shumë rigid.
+**Porta e implementimit:** Human Gate për **ndërtimin e linter-it është APPROVED** (**HG-LINTER-BUILD**, 2026-07-12). Implementimi bëhet në **PR tooling/code të veçantë pas mbylljes së PR #20**, sipas rollout-it më poshtë. Ky aprovim autorizon kodin/testet e linter-it, por **NUK** autorizon automatikisht promovimin në `required CI`, leximin e evidence-it private, thirrje fiskale apo ndryshim runtime të produktit. Çdo profil kalon fillimisht në `advisory`; promovimi i tij në `required` kërkon evidence kundër false-positive + review të pavarur + Human Gate të dytë (**HG-LINTER-REQUIRED**, i veçantë për secilin profil).
 
-**Faza:** PR i veçantë pas merge-it të PR #19, paralel me governance/full-corpus work; **nuk bllokon PRE-TIER2** — bëhet required CI vetëm nëse Human Gate e promovon më vonë.
+### Regjistri i profileve dhe fazat e implementimit
 
-**Acceptance evidence për PR-në e ardhshme:** linter-i duhet të ketë **fixtures/tests që kapin të gjitha gabimet e gjetura në review-n e PR #19** (PoC-migrim si "IMPLEMENTED", TESTED nga simulator, LATER në kolonën Treatment, qeliza bosh, dedup i munguar, phase drift, version drift).
+| ID | Profili | Çfarë mbron | Implementohet | Kandidat për `required` |
+|---|---|---|---|---|
+| `DOC-CORE` | Canonical Documentation & Governance | SSOT/roadmap/tracker/PM/INDEX; vocabulary; version/count/status drift; stale/current/superseded; PR body | **Menjëherë pas PR #20, para PR-së së parë të Step B** | Pas 2 PR-ve advisory pa false-positive kritik; pastaj aktiv në **F1–F10** |
+| `HISTORY-PRIV` | Git History & Privacy Policy | per-commit added-lines; introduced-then-removed; private paths/filenames; identifiers/secrets; scope whitelist | Bashkë me `DOC-CORE`, **para Step B** | Para çdo PR-je që prek SEF/GL/security/migrime; zgjerim në të gjitha PR-të nga **F1** |
+| `SEF-ATK` | ATK/SEF Normative Integrity | coverage nen/paragraf; sanksione; Source Register/Ledger/Gate; `T2-01…10`; Human Gate order; source drift | **PRE-Tier2, pas PR #20 dhe para mbylljes së Step B** | Para Human Gate të Tier 2 vetëm pas promotion-gate; gjithsesi required para **F5 freeze**, dhe për PLANET fiscal path në **F8/F9** |
+| `SRC-CLOSURE` | PRO DATA Source→Target & Migration Closure | Treatment/Maturity; proof; parity; 7 delivery gates; cleansing/dedup/freeze/reconciliation/sign-off | Framework në **F1**; rregulla domain shtohen në **F2–F8** | Required për dry-run/cutover artifacts në **F9** dhe sign-off në **F10** |
+| `ARCH-ADR` | Architecture, ADR & Dependency Integrity | ADR status/owner/deadline; dependency graph; module boundaries; vendim-vs-propozim; no duplicate authority | **F1** | Required për architecture freeze të çdo moduli nga **F2**; kontroll final në **F9** |
+| `DB-MIG` | Database, Schema & Migration Integrity | tenant keys; constraints; append-only/immutability; migration IDs/order/idempotency; fresh apply/no-op; rollback/restore pointers | **F1** | Required për migrime production-grade në **F2**; freeze/cutover required në **F9/F10** |
+| `SEC-TENANT` | Tenant Isolation, Identity, RBAC, Audit & Privacy | `business_id`; composite FK; deny-by-default; role verbs; 2FA/break-glass; audit; privacy gates; secret handling | **F1** | Required për çdo modul tenant-scoped nga **F1**; full security/privacy gate në **F9/F10** |
+| `CI-SUPPLY` | CI, Dependencies & Supply-Chain Governance | required checks; lockfile/dependency scope; Dependabot policy; overrides review; provenance; secret scans | **F1** | Required për të gjitha PR-të pas stabilizimit advisory në **F1**; audit i plotë në **F9** |
+| `FIN-ACCOUNTING` | Accounting, Tax & Financial Integrity | debit=kredit; draft-vs-approved; idempotency; period lock; AR/AP; VAT books; rounding; reversals; accountant gates | **F2** | Required për Accounting Core në **F2** dhe çdo integrim financiar në **F3–F10** |
+| `INV-WMS-OMS` | Product, Inventory, WMS/OMS & Costing | article lifecycle; stock movement; LOT/FEFO; warehouse/vehicle; reservation/allocation; receipt/pick/ship boundaries; COGS/BOM | **F3** | Required për inventory/COGS në **F3**; zgjerohet për KABI **F4–F6** dhe PLANET **F7/F8**; reconciliation në **F9/F10** |
+| `KABI-OPS` | KABI Dairy, QC, Traceability & Settlement | milk intake; sample/lab gate; antibiotic reject; tank/pool/batch; USAID settlement; AP/TVSH gates; recall/yield | **F4** | Required për KABI MVP në **F4/F5**; advanced controls në **F6**; UAT/cutover në **F9** |
+| `OFFLINE-EDGE` | Offline Sync, Local Hub, Hardware & Reliability | outbox separation; idempotency; sequence/gap; retry; poison isolation; hub epoch; printer/UPS/LAN; recovery matrix | Bazamenti në **F1** nga PoC-3/4; profil production në **F5** | Required për KABI offline në **F5**, PLANET hub/POS në **F7/F8**, stress/DR në **F9/F10** |
+| `PLANET-POS` | PLANET POS, KDS, FinanceOps & Peripherals | table/order lifecycle; station routing; printer fallback; KDS timers; business day; waiter/worker settlement; cash/card/bank reconciliation | **F7** | Required për PLANET Foundation në **F7**, live në **F8**, UAT/cutover në **F9/F10** |
+| `UX-CLIENT` | Web, Mobile, UX/UI, Accessibility & Localization | role-based flows; offline/error states; keyboard/touch; tabular money; accessibility; sq/en terminology; device/layout coverage | Baseline në **F1** | Required për user-facing MVP-të në **F4/F5/F7/F8**; UAT në **F9**; regression në **F10** |
+| `OBS-CAPACITY` | Observability, Performance, Capacity & SLO Evidence | health/log/error taxonomy; metrics/traces; queue age; load targets; latency/throughput; alert/runbook links; no untested SLA | Baseline në **F1** | Required për live-path capacity në **F5/F8**, load/stress në **F9**, monitoring/hypercare në **F10** |
+| `CUTOVER-OPS` | Backup, DR, Cutover, Certification & Operations | backup/PITR/restore evidence; opening balances; UAT; training; Go/No-Go; rollback; handover; recertification/source drift | Backup baseline në **F1**; profile skeleton gjatë fazave | Required për **F9** hardening/pilot dhe **F10** launch/hypercare |
 
-**Kriter shtesë pranimi — PER-COMMIT HISTORY SCAN (jo vetëm net-diff):**
-- Linter-i kontrollon **ÇDO commit në `base..HEAD` veçmas**, jo vetëm diff-in neto.
-- Për çdo commit skanon **added-lines** për: private paths/filenames · evidence metrics · operational-state claims · forbidden Treatment values · **PoC→IMPLEMENTED/TESTED promotion** · mixed maturity stages · qeliza bosh · phase/version/gate drift.
-- **Një vlerë e shtuar në commit A dhe e hequr në commit B = FAIL** (gabimi "introduced-then-removed" mbetet në histori).
-- Raporton vetëm **file/rresht/kategori** — kurrë materiale private.
-- Fixtures riprodhojnë **sintetikisht** gabimin "introduced-then-removed".
-- Implementimi mbetet **PR tooling i VEÇANTË pas PR #19**; asnjë script/config/workflow/test në PR #19.
+**Rregulli i fazimit:** framework-u nuk rindërtohet për çdo profil. `DOC-CORE` + engine-i i përbashkët ndërtohen një herë; çdo profil shton rules/fixtures/config para fazës së vet. Një profil i paimplementuar raportohet `NOT_IMPLEMENTED` — nuk konsiderohet implicitisht PASS. Faza nuk mbyllet nga linter-i vetëm: testet e produktit, evidence-i dhe Human Gate mbeten autoritetet e pranimit.
 
-*(Ky PR vetëm e regjistron mundësinë canonical — asnjë script/config/workflow/test nuk krijohet këtu.)*
+### Rregullat fillestare të detajuara — `SRC-CLOSURE`
+
+Linter-i kontrollon këtë matricë dhe dokumentet e sinkronizuara për:
+
+- vocabulary-n **Treatment** — vetëm `REQ/MD/OB/REF/NO` dhe kombinimet e lejuara;
+- ndalimin e `IMPLEMENTED/TESTED` kur prova është vetëm PoC/simulator;
+- qeliza të detyrueshme bosh, stage të përzier dhe overclaim;
+- phase references kundër roadmap-it;
+- ekzistencën e **7 delivery gates**: mapping · cleansing · dedup · freeze · dry-run · reconciliation · sign-off;
+- version/status/count drift ndërmjet SSOT, roadmap, tracker, PM protocol dhe INDEX;
+- ndalimin e leximit të evidence-it private.
+
+### Rregullat fillestare të detajuara — `SEF-ATK`
+
+Linter-i kontrollon mekanikisht dokumentet canonical ATK/SEF për:
+
+- **coverage nen-për-nen/paragraf-për-paragraf**: çdo ID normative e corpus-it të regjistruar paraqitet saktësisht një herë me burim, faqe/locator, disposition dhe arsyetim jo-bosh;
+- **referencat e sanksioneve**: çdo `SANCTION_CONTEXT` lidhet me kontrollin përkatës dhe çdo sanksion i deklaruar ka nen/faqe/burim;
+- praninë reale dhe unike të **`T2-01`…`T2-10`** në Ledger, Gate dhe Tracker — pa orphan, boshllëk ose pretendim vetëm në header;
+- version/count/status drift ndërmjet Source Register, Requirements Ledger, Compliance Gate, SSOT, roadmap, tracker, PoC-5 README/ANALIZA, INDEX dhe PR body;
+- rendin e pandryshueshëm: **Step B → Step C → independent review → HUMAN GATE → private `/ca/verify` PREFLIGHT → pjesa tjetër e Tier 2**;
+- klasifikime/status të ndaluara ose kontradiktore, përfshirë `LIVE placeholder = MISSING/T2-04`, jo `CONTRADICTS`;
+- përdorimin e kontrolluar të `current`, `historical`, `superseded`, `complete/full/exhaustive` dhe pretendimeve `closes on merge`;
+- sinkronizimin e metadata-ve të burimit (`version`, `last_verified_at`, affected IDs, cadence dhe source hash/status).
+
+### Kufiri i detyrueshëm i automatizimit
+
+Linter-i **NUK jep opinion ligjor dhe NUK vendos vetë semantikën** e një neni. Ai provon praninë, strukturën, referencat dhe konsistencën — jo nëse një nen është interpretuar drejt. Çdo ndryshim `IN_SCOPE ↔ N/A ↔ SANCTION_CONTEXT`, çdo source drift dhe çdo mbyllje gate kërkon **review njerëzor kundër burimit primar + Human Gate**. Linter-i:
+
+- nuk lexon private-local evidence, `.env`, identifikues, payload, certifikata apo raw response;
+- nuk bën thirrje `/ca/*`, `/pos/*` ose `/citizen/*`;
+- nuk modifikon dokumente automatikisht;
+- raporton vetëm `file · rresht · rule-id · kategori`, pa përmbajtje sensitive.
+
+### Per-commit history scan
+
+- Kontrollon **çdo commit në `base..HEAD` veçmas**, jo vetëm net-diff.
+- Skanon added-lines për private paths/filenames, evidence metrics, operational-state claims, vocabulary të ndaluar, PoC→production promotion, mixed maturity, qeliza bosh, phase/version/gate drift dhe rend të gabuar të Human Gate.
+- **Introduced-then-removed = FAIL**: një shkelje e shtuar në commit A dhe e hequr në commit B mbetet shkelje historike.
+- Fixtures janë vetëm sintetike dhe riprodhojnë klasat e defekteve pa materiale private.
+
+### Acceptance dhe promovimi në CI
+
+PR-ja e ardhshme e tooling-ut duhet të ketë fixtures/tests për gabimet e gjetura në review-t e PR #19 dhe PR #20, përfshirë:
+
+- PoC/simulator i promovuar gabimisht në `IMPLEMENTED/TESTED`;
+- `Treatment` i pavlefshëm, qelizë bosh, delivery gate i munguar, phase/version/count drift;
+- ID normative e munguar/dubluar, sanksion pa referencë, `T2-01…10` jo të plota;
+- PR body ose dokument aktiv me status/version stale;
+- preflight i vendosur para Human Gate;
+- shkelje `introduced-then-removed` në historinë e branch-it.
+
+Fillimisht ekzekutohet si **advisory check**. Bëhet **required CI** vetëm pas një periudhe prove me false-positive të matur, review të pavarur dhe **Human Gate të dytë (HG-LINTER-REQUIRED)**. Zero ndikim runtime; risku kryesor është false-positive nga parser shumë rigid.
+
+### Acceptance shtesë — klasa rregullash nga review-t e PR #19/#20
+
+**a) Old-value drift.** Kur ndryshon një count/version/status/set: vlera e re duhet të ekzistojë; vlera e vjetër duhet të mungojë nga të gjitha surfaces aktive; rreshtat e etiketuar qartë `HISTORICAL`/`SUPERSEDED` lejohen. Kërkimet janë të kualifikuara sipas dokumentit dhe kontekstit — jo grep i verbër mbi stringje si "v2.0"/"v2.1".
+
+**b) Repeated N/A reason.** Arsye identike `N/A` të përsëritura në nene me tituj/përmbajtje të ndryshme prodhojnë **WARNING për review njerëzor**. Ky kontroll NUK vendos vetë që interpretimi është i gabuar dhe NUK ndryshon disposition automatikisht.
+
+**c) Title/structure lock.** Titujt e neneve krahasohen mekanikisht me një fixture të versionuar, të nxjerrë nga burimi publik i ngrirë dhe të lidhur me source hash. Source hash/version drift → ndalim dhe review njerëzor. Linter-i nuk bën interpretim ligjor nga titulli.
+
+**d) Role/privacy vocabulary.** Dokumentet canonical aktive përdorin vetëm role të aprovuara (Pronari, Human Gate, Group Owner, PM, Finance Owner, etj.). Emra personalë realë NUK vendosen në config, fixtures apo deny-list të komituar; testet përdorin vetëm identitete sintetike. Kandidati për emër personal prodhon **privacy-review flag** pa e publikuar përmbajtjen e dyshuar në log.
+
+**e) Fixtures shtesë nga PR #19/#20** — përveç klasave të listuara më lart: stale old-value në surface aktive; status/count/version drift i pastër; rend i gabuar i Human Gate (përtej rastit preflight-para-gate); pretendim `closes on merge` pa review; titull neni i prerë.
+
+Acceptance matet vetëm me fixtures/tests reale — pa vlerësime ilustruese në canonical. Linter-i kontrollon strukturë dhe konsistencë; semantika ligjore mbetet review njerëzor + Human Gate.
+
+*(Ky seksion vetëm regjistron kontrollin e planifikuar canonical. Asnjë script, config, workflow ose test nuk implementohet nga ky ndryshim dokumentimi.)*

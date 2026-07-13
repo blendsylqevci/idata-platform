@@ -5,7 +5,7 @@
 
 ---
 
-## 1. Precondition (Blend)
+## 1. Precondition (Pronari)
 - Repo **private** e krijuar, emër neutral: `idata-platform`.
 - Mjedisi: **Node 24 LTS**, `pnpm`, Docker, GitHub CLI (të verifikuara).
 - Branch protection në `main` (PR + review) — aktivizo sapo të jetë commit-i i parë.
