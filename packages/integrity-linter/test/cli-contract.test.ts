@@ -15,9 +15,11 @@ beforeAll(() => {
 }, 120_000);
 
 function runCli(args: string[], cwd: string, env: Record<string, string> = {}) {
+  // IZOLIM: pastro env-et e GitHub Actions që trashëgohen kur vetë testet
+  // ekzekutohen NË Actions — trust-boundary testohet me kombinime eksplicite.
   const r = spawnSync(process.execPath, [CLI, ...args, "--cwd", cwd], {
     encoding: "utf8",
-    env: { ...process.env, GITHUB_EVENT_PATH: "", ...env },
+    env: { ...process.env, GITHUB_EVENT_PATH: "", GITHUB_ACTIONS: "", GITHUB_EVENT_NAME: "", ...env },
   });
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
