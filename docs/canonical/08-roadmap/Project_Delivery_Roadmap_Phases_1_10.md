@@ -681,7 +681,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 *(**Full-corpus re-audit + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim — `ATK_Source_Register.md` v2.4 + `ATK_SEF_Requirements_Ledger.md` v1.6 + Gate v2.0; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate).)*
 
 1. **Step A — ky docs correction PR** (kanonizimi i verdiktit + kontratave).
-1a. **GOVERNANCE PREREQUISITE — GOV-001** *(jashtë zinxhirit SEF)*: linter engine + `DOC-CORE` + `HISTORY-PRIV`, advisory, në **PR tooling të veçantë**; **përfundon para hapjes së PR-së së parë Step B** (nuk ecën njëkohësisht me të). Required-CI mbetet gated (`HG-LINTER-REQUIRED`).
+1a. **GOVERNANCE PREREQUISITE — GOV-001** *(jashtë zinxhirit SEF)*: linter engine + `DOC-CORE` + `HISTORY-PRIV`, advisory, në **PR tooling të veçantë**; **përfundon para hapjes së PR-së së parë Step B** (nuk ecën njëkohësisht me të). Required-CI mbetet gated (`HG-LINTER-REQUIRED`). **Statusi: PLOTËSOHET me merge-in e PR-së tooling GOV-001** (engine + `DOC-CORE`/`HISTORY-PRIV` advisory; 14 profile NOT_IMPLEMENTED; `SEF-ATK` gjatë Step B para mbylljes së tij) — pas atij merge-i Step B = hapi pasues.
 2. **Step B — PRE-Tier2 code hardening (`ATK-012`, P0):** mbyllja e **T2-01..T2-10** (Gate v2 §4).
 3. **Step C — official golden vectors + fake-HTTP/negative tests** (kundër C#/Go @ pins).
 4. **Independent re-review** i deltës + i të gjitha gates të Tier 2.
