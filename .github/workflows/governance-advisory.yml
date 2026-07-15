@@ -54,6 +54,7 @@ jobs:
             --profiles DOC-CORE,HISTORY-PRIV \
             --base "${{ github.event.pull_request.base.sha }}" \
             --head "${{ github.event.pull_request.head.sha }}" \
+            --docs-ref "${{ github.event.pull_request.head.sha }}" \
             --format text > linter-report.txt
           cat linter-report.txt
 
