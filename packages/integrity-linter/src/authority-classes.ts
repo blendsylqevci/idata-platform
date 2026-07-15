@@ -13,7 +13,7 @@
  */
 
 export type ConsumerRequirement = "REQUIRED_CURRENT" | "SCAN_IF_PRESENT";
-export type AuthorityKind = "version" | "count" | "status" | "set";
+export type AuthorityKind = "version" | "count" | "status" | "set" | "phase";
 
 export interface ConsumerSpec {
   file: string;
@@ -36,7 +36,45 @@ export interface AuthorityClass {
   authorityPattern: RegExp;
   /** Normalizues i përbashkët për authority + consumers (statuset). */
   normalize?: (raw: string) => string;
+  /**
+   * Activation boundary per-commit (§1.2, eksplicit në metadata):
+   *  - "ONCE_PRESENT" (default): klasa aktivizohet nga commit-i i PARË i range-ut
+   *    ku authority file ekziston; PARA aktivizimit mungesa lejohet nga kontrata;
+   *    PAS aktivizimit mungesa = ScanError (activation s'fsheh commit-et e PR-së).
+   */
+  activation?: "ONCE_PRESENT";
   consumers: ConsumerSpec[];
+}
+
+/**
+ * VALIDATOR I PËRBASHKËT PURE (§1) — i njëjti për DOC-CORE dhe HISTORY-PRIV:
+ * nxjerr TË GJITHA match-et, normalizon, zero vlera → AUTHORITY_UNREADABLE,
+ * >1 vlerë të NDRYSHME → AUTHORITY_AMBIGUOUS; match-e të përsëritura me të
+ * njëjtën vlerë të normalizuar lejohen (i njëjti authority).
+ * Vlera kthehet vetëm për krahasim të brendshëm — KURRË në output.
+ */
+export function extractAuthorityValue(text: string, cls: AuthorityClass): string {
+  const norm = cls.normalize ?? ((v: string) => v);
+  const re = new RegExp(
+    cls.authorityPattern.source,
+    cls.authorityPattern.flags.includes("g") ? cls.authorityPattern.flags : cls.authorityPattern.flags + "g",
+  );
+  const values = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m[1] !== undefined) values.add(norm(m[1]));
+  }
+  if (values.size === 0) throw new AuthorityError("INCOMPLETE_SCAN:AUTHORITY_UNREADABLE");
+  if (values.size > 1) throw new AuthorityError("INCOMPLETE_SCAN:AUTHORITY_AMBIGUOUS");
+  return [...values][0] as string;
+}
+
+/** Gabim autoriteti me kod fiks — ri-hidhet si ScanError nga thirrësit. */
+export class AuthorityError extends Error {
+  override readonly name = "AuthorityError";
+  constructor(public readonly code: string) {
+    super(code);
+  }
 }
 
 export const LEDGER = "docs/canonical/05-sef-atk/ATK_SEF_Requirements_Ledger.md";
@@ -209,8 +247,23 @@ export function defaultAuthorityClasses(): AuthorityClass[] {
         pattern: /HG-LINTER-REQUIRED[`*,)]{0,3} ?(?:mbetet |është )?(i paaprovuar|pending|gated|mbetet gated|APPROVED)/gi,
       })),
     },
+    {
+      // §5 PHASE REAL: faza e domenit Fiskalizim/SEF nga kolona "Faza" e 07
+      // (hierarkia dokumentare: 07 Parity Matrix = authority i fazës së domenit);
+      // konsumatorë PATH-BOUND: çelësat e mbylljes FISCAL-F*/BLOCKS-F* në Ledger.
+      // F-numra të parëndësishëm në prozë NUK kapen (pattern-et janë të lidhur).
+      id: "sef-fiscal-phase", kind: "phase", authorityFile: MATRIX07,
+      authorityPattern: /\| Fiskalizim \/ SEF \|[^\n]*\| (F\d+) \|/g,
+      consumers: [
+        { file: LEDGER, requirement: "SCAN_IF_PRESENT" as const, pattern: /FISCAL-(F\d+)/g },
+        { file: LEDGER, requirement: "SCAN_IF_PRESENT" as const, pattern: /BLOCKS-(F\d+)/g },
+      ],
+    },
   ];
 }
+
+/** Sipërfaqet default që DUHET të mbajnë chain-in e plotë aktiv (§4). */
+export const DEFAULT_CHAIN_REQUIRED = [INDEX, ROADMAP, GATE, SSOT, PM];
 
 /** Etiketë historike ROW-SCOPED — vlen vetëm në rreshtin ku gjendet vlera. */
 export function isHistoryLabeledRow(line: string): boolean {

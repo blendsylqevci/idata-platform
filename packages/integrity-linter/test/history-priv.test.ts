@@ -141,22 +141,138 @@ describe("HISTORY-PRIV — fail-closed, per-commit, privacy-safe", () => {
     expect(r3.findings.some((f) => f.ruleId === "HP-TOKEN-CLASS")).toBe(true);
   });
 
-  it("binary → REVIEW pa content; oversize → REVIEW pa content; UTF-8 invalid content → INCOMPLETE_SCAN", () => {
+  it("§1 battery: authority per-commit — missing/unreadable/ambige pas aktivizimit → exit 2; para aktivizimit lejohet nga metadata", () => {
     const { repo, base } = repoWithBase();
-    writeFileSync(join(repo.dir, "bin.dat"), Buffer.from([0, 159, 146, 150, 0, 7]));
-    const c1 = repo.commitAll("bin");
-    const r1 = runHistoryPriv(new GitCliReader(repo.dir), base, c1, undefined);
-    expect(r1.findings.map((f) => f.ruleId)).toContain("HP-BINARY-BLOB");
+    const mk = () => [{
+      id: "syn-auth", kind: "count" as const, authorityFile: "auth.md",
+      authorityPattern: /VLERA: (\d+)/g,
+      consumers: [{ file: "cons.md", requirement: "SCAN_IF_PRESENT" as const, pattern: /REF (\d+)/g }],
+    }];
+    const run = (b: string, h: string) =>
+      runHistoryPriv(new GitCliReader(repo.dir), b, h, undefined, { driftClasses: mk(), chainRequiredSurfaces: [] });
 
-    writeFileSync(join(repo.dir, "big.txt"), "a".repeat(1_000_001));
-    const c2 = repo.commitAll("big");
-    const r2 = runHistoryPriv(new GitCliReader(repo.dir), c1, c2, undefined);
-    expect(r2.findings.map((f) => f.ruleId)).toContain("HP-OVERSIZE-BLOB");
+    repo.write("cons.md", "REF 100\n");
+    const c1 = repo.commitAll("consumer pa authority");
+    expect(() => run(base, c1)).not.toThrow(); // para aktivizimit — lejohet nga metadata
 
-    // tekst me UTF-8 invalid (jo binar — pa NUL): parser refuzon → INCOMPLETE_SCAN
-    writeFileSync(join(repo.dir, "bad.txt"), Buffer.from([0x61, 0xc3, 0x28, 0x62, 0x0a]));
-    const c3 = repo.commitAll("bad encoding");
-    expect(() => runHistoryPriv(new GitCliReader(repo.dir), c2, c3, undefined)).toThrow(ScanError);
+    repo.write("auth.md", "VLERA: 100\n");
+    const c2 = repo.commitAll("authority aktivizohet");
+
+    repo.write("auth.md", "pa asnjë vlerë këtu\n");
+    const c3 = repo.commitAll("authority bosh");
+    expect(() => run(c2, c3)).toThrow("INCOMPLETE_SCAN:AUTHORITY_UNREADABLE"); // aktiv në bazën c2
+
+    repo.write("auth.md", "VLERA: 100\n");
+    const c4 = repo.commitAll("rikthehet valid");
+
+    repo.write("auth.md", "VLERA: 100\nVLERA: 200\n");
+    const c5 = repo.commitAll("dy vlera të ndryshme");
+    expect(() => run(c4, c5)).toThrow("INCOMPLETE_SCAN:AUTHORITY_AMBIGUOUS");
+
+  });
+
+  it("§1 battery: dy match me të njëjtën vlerë lejohen; fshirja PAS aktivizimit → AUTHORITY_MISSING", () => {
+    const { repo, base } = repoWithBase();
+    const mk = () => [{
+      id: "syn-auth2", kind: "count" as const, authorityFile: "auth.md",
+      authorityPattern: /VLERA: (\d+)/g,
+      consumers: [{ file: "cons.md", requirement: "SCAN_IF_PRESENT" as const, pattern: /REF (\d+)/g }],
+    }];
+    const run = (b: string, h: string) =>
+      runHistoryPriv(new GitCliReader(repo.dir), b, h, undefined, { driftClasses: mk(), chainRequiredSurfaces: [] });
+    repo.write("auth.md", "VLERA: 100\n");
+    repo.write("cons.md", "REF 100\n");
+    const c1 = repo.commitAll("aktiv");
+    repo.write("auth.md", "VLERA: 100\nVLERA: 100\n");
+    const c2 = repo.commitAll("dyfish e njëjta");
+    expect(() => run(c1, c2)).not.toThrow();
+    execFileSync("git", ["rm", "-q", "auth.md"], { cwd: repo.dir });
+    const c3 = repo.commitAll("fshihet pas aktivizimit");
+    expect(() => run(c2, c3)).toThrow("INCOMPLETE_SCAN:AUTHORITY_MISSING");
+  });
+
+  it("§1 battery: consumers PATH-BOUND — stale #2/#3, dy spec në një file, jo-consumer s'skanohet, zero vlerë raw në output", () => {
+    const { repo, base } = repoWithBase();
+    const classes = [{
+      id: "syn-multi", kind: "version" as const, authorityFile: "auth.md",
+      authorityPattern: /V: (\d+\.\d+)/g,
+      consumers: [
+        { file: "c1.md", requirement: "REQUIRED_CURRENT" as const, pattern: /REF v(\d+\.\d+)/g },
+        { file: "c2.md", requirement: "SCAN_IF_PRESENT" as const, pattern: /REF v(\d+\.\d+)/g },
+        { file: "c2.md", requirement: "SCAN_IF_PRESENT" as const, pattern: /ALT (\d+\.\d+)/g },
+        { file: "c3.md", requirement: "SCAN_IF_PRESENT" as const, pattern: /REF v(\d+\.\d+)/g },
+      ],
+    }];
+    repo.write("auth.md", "V: 2.0\n");
+    repo.write("c1.md", "REF v2.0\n");
+    repo.commitAll("bazë e pastër");
+    repo.write("c2.md", "REF v1.9 stale\nALT 1.8 stale\n");
+    repo.write("c3.md", "REF v1.7 stale\n");
+    repo.write("jo-consumer.md", "REF v0.1 tekst i ngjashëm\n");
+    const head = repo.commitAll("stale consumers");
+    const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined, { driftClasses: classes, chainRequiredSurfaces: [] });
+    const drift = r.findings.filter((f) => f.ruleId === "HP-DRIFT-VERSION").map((f) => f.locator);
+    expect(drift.some((l) => l.startsWith("c2.md:1"))).toBe(true);
+    expect(drift.some((l) => l.startsWith("c2.md:2"))).toBe(true);
+    expect(drift.some((l) => l.startsWith("c3.md:1"))).toBe(true);
+    expect(drift.some((l) => l.includes("jo-consumer"))).toBe(false);
+    const json = toJsonReport({ mode: "advisory", evaluations: r.evaluations, findings: r.findings });
+    expect(json).not.toContain("1.9");
+    expect(json).not.toContain("2.0");
+  });
+
+  it("§1 battery: REQUIRED hiqet në A dhe rikthehet në B → finding historik te A; rreshti historik s'e plotëson REQUIRED", () => {
+    const { repo, base } = repoWithBase();
+    const classes = [{
+      id: "syn-req", kind: "status" as const, authorityFile: "auth.md",
+      authorityPattern: /ST: (OK|JO)/g,
+      consumers: [{ file: "c1.md", requirement: "REQUIRED_CURRENT" as const, pattern: /GJENDJA (OK|JO)/g }],
+    }];
+    repo.write("auth.md", "ST: OK\n");
+    repo.write("c1.md", "GJENDJA OK\n");
+    repo.commitAll("bazë");
+    repo.write("c1.md", "pa referencë fare tani\n");
+    const cA = repo.commitAll("A heq referencën");
+    repo.write("c1.md", "GJENDJA OK\n");
+    const cB = repo.commitAll("B e rikthen");
+    const r = runHistoryPriv(new GitCliReader(repo.dir), base, cB, undefined, { driftClasses: classes, chainRequiredSurfaces: [] });
+    const missing = r.findings.filter((f) => f.ruleId === "HP-CURRENT-VALUE-MISSING");
+    expect(missing).toHaveLength(1);
+    expect(missing[0]?.commit).toBe(cA.slice(0, 8));
+    repo.write("c1.md", "Historia: GJENDJA OK (SUPERSEDED)\n");
+    const cC = repo.commitAll("C vetëm historik");
+    const r2 = runHistoryPriv(new GitCliReader(repo.dir), base, cC, undefined, { driftClasses: classes, chainRequiredSurfaces: [] });
+    expect(r2.findings.filter((f) => f.ruleId === "HP-CURRENT-VALUE-MISSING" && f.commit === cC.slice(0, 8))).toHaveLength(1);
+  });
+
+  it("§1 battery: GitReader failure → propagohet exit 2, kurrë skip+EVALUATED", () => {
+    const { repo, base } = repoWithBase();
+    repo.write("x.md", "diçka\n");
+    const head = repo.commitAll("c");
+    const real = new GitCliReader(repo.dir);
+    const failing = new Proxy(real, {
+      get(t, prop, rec) {
+        if (prop === "hasFile") return () => { throw new ScanError("GIT_OP_FAILED:ls-tree"); };
+        return Reflect.get(t, prop, rec);
+      },
+    }) as GitCliReader;
+    expect(() => runHistoryPriv(failing, base, head, undefined)).toThrow("GIT_OP_FAILED:ls-tree");
+  });
+
+  it("§4: commit-i ndërmjetës që prish chain-in kapet; rikthimi s'e fshin finding-un historik", () => {
+    const { repo, base } = repoWithBase();
+    const CH = "Step B → Step C → independent review → HUMAN GATE → private PREFLIGHT → Tier 2";
+    repo.write("chain.md", CH + "\n");
+    repo.commitAll("chain i plotë");
+    repo.write("chain.md", "Step B → Step C → HUMAN GATE → private PREFLIGHT → Tier 2\n");
+    const cBreak = repo.commitAll("prish chain-in");
+    repo.write("chain.md", CH + "\n");
+    const cFix = repo.commitAll("e rikthen");
+    const r = runHistoryPriv(new GitCliReader(repo.dir), base, cFix, undefined, { driftClasses: [], chainRequiredSurfaces: ["chain.md"] });
+    const broken = r.findings.filter((f) => f.ruleId === "HP-CHAIN-INCOMPLETE");
+    expect(broken).toHaveLength(1);
+    expect(broken[0]?.commit).toBe(cBreak.slice(0, 8));
+    expect(broken[0]?.locator).toContain("independent-review");
   });
 
   it("§4D: binary me TAB në filename → INCOMPLETE_SCAN nga path policy (para blob-it)", () => {
@@ -219,12 +335,15 @@ describe("HISTORY-PRIV — fail-closed, per-commit, privacy-safe", () => {
       "PoC " + IMPL + " pa production evidence",                     // §2F — 'pa' NUK e shpëton
       "rendi: private " + PF + " → " + HG,                           // §2I single-line
       "",
-      "negativë:",
+      "raste §6C:",
       "| a | REQ+REF | b | c |",
-      "PoC feasibility-only, JO-" + TSTD + ".",
-      "Historia: " + XHIRO + " (HISTORICAL)",
+      "PoC feasibility-only, JO-" + TSTD + ".",                        // strukturuar → clean
+      "Historia: " + XHIRO + " (HISTORICAL)",                          // §6C: historiku NUK përjashton → FINDING
+      "nuk raportohet " + XHIRO + " këtu",                             // mohim LOKAL → clean
+      "shit" + "jet reale janë 123, jo 0",                             // trailing "jo" s'bypasson → FINDING
+      "PoC " + IMPL + "; jo për fiskalizim",                           // "jo" i mëvonshëm s'bypasson → FINDING
       "rendi i saktë: " + HG + " → private " + PF,
-      "vetëm 223 records pa kontekst këtu (near-miss)",               // near-miss → s'ka context-fjalë
+      "vetëm 223 records pa kontekst këtu (near-miss)",
     ].join("\n") + "\n");
     // §2I multiline: lista e shpërndarë në rreshta të njëpasnjëshëm
     repo.write("order.md", [
@@ -239,8 +358,8 @@ describe("HISTORY-PRIV — fail-closed, per-commit, privacy-safe", () => {
     expect(ids.filter((i) => i === "HP-MIXED-MATURITY")).toHaveLength(2);  // d + e
     expect(ids.filter((i) => i === "HP-EMPTY-MANDATORY-CELL")).toHaveLength(1);
     expect(ids.filter((i) => i === "HP-EVIDENCE-METRIC")).toHaveLength(2); // 223 + 1076
-    expect(ids.filter((i) => i === "HP-OPERATIONAL-CLAIM")).toHaveLength(1);
-    expect(ids.filter((i) => i === "HP-POC-PROMOTION")).toHaveLength(1);   // 'pa' s'e shpëton
+    expect(ids.filter((i) => i === "HP-OPERATIONAL-CLAIM")).toHaveLength(3); // aktivi + historiku(§6C) + "shitjet reale…, jo 0"
+    expect(ids.filter((i) => i === "HP-POC-PROMOTION")).toHaveLength(2);   // 'pa' s'e shpëton + '; jo …' s'e shpëton
     expect(ids.filter((i) => i === "HP-GATE-ORDER").length).toBeGreaterThanOrEqual(2); // single + multiline
   });
 
@@ -263,20 +382,25 @@ describe("HISTORY-PRIV — fail-closed, per-commit, privacy-safe", () => {
     expect(json).not.toContain(nine); // vlera KURRË në output
   });
 
-  it("§6.9: version drift PER-COMMIT kundër snapshot-it tracked të po atij commit-i", () => {
+  it("§6.9: version drift PER-COMMIT — konsumatorë PATH-BOUND kundër snapshot-it të commit-it", () => {
     const { repo, base } = repoWithBase();
-    repo.write("docs/canonical/05-sef-atk/ATK_SEF_Requirements_Ledger.md", "**Versioni:** 1.6\n");
+    const baseCls = {
+      id: "syn-ledger", kind: "version" as const, authorityFile: "docs/ledger.md",
+      authorityPattern: /\*\*Versioni:\*\* (\d+\.\d+)/g,
+      consumers: [{ file: "docs/note.md", requirement: "SCAN_IF_PRESENT" as const, pattern: /Ledger(?:\.md)?`?\s*(?:—)?\s*v(\d+\.\d+)/g }],
+    };
+    repo.write("docs/ledger.md", "**Versioni:** 1.6\n");
     repo.commitAll("authority v1.6");
     repo.write("docs/note.md", ["shih Ledger.md` — v1", ".", "5 për detajet\n"].join(""));
     const head = repo.commitAll("stale consumer");
-    const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined);
+    const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined, { driftClasses: [baseCls], chainRequiredSurfaces: [] });
     const drift = r.findings.filter((f) => f.ruleId === "HP-DRIFT-VERSION");
     expect(drift).toHaveLength(1);
     expect(drift[0]?.locator).toContain("docs/note.md:1");
-    // negative: konsumator korrekt + etiketë historike
     repo.write("docs/note2.md", "Ledger v1.6 aktual\nHistoria: Ledger v1.5 (SUPERSEDED)\n");
     const head2 = repo.commitAll("ok consumer");
-    const r2 = runHistoryPriv(new GitCliReader(repo.dir), head, head2, undefined);
+    const cls2 = { ...baseCls, consumers: [...baseCls.consumers, { file: "docs/note2.md", requirement: "SCAN_IF_PRESENT" as const, pattern: /Ledger(?:\.md)?`?\s*(?:—)?\s*v(\d+\.\d+)/g }] };
+    const r2 = runHistoryPriv(new GitCliReader(repo.dir), head, head2, undefined, { driftClasses: [cls2], chainRequiredSurfaces: [] });
     expect(r2.findings.filter((f) => f.ruleId === "HP-DRIFT-VERSION")).toHaveLength(0);
   });
 
@@ -321,7 +445,10 @@ describe("HISTORY-PRIV — fail-closed, per-commit, privacy-safe", () => {
     expect(f?.locator).toBe("deep.md:25");
   });
 
-  it("self-scan i PR-së aktuale → zero privacy ERROR (SKIP eksplicit kur s'ka origin/main)", (ctx) => {
+  // §7A: INTEGRATION/SELF-SCAN test mbi HISTORINË REALE të repo-s — jo unit test.
+  // Madhësia e historisë së PR-së rritet me çdo pass; default-i 5s tejkalohet në
+  // makina më të ngadalta. Timeout-i NUK fsheh hang — dështimi/hang mbetet dështim.
+  it("self-scan i PR-së aktuale → zero privacy ERROR (SKIP eksplicit kur s'ka origin/main)", { timeout: 60_000 }, (ctx) => {
     const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"]).toString("utf8").trim();
     const reader = new GitCliReader(repoRoot);
     let base: string;

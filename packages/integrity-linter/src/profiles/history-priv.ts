@@ -1,19 +1,17 @@
 /**
  * HISTORY-PRIV — historia e git-it & politika e privatësisë (advisory, FAIL-CLOSED).
  *
- * Hardening II (§2/§3/§4/§5):
- *  - ÇDO commit në merge-base..head skanohet VEÇMAS (introduced-then-removed mbetet);
- *  - policy path/mode/scope zbatohet mbi TË GJITHA entries PARA çdo content access
- *    (provohet me call-order spy test); rename = D+A (pa -M);
- *  - private Add/Modify/Typechange → ERROR `[REDACTED_PATH]` pa blob read;
- *    private Delete = cleanup i lejuar; Delete privat + Add publik i njëjtit commit
- *    → HP-PRIVATE-RELOCATION; scope whitelist NUK e anulon privacy policy;
- *  - merge commit → INCOMPLETE_SCAN → exit 2; mode të lejuara vetëm 100644/100755;
- *  - binary/oversize (old OSE new blob) → REVIEW + evaluation NOT_EVALUATED me
- *    check="content" e reason kod fiks — run-i NUK quhet content-complete;
- *  - drift per-commit (version/count/status/set/phase-kind) kundër authority
- *    snapshot-it tracked të të NJËJTIT commit;
- *  - Human Gate order edhe multiline (lista/line-wrap) mbi blloqe added-lines.
+ * Hardening III:
+ *  §1 — drift per-commit mbi SNAPSHOT-in FINAL të secilit commit me validator të
+ *       PËRBASHKËT: authority missing (pas aktivizimit ONCE_PRESENT) / zero match /
+ *       vlera ambige → ScanError; TË GJITHË ConsumerSpec-at path-bound; defektet
+ *       dedup-ohen kundrejt snapshot-it të PARENT-it (introduced-then-removed mbetet);
+ *  §2 — content i pa-skanueshëm (binary/oversize, old OSE new blob) → ScanError /
+ *       exit 2 — ASNJË agregat EVALUATED për coverage të paplotë;
+ *  §3 — relocation privat→publik ndiqet me OID nëpër TËRË range-in (in-memory set;
+ *       zero blob reads private; output vetëm [REDACTED_PATH]);
+ *  §4 — chain-i invariant (prani + rend) vlerësohet per-commit mbi sipërfaqet
+ *       chainRequired — commit-i ndërmjetës që e prish = finding historik.
  */
 
 import type { Finding, GitReader, ProfileEvaluation, PullRequestEvent, RawEntry } from "../types.js";
@@ -21,8 +19,11 @@ import { ConfigError, ScanError } from "../types.js";
 import { profileStatus } from "../profile-registry.js";
 import { ALLOWED_FILE_MODES, NULL_MODE, evaluatePath } from "../path-policy.js";
 import { buildContentRules, type RuleContext } from "./history-rules.js";
-import { defaultAuthorityClasses, isHistoryLabeledRow, type AuthorityClass } from "../authority-classes.js";
-import { extractChainText, chainOrderViolations } from "./doc-core.js";
+import {
+  AuthorityError, DEFAULT_CHAIN_REQUIRED, defaultAuthorityClasses, extractAuthorityValue,
+  isHistoryLabeledRow, type AuthorityClass,
+} from "../authority-classes.js";
+import { chainOrderViolations, evaluateChainPresence, extractChainText } from "./doc-core.js";
 
 const P = "HISTORY-PRIV" as const;
 const REDACTED = "[REDACTED_PATH]";
@@ -34,7 +35,6 @@ export interface ScopeBlock {
   allowed: string[];
 }
 
-/** Parse i bllokut machine-readable `<!-- integrity-linter:scope ... -->`. */
 export function parseScopeBlock(body: string | undefined): ScopeBlock {
   if (body === undefined) return { present: false, malformed: false, allowed: [] };
   const start = body.indexOf("<!-- integrity-linter:scope");
@@ -62,10 +62,83 @@ export function pathInScope(path: string, allowed: string[]): boolean {
 export interface HistoryPrivOptions {
   /** Klasat e drift-it per-commit (default = klasat reale; testet injektojnë sintetike). */
   driftClasses?: AuthorityClass[];
+  /** Sipërfaqet chainRequired per-commit (§4). */
+  chainRequiredSurfaces?: string[];
 }
 
-function globalized(re: RegExp): RegExp {
-  return new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+interface SnapshotReaderAt {
+  has(path: string): boolean;
+  read(path: string): string;
+}
+
+/**
+ * Vlerëson defektet e drift-it të një klase mbi NJË snapshot (semantikë IDENTIKE
+ * me DOC-CORE — validator/kontratë e përbashkët §1). Kthen firma të brendshme
+ * defektesh (vlerat KURRË s'dalin në output) + locator-ë të sigurt.
+ */
+function evaluateClassOnSnapshot(
+  cls: AuthorityClass,
+  snap: SnapshotReaderAt,
+): Map<string, string> {
+  const defects = new Map<string, string>(); // firma → locator i sigurt
+  const authorityText = snap.read(cls.authorityFile);
+  const current = extractAuthorityValue(authorityText, cls); // zero/ambige → AuthorityError
+  const norm = cls.normalize ?? ((v: string) => v);
+  for (const consumer of cls.consumers) {
+    if (!snap.has(consumer.file)) {
+      if (consumer.requirement === "REQUIRED_CURRENT") {
+        defects.set(`${cls.id}|${consumer.file}|missing-file`, `${consumer.file} (${cls.id})`);
+      }
+      continue; // SCAN_IF_PRESENT: mungesa e file-it lejohet nga metadata
+    }
+    const text = snap.read(consumer.file);
+    const lines = text.split("\n");
+    let currentSeenActive = false;
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i] ?? "";
+      const re = new RegExp(consumer.pattern.source, consumer.pattern.flags.includes("g") ? consumer.pattern.flags : consumer.pattern.flags + "g");
+      let cm: RegExpExecArray | null;
+      while ((cm = re.exec(line)) !== null) {
+        if (cm[1] === undefined) continue;
+        if (consumer.excludeBefore !== undefined &&
+            consumer.excludeBefore.test(line.slice(Math.max(0, cm.index - 24), cm.index))) {
+          continue;
+        }
+        const seen = norm(cm[1]);
+        const labeled = isHistoryLabeledRow(line);
+        if (seen === current) {
+          if (!labeled) currentSeenActive = true; // historical row s'plotëson REQUIRED aktiv
+        } else if (!labeled) {
+          // firma mban vlerën vetëm PËR KRAHASIM të brendshëm; locator pa vlerë
+          defects.set(`${cls.id}|${consumer.file}|stale|${seen}`, `${consumer.file}:${i + 1} (${cls.id})`);
+        }
+      }
+    }
+    if (consumer.requirement === "REQUIRED_CURRENT" && !currentSeenActive) {
+      defects.set(`${cls.id}|${consumer.file}|missing`, `${consumer.file} (${cls.id})`);
+    }
+  }
+  return defects;
+}
+
+/** Firma të defekteve të chain-it mbi një snapshot (§4). */
+function evaluateChainOnSnapshot(surfaces: string[], snap: SnapshotReaderAt): Map<string, string> {
+  const defects = new Map<string, string>();
+  for (const file of surfaces) {
+    if (!snap.has(file)) continue; // sipërfaqja mund të mos ekzistojë ende në histori
+    const evaln = evaluateChainPresence(snap.read(file));
+    if (evaln.noActiveChain) {
+      defects.set(`chain|${file}|noactive`, `${file} (asnjë chain aktiv)`);
+    } else {
+      for (const missing of evaln.missing) {
+        defects.set(`chain|${file}|missing:${missing}`, `${file} (mungon: ${missing})`);
+      }
+      for (const v of evaln.violations) {
+        defects.set(`chain|${file}|order:${v.later}<${v.earlier}`, `${file} (${v.later} para ${v.earlier})`);
+      }
+    }
+  }
+  return defects;
 }
 
 export function runHistoryPriv(
@@ -78,12 +151,11 @@ export function runHistoryPriv(
   const status = profileStatus(P);
   const findings: Finding[] = [];
   const evaluations: ProfileEvaluation[] = [];
-  const contentNotEvaluated = new Set<string>(); // kode fikse: BINARY_BLOB / OVERSIZE_BLOB
 
   const base = baseSha ?? event?.baseSha;
   const head = headSha ?? event?.headSha;
   if (base === undefined || head === undefined) {
-    throw new ConfigError("RANGE_MISSING"); // pa hamendësim origin/main
+    throw new ConfigError("RANGE_MISSING");
   }
   if (reader.isShallow()) {
     throw new ScanError("INCOMPLETE_SCAN:SHALLOW_REPOSITORY");
@@ -115,34 +187,78 @@ export function runHistoryPriv(
 
   const contentRules = buildContentRules();
   const driftClasses = options.driftClasses ?? defaultAuthorityClasses();
+  const chainSurfaces = options.chainRequiredSurfaces ?? DEFAULT_CHAIN_REQUIRED;
+
+  const snapAt = (sha: string): SnapshotReaderAt => {
+    const cache = new Map<string, string>();
+    const hasCache = new Map<string, boolean>();
+    return {
+      has(path: string): boolean {
+        if (!hasCache.has(path)) hasCache.set(path, reader.hasFile(sha, path));
+        return hasCache.get(path) === true;
+      },
+      read(path: string): string {
+        const c = cache.get(path);
+        if (c !== undefined) return c;
+        const t = reader.showFile(sha, path);
+        cache.set(path, t);
+        return t;
+      },
+    };
+  };
+
+  // §3: OID-et e blob-eve të fshira nga path privat — gjatë TËRË range-it (in-memory).
+  const deletedPrivateOids = new Set<string>();
+  // §1: activation ONCE_PRESENT per klasë + gjendja parent e defekteve për dedup.
+  // Activation ONCE_PRESENT (§1.2): klasa aktivizohet nga snapshot-i i PARË ku
+  // authority ekziston DHE vlera nxirret pa ambiguitet; para aktivizimit mungesa/
+  // palexueshmëria lejohet nga METADATA (jo silent skip — kontratë e deklaruar);
+  // PAS aktivizimit çdo mungesë/palexueshmëri/ambiguitet = ScanError (exit 2).
+  const activated = new Map<string, boolean>();
+  const baseSnap = snapAt(mergeBase);
+  let parentDriftDefects = new Map<string, string>();
+  for (const cls of driftClasses) {
+    if (baseSnap.has(cls.authorityFile)) {
+      try {
+        const d = evaluateClassOnSnapshot(cls, baseSnap);
+        activated.set(cls.id, true);
+        for (const [k, v] of d) parentDriftDefects.set(k, v);
+      } catch (err) {
+        if (!(err instanceof AuthorityError)) throw err;
+        // e palexueshme NË BAZË → klasa ende e paaktivizuar (aktivizohet më vonë)
+      }
+    }
+  }
+  let parentChainDefects = evaluateChainOnSnapshot(chainSurfaces, baseSnap);
 
   for (const sha of commits) {
     const short = sha.slice(0, 8);
 
-    // ── MERGE COMMIT: INCOMPLETE_SCAN → exit 2 (kurrë REVIEW+continue) ──
     if (reader.parents(sha).length > 1) {
       throw new ScanError("INCOMPLETE_SCAN:MERGE_COMMIT_IN_RANGE");
     }
 
-    // ── FAZA 1: metadata + POLICY mbi TË GJITHA entries PARA content access ──
     const entries = reader.rawEntries(sha);
-    const approved: RawEntry[] = [];
-    let privateDeletion = false;
-    let publicAddition = false;
 
+    // §3 PASS 1: mblidh OID-et e fshirjeve private PARA çdo vlerësimi tjetër
+    for (const entry of entries) {
+      if (entry.status === "D" && evaluatePath(entry.path) === "BLOCKED" && !/^0+$/.test(entry.oldOid)) {
+        deletedPrivateOids.add(entry.oldOid);
+      }
+    }
+
+    // PASS 2: policy path/mode/scope mbi TË GJITHA entries PARA content access
+    const approved: RawEntry[] = [];
     for (const entry of entries) {
       const verdict = evaluatePath(entry.path);
       if (verdict === "BLOCKED") {
-        if (entry.status === "D") {
-          privateDeletion = true; // cleanup i lejuar — zero blob read, zero finding
-          continue;
-        }
+        if (entry.status === "D") continue; // cleanup i lejuar — zero blob read
         findings.push({
           profile: P, profileStatus: status, severity: "ERROR",
           ruleId: "HP-PRIVATE-PATH", category: "privacy",
           locator: REDACTED, commit: short,
         });
-        continue; // ASNJË qasje në blob — as scope check (whitelist s'e anulon policy-n)
+        continue;
       }
       const modeToCheck = entry.status === "D" ? entry.oldMode : entry.newMode;
       if (!ALLOWED_FILE_MODES.has(modeToCheck) && modeToCheck !== NULL_MODE) {
@@ -150,7 +266,14 @@ export function runHistoryPriv(
       }
       if (entry.status === "D") continue;
 
-      publicAddition = true;
+      // §3: relocation me OID — brenda të njëjtit commit OSE nga commit i mëparshëm
+      if (deletedPrivateOids.has(entry.newOid)) {
+        findings.push({
+          profile: P, profileStatus: status, severity: "REVIEW",
+          ruleId: "HP-PRIVATE-RELOCATION", category: "privacy",
+          locator: REDACTED, commit: short,
+        });
+      }
       if (event?.body !== undefined && scope.present && !scope.malformed && !pathInScope(entry.path, scope.allowed)) {
         findings.push({
           profile: P, profileStatus: status, severity: "WARNING",
@@ -161,71 +284,25 @@ export function runHistoryPriv(
       approved.push(entry);
     }
 
-    if (privateDeletion && publicAddition) {
-      findings.push({
-        profile: P, profileStatus: status, severity: "REVIEW",
-        ruleId: "HP-PRIVATE-RELOCATION", category: "privacy",
-        locator: REDACTED, commit: short,
-      });
-    }
+    const snap = snapAt(sha);
 
-    // authority snapshot per-commit (§2H) — tracked Git objects të të njëjtit commit
-    const snapshotValues = new Map<string, { current: string; cls: AuthorityClass }>();
-    for (const cls of driftClasses) {
-      if (!reader.hasFile(sha, cls.authorityFile)) continue;
-      const norm = cls.normalize ?? ((v: string) => v);
-      const m = globalized(cls.authorityPattern).exec(reader.showFile(sha, cls.authorityFile));
-      if (m?.[1] !== undefined) snapshotValues.set(cls.id, { current: norm(m[1]), cls });
-    }
-
-    // ── FAZA 2: content vetëm për blob-et e APROVUARA ──
-    const snapshotCache = new Map<string, string | undefined>();
-    const getSnapshot = (path: string): string | undefined => {
-      if (!snapshotCache.has(path)) {
-        snapshotCache.set(path, reader.hasFile(sha, path) ? reader.showFile(sha, path) : undefined);
-      }
-      return snapshotCache.get(path);
-    };
-
+    // ── CONTENT — §2: e pa-skanueshme = SKANIM I PAPLOTË = exit 2 ──
     for (const entry of approved) {
-      // §5: kontrollo TË DY blob-et relevante — edhe old blob-i oversize/binar
-      // e bën content coverage të paplotë (diff-i varet prej tij).
-      if (entry.status === "M" && entry.oldOid !== undefined && !/^0+$/.test(entry.oldOid)) {
-        const oldSize = reader.blobSizeByOid(entry.oldOid);
-        if (oldSize > OVERSIZE_BYTES) {
-          findings.push({
-            profile: P, profileStatus: status, severity: "REVIEW",
-            ruleId: "HP-OVERSIZE-BLOB", category: "filesystem-boundary",
-            locator: entry.path, commit: short,
-          });
-          contentNotEvaluated.add("OVERSIZE_BLOB");
-          continue;
+      if (entry.status === "M" && !/^0+$/.test(entry.oldOid)) {
+        if (reader.blobSizeByOid(entry.oldOid) > OVERSIZE_BYTES) {
+          throw new ScanError("INCOMPLETE_SCAN:OVERSIZE_BLOB");
         }
       }
-      const size = reader.blobSizeByOid(entry.newOid);
-      if (size > OVERSIZE_BYTES) {
-        findings.push({
-          profile: P, profileStatus: status, severity: "REVIEW",
-          ruleId: "HP-OVERSIZE-BLOB", category: "filesystem-boundary",
-          locator: entry.path, commit: short,
-        });
-        contentNotEvaluated.add("OVERSIZE_BLOB");
-        continue;
+      if (reader.blobSizeByOid(entry.newOid) > OVERSIZE_BYTES) {
+        throw new ScanError("INCOMPLETE_SCAN:OVERSIZE_BLOB");
       }
       const content = reader.addedContent(sha, entry.path);
       if (content.binary) {
-        findings.push({
-          profile: P, profileStatus: status, severity: "REVIEW",
-          ruleId: "HP-BINARY-BLOB", category: "filesystem-boundary",
-          locator: entry.path, commit: short,
-        });
-        contentNotEvaluated.add("BINARY_BLOB");
-        continue;
+        throw new ScanError("INCOMPLETE_SCAN:BINARY_BLOB");
       }
 
-      // rregullat e klasave (kontekst + snapshot column-aware)
-      for (const { line, text } of content.lines.map((l) => ({ line: l.line, text: l.text }))) {
-        const ctx: RuleContext = { line: text, path: entry.path, lineNo: line, snapshot: () => getSnapshot(entry.path) };
+      for (const { line, text } of content.lines) {
+        const ctx: RuleContext = { line: text, path: entry.path, lineNo: line, snapshot: () => (snap.has(entry.path) ? snap.read(entry.path) : undefined) };
         for (const rule of contentRules) {
           if (rule.test(ctx)) {
             findings.push({
@@ -235,33 +312,9 @@ export function runHistoryPriv(
             });
           }
         }
-        // §2H drift per-commit kundër snapshot-it të të njëjtit commit
-        for (const [id, { current, cls }] of snapshotValues) {
-          if (entry.path === cls.authorityFile) continue;
-          const consumer = cls.consumers[0];
-          if (consumer === undefined) continue;
-          if (isHistoryLabeledRow(text)) continue;
-          const norm = cls.normalize ?? ((v: string) => v);
-          const re = globalized(consumer.pattern);
-          let cm: RegExpExecArray | null;
-          while ((cm = re.exec(text)) !== null) {
-            if (cm[1] === undefined) continue;
-            if (consumer.excludeBefore !== undefined &&
-                consumer.excludeBefore.test(text.slice(Math.max(0, cm.index - 24), cm.index))) {
-              continue;
-            }
-            if (norm(cm[1]) !== current) {
-              findings.push({
-                profile: P, profileStatus: status, severity: "WARNING",
-                ruleId: `HP-DRIFT-${cls.kind.toUpperCase()}`, category: "drift",
-                locator: `${entry.path}:${line} (${id})`, commit: short,
-              });
-            }
-          }
-        }
       }
 
-      // §2I: Human Gate order edhe MULTILINE — blloqe rreshtash added KONSEKUTIVË
+      // rend zinxhiri mbi blloqe added-lines KONSEKUTIVË (plotësues i §4 snapshot)
       const blocks: Array<Array<{ line: number; text: string }>> = [];
       let cur: Array<{ line: number; text: string }> = [];
       for (const l of content.lines) {
@@ -285,15 +338,57 @@ export function runHistoryPriv(
         }
       }
     }
+
+    // ── §1 DRIFT per-commit mbi SNAPSHOT-in FINAL (dedup kundrejt parent-it) ──
+    const currentDriftDefects = new Map<string, string>();
+    for (const cls of driftClasses) {
+      const exists = snap.has(cls.authorityFile);
+      if (!exists) {
+        if (activated.get(cls.id) === true) {
+          // pas aktivizimit ONCE_PRESENT mungesa = dështim (activation s'fsheh commits)
+          throw new ScanError("INCOMPLETE_SCAN:AUTHORITY_MISSING");
+        }
+        continue; // para aktivizimit — e lejuar nga metadata e klasës
+      }
+      let clsDefects: Map<string, string>;
+      try {
+        clsDefects = evaluateClassOnSnapshot(cls, snap);
+      } catch (err) {
+        if (err instanceof AuthorityError) {
+          if (activated.get(cls.id) === true) throw new ScanError(err.code); // pas aktivizimit → exit 2
+          continue; // para aktivizimit — e lejuar nga metadata ONCE_PRESENT
+        }
+        throw err;
+      }
+      activated.set(cls.id, true);
+      for (const [k, v] of clsDefects) currentDriftDefects.set(k, v);
+    }
+    for (const [sig, locator] of currentDriftDefects) {
+      if (parentDriftDefects.has(sig)) continue; // ekzistonte para këtij commit-i
+      const cls = driftClasses.find((c) => sig.startsWith(`${c.id}|`));
+      const kind = cls?.kind.toUpperCase() ?? "VALUE";
+      const isMissing = sig.endsWith("|missing") || sig.endsWith("|missing-file");
+      findings.push({
+        profile: P, profileStatus: status, severity: "WARNING",
+        ruleId: isMissing ? "HP-CURRENT-VALUE-MISSING" : `HP-DRIFT-${kind}`,
+        category: "drift", locator, commit: short,
+      });
+    }
+    parentDriftDefects = currentDriftDefects;
+
+    // ── §4 CHAIN per-commit mbi snapshot (prani + rend; dedup kundrejt parent-it) ─
+    const currentChainDefects = evaluateChainOnSnapshot(chainSurfaces, snap);
+    for (const [sig, locator] of currentChainDefects) {
+      if (parentChainDefects.has(sig)) continue;
+      findings.push({
+        profile: P, profileStatus: status, severity: "WARNING",
+        ruleId: sig.includes("|order:") ? "HP-GATE-ORDER" : "HP-CHAIN-INCOMPLETE",
+        category: "sequence", locator, commit: short,
+      });
+    }
+    parentChainDefects = currentChainDefects;
   }
 
-  // §5: coverage e paplotë e content-it raportohet EKSPLICIT — kurrë "scan complete"
-  for (const reason of [...contentNotEvaluated].sort()) {
-    evaluations.push({
-      profile: P, profileStatus: status, status: "NOT_EVALUATED",
-      check: "content", reason,
-    });
-  }
   evaluations.push({ profile: P, profileStatus: status, status: "EVALUATED" });
   return { findings, evaluations };
 }

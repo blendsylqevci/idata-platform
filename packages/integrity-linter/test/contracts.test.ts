@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { frag, makeTempRepo } from "./helpers.js";
 import { GitCliReader } from "../src/git-repository.js";
 import { runHistoryPriv } from "../src/profiles/history-priv.js";
 import { toJsonReport, toTextReport, sortEvaluations } from "../src/reporter.js";
 import type { GitReader, ProfileEvaluation } from "../src/types.js";
+import { ScanError } from "../src/types.js";
 
 function repoWithBase() {
   const repo = makeTempRepo();
@@ -116,39 +118,108 @@ describe("§6 REPORTER — kontrata e `check` në text + JSON + sort determinist
   });
 });
 
-describe("§5 boundary — size cap ekzakt / ±1 dhe old-blob coverage", () => {
-  it("cap-1 dhe cap ekzakt skanohen; cap+1 → REVIEW + NOT_EVALUATED(content)", () => {
+describe("§2 boundary — content i pa-skanueshëm = exit 2 (fail-closed, Pass III)", () => {
+  it("cap−1 dhe cap EKZAKT skanohen; cap+1 → ScanError OVERSIZE_BLOB pa path në error", () => {
     const { repo, base } = repoWithBase();
-    repo.write("a.txt", "a".repeat(999_999) + "\n");   // nën cap (size = 1_000_000 me \n)
-    repo.write("b.txt", "b".repeat(1_000_001));         // mbi cap
-    const head = repo.commitAll("sizes");
-    const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined);
-    const over = r.findings.filter((f) => f.ruleId === "HP-OVERSIZE-BLOB").map((f) => f.locator);
-    expect(over).toEqual(["b.txt"]);
-    const notEval = r.evaluations.filter((e) => e.check === "content");
-    expect(notEval.map((e) => e.reason)).toContain("OVERSIZE_BLOB");
-    expect(notEval.every((e) => e.status === "NOT_EVALUATED")).toBe(true);
+    repo.write("a.txt", "a".repeat(999_999) + "\n"); // = 1_000_000 me \n (cap ekzakt)
+    const c1 = repo.commitAll("cap exact");
+    const r1 = runHistoryPriv(new GitCliReader(repo.dir), base, c1, undefined);
+    expect(r1.findings.filter((f) => f.ruleId.includes("OVERSIZE"))).toHaveLength(0);
+    expect(r1.evaluations.some((e) => e.status === "EVALUATED" && e.check === undefined)).toBe(true);
+
+    repo.write("b.txt", "b".repeat(1_000_001)); // cap+1
+    const c2 = repo.commitAll("over cap");
+    try {
+      runHistoryPriv(new GitCliReader(repo.dir), c1, c2, undefined);
+      expect.unreachable("duhet exit-2 path");
+    } catch (err) {
+      expect((err as { code?: string }).code).toBe("INCOMPLETE_SCAN:OVERSIZE_BLOB");
+      expect((err as Error).message).not.toContain("b.txt");
+    }
   });
 
-  it("old blob oversize + new i vogël → coverage e paplotë (kontrollohen TË DY blob-et)", () => {
-    const { repo, base } = repoWithBase();
+  it("old blob oversize + new i vogël → ScanError (kontrollohen TË DY blob-et)", () => {
+    const { repo } = repoWithBase();
     repo.write("big.txt", "x".repeat(1_000_100));
     const c1 = repo.commitAll("big v1");
     repo.write("big.txt", "i vogël tani\n");
-    const head = repo.commitAll("small v2");
-    const r = runHistoryPriv(new GitCliReader(repo.dir), c1, head, undefined);
-    expect(r.findings.some((f) => f.ruleId === "HP-OVERSIZE-BLOB" && f.locator === "big.txt")).toBe(true);
-    expect(r.evaluations.some((e) => e.check === "content" && e.reason === "OVERSIZE_BLOB")).toBe(true);
+    const c2 = repo.commitAll("small v2");
+    expect(() => runHistoryPriv(new GitCliReader(repo.dir), c1, c2, undefined))
+      .toThrow("INCOMPLETE_SCAN:OVERSIZE_BLOB");
   });
 
-  it("binar me NUL në fillim dhe NUL në fund → REVIEW pa content; UTF-8 invalid pa NUL → exit-2 path", () => {
+  it("binar (NUL fillim/fund) → ScanError BINARY_BLOB pa OID; UTF-8 invalid → ScanError", () => {
     const { repo, base } = repoWithBase();
     writeFileSync(`${repo.dir}/nul-start.bin`, Buffer.concat([Buffer.from([0]), Buffer.from("abc")]));
+    const c1 = repo.commitAll("nul start");
+    try {
+      runHistoryPriv(new GitCliReader(repo.dir), base, c1, undefined);
+      expect.unreachable("duhet exit-2 path");
+    } catch (err) {
+      expect((err as { code?: string }).code).toBe("INCOMPLETE_SCAN:BINARY_BLOB");
+      expect((err as Error).message).not.toMatch(/[0-9a-f]{40}/);
+    }
     writeFileSync(`${repo.dir}/nul-end.bin`, Buffer.concat([Buffer.from("abc"), Buffer.from([0])]));
-    const head = repo.commitAll("nul blobs");
-    const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined);
-    const bins = r.findings.filter((f) => f.ruleId === "HP-BINARY-BLOB").map((f) => f.locator).sort();
-    expect(bins).toEqual(["nul-end.bin", "nul-start.bin"]);
-    expect(r.evaluations.some((e) => e.check === "content" && e.reason === "BINARY_BLOB")).toBe(true);
+    const c2 = repo.commitAll("nul end");
+    expect(() => runHistoryPriv(new GitCliReader(repo.dir), c1, c2, undefined))
+      .toThrow("INCOMPLETE_SCAN:BINARY_BLOB");
+
+    const repo2 = makeTempRepo();
+    repo2.write("README.md", "base\n");
+    const b2 = repo2.commitAll("base");
+    writeFileSync(`${repo2.dir}/bad.txt`, Buffer.from([0x61, 0xc3, 0x28, 0x62, 0x0a]));
+    const h2 = repo2.commitAll("bad encoding");
+    expect(() => runHistoryPriv(new GitCliReader(repo2.dir), b2, h2, undefined)).toThrow(ScanError);
+  });
+});
+
+describe("§3 PRIVATE RELOCATION — OID nëpër TËRË range-in", () => {
+  it("delete privat në A → add publik me të NJËJTIN OID në C → RELOCATION i redaktuar te C", () => {
+    const { repo } = repoWithBase();
+    const privDir = frag("private", "-sensitive");
+    repo.write(`${privDir}/leak.md`, "synthetic-priv-content\n");
+    const c1 = repo.commitAll("private add");
+    execFileSync("git", ["rm", "-rq", privDir], { cwd: repo.dir });
+    const c2 = repo.commitAll("private delete only");
+    repo.write("public-copy.md", "synthetic-priv-content\n"); // i njëjti content → i njëjti OID
+    const c3 = repo.commitAll("public re-add later");
+    const r = runHistoryPriv(new GitCliReader(repo.dir), c1, c3, undefined);
+    const reloc = r.findings.filter((f) => f.ruleId === "HP-PRIVATE-RELOCATION");
+    expect(reloc).toHaveLength(1);
+    expect(reloc[0]?.commit).toBe(c3.slice(0, 8));
+    expect(reloc[0]?.locator).toBe("[REDACTED_PATH]");
+    const json = toJsonReport({ mode: "advisory", evaluations: r.evaluations, findings: r.findings });
+    expect(json).not.toContain(privDir);
+    expect(json).not.toMatch(/[0-9a-f]{40}/);
+  });
+
+  it("same-commit relocation kapet; OID i palidhur → clean; delete-only → clean", () => {
+    const { repo } = repoWithBase();
+    const privDir = frag("docs", "-private");
+    repo.write(`${privDir}/x.md`, "relocate-me\n");
+    const c1 = repo.commitAll("private add");
+    execFileSync("git", ["mv", `${privDir}/x.md`, "public-x.md"], { cwd: repo.dir });
+    const c2 = repo.commitAll("same-commit relocation");
+    const r2 = runHistoryPriv(new GitCliReader(repo.dir), c1, c2, undefined);
+    expect(r2.findings.filter((f) => f.ruleId === "HP-PRIVATE-RELOCATION")).toHaveLength(1);
+
+    const repo2 = makeTempRepo();
+    repo2.write("README.md", "base\n");
+    repo2.write(`${frag("private", "-sensitive")}/y.md`, "content-A\n");
+    const d1 = repo2.commitAll("priv add");
+    execFileSync("git", ["rm", "-rq", frag("private", "-sensitive")], { cwd: repo2.dir });
+    repo2.write("unrelated.md", "content-B krejt tjetër\n");
+    const d2 = repo2.commitAll("delete privat + add i palidhur");
+    const rU = runHistoryPriv(new GitCliReader(repo2.dir), d1, d2, undefined);
+    expect(rU.findings.filter((f) => f.ruleId === "HP-PRIVATE-RELOCATION")).toHaveLength(0);
+
+    const repo3 = makeTempRepo();
+    repo3.write("README.md", "base\n");
+    repo3.write(`${frag("evidence", "-private", "-local")}/z.md`, "cleanup\n");
+    const e1 = repo3.commitAll("priv");
+    execFileSync("git", ["rm", "-rq", frag("evidence", "-private", "-local")], { cwd: repo3.dir });
+    const e2 = repo3.commitAll("delete-only cleanup");
+    const rC = runHistoryPriv(new GitCliReader(repo3.dir), e1, e2, undefined);
+    expect(rC.findings).toHaveLength(0);
   });
 });
