@@ -12,9 +12,11 @@ implementim aktiv per-commit + fixtures pozitive, negative, boundary dhe inverse
 ose implementim të profileve të tjera.
 
 **DOC-CORE baseline = IMPLEMENTED_ADVISORY:** kontratë bidirectional
-`authority → consumers` (REQUIRED_CURRENT / SCAN_IF_PRESENT; missing/stale/ambiguous),
-rendi invariant i zinxhirit SEF, milestones, role-vocabulary (REVIEW), claims
-kontekstuale, PR-body drift (NOT_EVALUATED kur mungon event-i).
+`authority → consumers` (REQUIRED_CURRENT / SCAN_IF_PRESENT; missing/stale/ambiguous
+→ fail-closed), zinxhiri SEF me **prani + rend** të 6 hallkave, klasa reale `phase`
+(kolona "Faza" e 07 → çelësat FISCAL-/BLOCKS- të Ledger-it), milestones,
+role-vocabulary me fraza të plota (REVIEW), claims kontekstuale, PR-body drift
+(NOT_EVALUATED vetëm kur mungon event-i).
 
 **14 profilet e tjera = NOT_IMPLEMENTED** (kurrë PASS). `--mode required` refuzohet —
 `HG-LINTER-REQUIRED` i paaprovuar.
@@ -29,11 +31,13 @@ kontekstuale, PR-body drift (NOT_EVALUATED kur mungon event-i).
   zero content/hash; delete-only cleanup lejohet; relocation privat→publik → REVIEW.
 - **Fail-closed (exit 2):** merge commit në range; mode ≠ 100644/100755; path me
   tab/newline/UTF-8 invalid/bidi/format chars/prefiks të dyshimtë; parser failure;
-  authority missing/unreadable/ambiguous; surface e detyrueshme që mungon; shallow repo;
-  event i malformuar/oversize/SHA invalid/range mismatch. Kode gabimi FIKSE —
-  kurrë raw git message/argv/ref/path.
-- **Binary/oversize:** REVIEW me safe locator + evaluation `check=content`
-  `NOT_EVALUATED` (`BINARY_BLOB`/`OVERSIZE_BLOB`) — run-i NUK quhet content-complete.
+  authority missing/unreadable/ambiguous (validator i përbashkët, per-commit,
+  aktivizim ONCE_PRESENT); **binary/oversize blob** (`INCOMPLETE_SCAN:BINARY_BLOB`/
+  `OVERSIZE_BLOB` — përshkallëzuar nga REVIEW+NOT_EVALUATED e Pass II, shih 07 v2.5);
+  surface e detyrueshme që mungon; shallow repo; event i malformuar/oversize/
+  SHA invalid/range mismatch. Kode gabimi FIKSE — kurrë raw git message/argv/ref/path.
+- **Relocation private→publike:** OID-t e blob-eve private të fshira ndiqen nëpër
+  GJITHË range-un — rikthimi në commit tjetër kapet (REVIEW me `[REDACTED_PATH]`).
 - **Event trust boundary:** `GITHUB_EVENT_PATH` lexohet automatikisht VETËM kur
   `GITHUB_ACTIONS=true` dhe `GITHUB_EVENT_NAME=pull_request`; lokalisht vetëm
   `--event-file` eksplicit; O_NOFOLLOW + fstat; caps fikse; SHA 40-hex.
