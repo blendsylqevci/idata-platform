@@ -107,10 +107,10 @@ export function evaluatePath(path: string): PathVerdict {
   // 4b) *.secret.md — klasë kudo, çfarëdo case/nesting
   if (basenameLower.endsWith(frag(".", "secret", ".md"))) return "BLOCKED";
 
-  // 5) stema owner-only KUDO në basename (me kufi fjale majtas — jo vetëm startsWith)
+  // 5) stema owner-only SUBSTRING kudo në basename (§6A: parity e saktë me
+  // guard-in, i cili bën grep -iE substring mbi path — pa kufij fjale)
   for (const stem of BLOCKED_BASENAME_STEMS) {
-    const re = new RegExp(`(^|[^a-zë])${stem.toLowerCase().replace(/[.*+?^${}()|[\]\\/]/g, (c) => "\\" + c)}`, "i");
-    if (re.test(basenameLower)) return "BLOCKED";
+    if (basenameLower.includes(stem.toLowerCase())) return "BLOCKED";
   }
   for (const sub of BLOCKED_BASENAME_SUBSTRINGS) {
     if (basenameLower.includes(sub.toLowerCase())) return "BLOCKED";

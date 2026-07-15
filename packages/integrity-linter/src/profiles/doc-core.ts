@@ -1,15 +1,14 @@
 /**
  * DOC-CORE — integriteti i dokumentacionit canonical & governance (advisory, FAIL-CLOSED).
  *
- * Kontrata bidirectional authority → consumers (§1, Hardening II):
- *  - REQUIRED_CURRENT: vlera aktuale DUHET të jetë e pranishme (mungesa e saj =
- *    DC-CURRENT-VALUE-MISSING); çdo vlerë stale aktive = DC-OLD-VALUE-DRIFT;
- *  - SCAN_IF_PRESENT: mungesa e referencës lejohet; nëse është, duhet current;
- *  - etiketa historike vlen VETËM same-row; rresht i etiketuar me vlerën current
- *    NUK e plotëson kërkesën REQUIRED_CURRENT (current duhet AKTIV);
- *  - authority missing/unreadable/AMBIGUOUS → ScanError → exit 2 (kurrë WARNING);
- *  - PR body: SCAN_IF_PRESENT kundrejt authority-ve; event/body që mungon →
- *    evaluation NOT_EVALUATED me check="pr-body" — kurrë PASS i fabrikuar.
+ * Hardening III:
+ *  - §1: validator i PËRBASHKËT pure `extractAuthorityValue` (i njëjti me HISTORY-PRIV);
+ *  - §4: zinxhiri invariant kontrollohet për PRANI + REND në sipërfaqet chainRequired —
+ *    të 6 hallkat duhen në një block AKTIV; HISTORICAL chain s'e plotëson;
+ *    variantet e review normalizohen në të njëjtën hallkë;
+ *  - §7: qelizat me GFM parser; role-bearing fields (kolona Owner/Pronari/Kush/… +
+ *    etiketa **Pronari:**) në TË GJITHA sipërfaqet aktive; FRAZA TË PLOTA rolesh —
+ *    një fjalë e lejuar brenda tokenit NUK e aprovon tokenin.
  *
  * Linter-i NUK jep opinion ligjor dhe NUK vendos semantikën e asnjë neni.
  */
@@ -18,45 +17,60 @@ import type { Finding, GitReader, ProfileEvaluation, PullRequestEvent } from "..
 import { ScanError } from "../types.js";
 import { profileStatus } from "../profile-registry.js";
 import {
-  defaultAuthorityClasses, isHistoryLabeledRow,
+  AuthorityError, defaultAuthorityClasses, extractAuthorityValue, isHistoryLabeledRow,
   GATE, INDEX, LEDGER, PM, POC5README, ROADMAP, SSOT, TRACKER,
   type AuthorityClass,
 } from "../authority-classes.js";
+import { isSeparatorRow, parseTableRow, tableContextAt } from "../markdown-table.js";
 
 const P = "DOC-CORE" as const;
 
 export interface DocCoreSurfaces {
   orderSurfaces: string[];
+  /** Sipërfaqet e DETYRUARA të mbajnë një block AKTIV me TË GJITHA 6 hallkat (§4). */
+  chainRequiredSurfaces: string[];
   trackerFile?: string;
   milestoneSurfaces: string[];
   authorities: AuthorityClass[];
-  approvedRoleWords: string[];
+  approvedRolePhrases: string[];
 }
 
-/** Fjalët e aprovuara të roleve (word-boundary; KURRË emra personalë realë). */
-export const APPROVED_ROLE_WORDS = [
-  "pronari", "codex", "claude", "pm", "group", "owner", "human", "gate", "finance",
-  "kontabilisti", "icode", "atk", "kabi", "planet", "teknologu", "fabrika", "laboratori",
-  "jurist", "aip", "tech", "dev", "admin", "management", "operations", "sales",
-  "logistics", "hardware", "vendor", "klienti", "burimi", "tier",
+/**
+ * FRAZA TË PLOTA rolesh të aprovuara (normalizuara lowercase; §7) — të nxjerra
+ * nga vokabulari canonical i normalizuar (PR #20). KURRË emra personalë realë.
+ * Tokeni duhet të BARAZOHET me një frazë pas normalizimit — jo substring.
+ */
+export const APPROVED_ROLE_PHRASES = [
+  "pronari", "codex", "claude code", "pm", "group owner", "human gate", "finance owner",
+  "kontabilisti", "icode", "icode dev", "icode support", "icode l.l.c",
+  "atk", "kabi", "kabi admin", "kabi sales", "planet", "planet finance",
+  "planet operations", "planet management", "teknologu", "fabrika", "laboratori",
+  "jurist", "aip", "tech", "hardware vendor", "klienti", "owner", "burimi",
+  "logistics", "tier 2", "ti", "group",
 ];
 
 export function defaultSurfaces(): DocCoreSurfaces {
   return {
     orderSurfaces: [INDEX, ROADMAP, GATE, SSOT, PM, POC5README, LEDGER],
+    chainRequiredSurfaces: [INDEX, ROADMAP, GATE, SSOT, PM],
     trackerFile: TRACKER,
     milestoneSurfaces: [INDEX, ROADMAP, SSOT, PM],
     authorities: defaultAuthorityClasses(),
-    approvedRoleWords: APPROVED_ROLE_WORDS,
+    approvedRolePhrases: APPROVED_ROLE_PHRASES,
   };
 }
 
 export { isHistoryLabeledRow as isHistoryLabeled };
 
-const ORDER_TOKENS: Array<{ key: string; res: RegExp[] }> = [
+/** Hallkat e zinxhirit invariant; review normalizohet nga TË GJITHA variantet reale (§4). */
+export const CHAIN_TOKENS: Array<{ key: string; res: RegExp[] }> = [
   { key: "step-b", res: [/Step B\b/] },
   { key: "step-c", res: [/Step C\b/] },
-  { key: "review", res: [/independent re-?review/i, /review(?:-t|t)? (?:i|të) pavarur/i, /independent review/i] },
+  {
+    key: "independent-review",
+    res: [/independent re-?review/i, /\bre-review\b/i, /independent review/i,
+      /review(?:-t|t)? (?:i|të) pavarur/i, /rishikim(?:i|in)? (?:i|të) pavarur/i],
+  },
   { key: "human-gate", res: [/HUMAN GATE/i] },
   { key: "preflight", res: [/PREFLIGHT/i] },
   { key: "tier-2", res: [/Tier 2\b/] },
@@ -74,14 +88,14 @@ function firstIndex(paragraph: string, res: RegExp[]): number {
 /**
  * Nxjerr "chain text" nga një grup rreshtash — vetëm segmentet që janë
  * pretendime reale rendi (→ / "pastaj" / artikuj liste / bullets), me
- * parenteza të hequra, tabela/historikë të përjashtuar dhe subjekte 48-kar.
- * E përdorin edhe DOC-CORE (paragrafët) edhe HISTORY-PRIV (blloqet e added-lines).
+ * parenteza të hequra, tabela/historikë të përjashtuar; dritare ±80 rreth
+ * markerëve; subjekte 48-kar. për artikuj liste pa marker.
  */
 export function extractChainText(lines: string[]): string {
   const chainParts: string[] = [];
   for (const rawLine of lines) {
     if (rawLine.trimStart().startsWith("|")) continue; // tabelat s'janë zinxhirë
-    if (isHistoryLabeledRow(rawLine)) continue;
+    if (isHistoryLabeledRow(rawLine)) continue; // chain historik ≠ chain aktiv
     const line = rawLine.replace(/\([^)]*\)/g, " ");
     const isNumbered = /^\s*(?:\d+[a-z]?\.|[-*])\s/.test(line);
     const markers: number[] = [];
@@ -92,7 +106,7 @@ export function extractChainText(lines: string[]): string {
     } else if (markers.length > 0) {
       const keep = new Array<boolean>(line.length).fill(false);
       for (const mi of markers) {
-        for (let k = Math.max(0, mi - 48); k < Math.min(line.length, mi + 48); k++) keep[k] = true;
+        for (let k = Math.max(0, mi - 80); k < Math.min(line.length, mi + 80); k++) keep[k] = true;
       }
       let windowed = "";
       for (let k = 0; k < line.length; k++) windowed += keep[k] === true ? line[k] : " ";
@@ -103,7 +117,7 @@ export function extractChainText(lines: string[]): string {
 }
 
 export function chainOrderViolations(chainText: string): Array<{ later: string; earlier: string }> {
-  const present = ORDER_TOKENS
+  const present = CHAIN_TOKENS
     .map((t) => ({ key: t.key, idx: firstIndex(chainText, t.res) }))
     .filter((t) => t.idx >= 0);
   const out: Array<{ later: string; earlier: string }> = [];
@@ -117,13 +131,61 @@ export function chainOrderViolations(chainText: string): Array<{ later: string; 
   return out;
 }
 
-/** Tokenizim i owner-cell: ndarje në separatorë; çdo token kërkon ≥1 fjalë roli me kufij fjale. */
-export function ownerCellUnknownTokens(cell: string, approvedWords: string[]): number {
-  const tokens = cell.split(/[/,+;·]|→|\bdhe\b/i).map((t) => t.trim()).filter((t) => t !== "" && t !== "—" && t !== "-");
+export interface ChainEvaluation {
+  /** Hallkat që mungojnë nga blloku MË I MIRË aktiv i sipërfaqes. */
+  missing: string[];
+  /** Shkeljet e rendit në bllokun më të mirë. */
+  violations: Array<{ later: string; earlier: string }>;
+  /** true kur s'u gjet ASNJË block kandidat aktiv (≥2 hallka). */
+  noActiveChain: boolean;
+}
+
+/**
+ * §4: vlerëson PRANINË + RENDIN e zinxhirit të plotë në një dokument:
+ * blloku më i mirë AKTIV duhet t'i ketë TË GJITHA hallkat në rendin e saktë.
+ * Përdoret nga DOC-CORE (HEAD) dhe HISTORY-PRIV (snapshot per-commit).
+ */
+export function evaluateChainPresence(text: string): ChainEvaluation {
+  const paragraphs = text.split(/\n\s*\n/);
+  let best: { count: number; missing: string[]; violations: Array<{ later: string; earlier: string }> } | undefined;
+  for (const para of paragraphs) {
+    const chainText = extractChainText(para.split("\n"));
+    const present = CHAIN_TOKENS.filter((t) => firstIndex(chainText, t.res) >= 0);
+    if (present.length < 2) continue; // jo pretendim zinxhiri (partial prose near-miss)
+    const missing = CHAIN_TOKENS.filter((t) => firstIndex(chainText, t.res) < 0).map((t) => t.key);
+    const violations = chainOrderViolations(chainText);
+    const score = present.length - violations.length * 0.5;
+    if (best === undefined || score > best.count) {
+      best = { count: score, missing, violations };
+    }
+  }
+  if (best === undefined) return { missing: CHAIN_TOKENS.map((t) => t.key), violations: [], noActiveChain: true };
+  return { missing: best.missing, violations: best.violations, noActiveChain: false };
+}
+
+/** Header-at e kolonave role-bearing (§7) — barazi e plotë e emrit të kolonës. */
+const ROLE_HEADER_RE = /^(Owner( \/ burimi)?|Pronari?|Kush|Përgjegjës\w*|Approver|Human Gate)$/i;
+/** Etiketat metadata role-bearing. */
+const ROLE_LABEL_RE = /^\*{0,2}(Pronar(?:i)?(?: i dokumentit)?|Owner|Përgjegjës\w*|Approver)\s*:\*{0,2}\s*(.+)$/i;
+
+/** Tokenizon një vlerë role-bearing dhe kthen numrin e tokenëve JO të aprovuar. */
+export function roleTokensUnknown(cellRaw: string, approvedPhrases: string[]): number {
+  const cell = cellRaw
+    .replace(/\([^)]*\)/g, " ")           // kualifikuesit në parenteza hiqen
+    .replace(/[`*]/g, "")
+    .trim();
+  if (cell === "" || cell === "—" || cell === "-") return 0;
+  const tokens = cell
+    .split(/[/,+;·]|→|\bdhe\b/i)
+    .map((t) => t.trim().toLowerCase()
+      .replace(/\s+nëse duhet$/, "")
+      .replace(/\s+sipas rreshtit$/, "")
+      .replace(/\s+/g, " "))
+    .filter((t) => t !== "" && t !== "—" && t !== "-");
+  const approved = new Set(approvedPhrases.map((p) => p.toLowerCase()));
   let unknown = 0;
   for (const token of tokens) {
-    const ok = approvedWords.some((w) => new RegExp(`(^|[^\\p{L}])${w}([^\\p{L}]|$)`, "iu").test(token));
-    if (!ok) unknown += 1;
+    if (!approved.has(token)) unknown += 1; // FRAZË E PLOTË — jo substring/fjalë e vetme
   }
   return unknown;
 }
@@ -159,19 +221,17 @@ export function runDocCore(
     return text;
   };
 
-  // ── 1) kontrata bidirectional authority → consumers ─────────────────────
+  // ── 1) kontrata bidirectional authority → consumers (validator i përbashkët) ─
   for (const cls of surfaces.authorities) {
     const authorityText = readDoc(cls.authorityFile); // missing → exit 2
-    const norm = cls.normalize ?? ((v: string) => v);
-    const values = new Set<string>();
-    const are = globalized(cls.authorityPattern);
-    let am: RegExpExecArray | null;
-    while ((am = are.exec(authorityText)) !== null) {
-      if (am[1] !== undefined) values.add(norm(am[1]));
+    let current: string;
+    try {
+      current = extractAuthorityValue(authorityText, cls);
+    } catch (err) {
+      if (err instanceof AuthorityError) throw new ScanError(err.code);
+      throw err;
     }
-    if (values.size === 0) throw new ScanError("INCOMPLETE_SCAN:AUTHORITY_UNREADABLE");
-    if (values.size > 1) throw new ScanError("INCOMPLETE_SCAN:AUTHORITY_AMBIGUOUS");
-    const current = [...values][0] as string;
+    const norm = cls.normalize ?? ((v: string) => v);
 
     for (const consumer of cls.consumers) {
       const text = consumer.requirement === "REQUIRED_CURRENT"
@@ -189,7 +249,7 @@ export function runDocCore(
           if (cm[1] === undefined) continue;
           if (consumer.excludeBefore !== undefined &&
               consumer.excludeBefore.test(line.slice(Math.max(0, cm.index - 24), cm.index))) {
-            continue; // guard kontekstual per-match (jo per-rresht)
+            continue; // guard kontekstual per-match
           }
           anyMatch = true;
           const seen = norm(cm[1]);
@@ -215,7 +275,7 @@ export function runDocCore(
     }
   }
 
-  // ── 2) rendi invariant i zinxhirit SEF (per paragraf) ──────────────────
+  // ── 2) rendi invariant (të gjitha orderSurfaces) + PRANIA (chainRequired, §4) ─
   for (const file of surfaces.orderSurfaces) {
     const text = readDoc(file);
     const paragraphs = text.split(/\n\s*\n/);
@@ -231,6 +291,24 @@ export function runDocCore(
         });
       }
       lineNo += paraLines.length + 1;
+    }
+  }
+  for (const file of surfaces.chainRequiredSurfaces) {
+    const evaln = evaluateChainPresence(readDoc(file));
+    if (evaln.noActiveChain) {
+      findings.push({
+        profile: P, profileStatus: status, severity: "WARNING",
+        ruleId: "DC-CHAIN-INCOMPLETE", category: "sequence",
+        locator: `${file} (asnjë chain aktiv)`,
+      });
+    } else {
+      for (const missing of evaln.missing) {
+        findings.push({
+          profile: P, profileStatus: status, severity: "WARNING",
+          ruleId: "DC-CHAIN-INCOMPLETE", category: "sequence",
+          locator: `${file} (mungon: ${missing})`,
+        });
+      }
     }
   }
 
@@ -252,27 +330,47 @@ export function runDocCore(
         });
       }
     }
+  }
 
-    // ── 4) vocabulary rolesh — TOKENIZED word-boundary (jo substring bypass) ─
-    const lines = tracker.split("\n");
+  // ── 4) role/privacy vocabulary — kontekste të STRUKTURUARA kudo (§7) ────
+  const roleSurfaces = [...surfaces.orderSurfaces, ...(surfaces.trackerFile ? [surfaces.trackerFile] : [])];
+  for (const file of roleSurfaces) {
+    const text = readDoc(file);
+    const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] ?? "";
-      if (!line.startsWith("| `")) continue;
-      const cells = line.split("|").map((c) => c.trim());
-      const ownerCell = cells[4];
-      if (ownerCell === undefined || ownerCell === "" || ownerCell === "—") continue;
-      if (ownerCellUnknownTokens(ownerCell, surfaces.approvedRoleWords) > 0) {
+      // (a) rreshta tabele nën kolonë role-bearing
+      if (line.trimStart().startsWith("|") && !isSeparatorRow(line)) {
+        const tctx = tableContextAt(text, i + 1);
+        const col = tctx?.columnIndex(ROLE_HEADER_RE);
+        if (tctx !== undefined && col !== undefined) {
+          const row = parseTableRow(line);
+          const cell = row.cells[col];
+          if (!row.malformed && cell !== undefined &&
+              roleTokensUnknown(cell, surfaces.approvedRolePhrases) > 0) {
+            findings.push({
+              profile: P, profileStatus: status, severity: "REVIEW",
+              ruleId: "DC-ROLE-VOCAB", category: "privacy-review",
+              locator: `${file}:${i + 1}`,
+            });
+          }
+          continue;
+        }
+      }
+      // (b) etiketa metadata role-bearing
+      const lm = ROLE_LABEL_RE.exec(line.trim());
+      if (lm?.[2] !== undefined && roleTokensUnknown(lm[2], surfaces.approvedRolePhrases) > 0) {
         findings.push({
           profile: P, profileStatus: status, severity: "REVIEW",
           ruleId: "DC-ROLE-VOCAB", category: "privacy-review",
-          locator: `${surfaces.trackerFile}:${i + 1}`,
+          locator: `${file}:${i + 1}`,
         });
       }
     }
   }
 
   // ── 5) pretendime absolute — kontekstuale per-rresht ────────────────────
-  for (const file of [...surfaces.orderSurfaces, ...(surfaces.trackerFile ? [surfaces.trackerFile] : [])]) {
+  for (const file of roleSurfaces) {
     const text = readDoc(file);
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
@@ -293,8 +391,7 @@ export function runDocCore(
     }
   }
 
-  // ── 6) PR body kundrejt authority-ve (SCAN_IF_PRESENT — jo çdo authority
-  //       kërkohet në body; body pa përmbajtje → NOT_EVALUATED, jo PASS) ────
+  // ── 6) PR body kundrejt authority-ve (SCAN_IF_PRESENT; pa event → NOT_EVALUATED) ─
   if (event?.body === undefined) {
     evaluations.push({
       profile: P, profileStatus: status, status: "NOT_EVALUATED",
@@ -305,10 +402,14 @@ export function runDocCore(
     for (const cls of surfaces.authorities) {
       const authorityText = readDocIfPresent(cls.authorityFile);
       if (authorityText === undefined) continue;
+      let current: string;
+      try {
+        current = extractAuthorityValue(authorityText, cls);
+      } catch (err) {
+        if (err instanceof AuthorityError) throw new ScanError(err.code);
+        throw err;
+      }
       const norm = cls.normalize ?? ((v: string) => v);
-      const am2 = globalized(cls.authorityPattern).exec(authorityText);
-      const current = am2?.[1] !== undefined ? norm(am2[1]) : undefined;
-      if (current === undefined) continue;
       const consumer0 = cls.consumers[0];
       if (consumer0 === undefined) continue;
       for (let i = 0; i < bodyLines.length; i++) {

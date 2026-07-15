@@ -7,9 +7,10 @@ import { ScanError } from "../src/types.js";
 function syntheticSurfaces(rowCountRequirement: "REQUIRED_CURRENT" | "SCAN_IF_PRESENT" = "REQUIRED_CURRENT"): DocCoreSurfaces {
   return {
     orderSurfaces: ["index.md"],
+    chainRequiredSurfaces: [],
     trackerFile: "tracker.md",
     milestoneSurfaces: ["index.md", "roadmap.md"],
-    approvedRoleWords: ["pronari", "pm"],
+    approvedRolePhrases: ["pronari", "pm"],
     authorities: [
       {
         id: "ledger-version", kind: "version",
@@ -27,7 +28,9 @@ function syntheticSurfaces(rowCountRequirement: "REQUIRED_CURRENT" | "SCAN_IF_PR
   };
 }
 
-function writeBase(repo: ReturnType<typeof makeTempRepo>, indexBody: string, tracker = "| `GOV-001` | x | y | Pronari | z |\n") {
+const TRACKER_HDR = "| ID | W | K | Owner / burimi | S |\n|---|---|---|---|---|\n";
+function writeBase(repo: ReturnType<typeof makeTempRepo>, indexBody: string, trackerRows = "| `GOV-001` | x | y | Pronari | z |\n") {
+  const tracker = TRACKER_HDR + trackerRows;
   repo.write("ledger.md", "**Versioni:** 1.6\nTOTAL: 132\n");
   repo.write("index.md", indexBody);
   repo.write("tracker.md", tracker);
@@ -56,7 +59,7 @@ describe("DOC-CORE — fail-closed + drift/order/milestone/claims/pr-body", () =
     const repo = makeTempRepo();
     repo.write("ledger.md", "pa version fare\n");
     repo.write("index.md", "x\n");
-    repo.write("tracker.md", "| `GOV-001` | x | y | Pronari | z |\n");
+    repo.write("tracker.md", TRACKER_HDR + "| `GOV-001` | x | y | Pronari | z |\n");
     repo.write("roadmap.md", "GOV-001\n");
     repo.commitAll("authority pa vlerë");
     expect(() => runDocCore(new GitCliReader(repo.dir), "HEAD", syntheticSurfaces(), { body: "" }))
@@ -144,7 +147,7 @@ describe("DOC-CORE — fail-closed + drift/order/milestone/claims/pr-body", () =
     const repo = makeTempRepo();
     repo.write("ledger.md", "**Versioni:** 1.6\nTOTAL: 132\n");
     repo.write("index.md", "asnjë referencë ledger këtu\n");
-    repo.write("tracker.md", "| `GOV-001` | x | y | Pronari | z |\n");
+    repo.write("tracker.md", TRACKER_HDR + "| `GOV-001` | x | y | Pronari | z |\n");
     repo.write("roadmap.md", "GOV-001\n");
     repo.commitAll("docs");
     const r = runDocCore(new GitCliReader(repo.dir), "HEAD", syntheticSurfaces(), { body: "" });
@@ -183,7 +186,7 @@ describe("DOC-CORE — fail-closed + drift/order/milestone/claims/pr-body", () =
     const repo = makeTempRepo();
     repo.write("ledger.md", "**Versioni:** 1.6\n**Versioni:** 1.5\nTOTAL: 132\n");
     repo.write("index.md", "Ledger v1.6 · 132 source-rows\n");
-    repo.write("tracker.md", "| `GOV-001` | x | y | Pronari | z |\n");
+    repo.write("tracker.md", TRACKER_HDR + "| `GOV-001` | x | y | Pronari | z |\n");
     repo.write("roadmap.md", "GOV-001\n");
     repo.commitAll("docs");
     expect(() => runDocCore(new GitCliReader(repo.dir), "HEAD", syntheticSurfaces(), { body: "" }))
@@ -211,8 +214,8 @@ describe("DOC-CORE — fail-closed + drift/order/milestone/claims/pr-body", () =
     const r = runDocCore(new GitCliReader(repo.dir), "HEAD", syntheticSurfaces(), { body: "" });
     const vocab = r.findings.filter((f) => f.ruleId === "DC-ROLE-VOCAB").map((f) => f.locator);
     expect(vocab).toHaveLength(2); // ACC-903 (substring bypass) + ACC-904 (token i panjohur)
-    expect(vocab.some((l) => l.endsWith(":2"))).toBe(true);
-    expect(vocab.some((l) => l.endsWith(":3"))).toBe(true);
+    expect(vocab.some((l) => l.endsWith(":4"))).toBe(true);
+    expect(vocab.some((l) => l.endsWith(":5"))).toBe(true);
     expect(JSON.stringify(r)).not.toContain("Sintetik"); // kandidati s'publikohet
   });
 

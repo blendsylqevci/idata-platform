@@ -107,20 +107,34 @@ export function readPullRequestEvent(eventPath: string | undefined): PullRequest
   } catch {
     throw new ConfigError("EVENT_MALFORMED");
   }
-  const pr = (parsed as { pull_request?: { base?: { sha?: unknown }; head?: { sha?: unknown }; body?: unknown } | null }).pull_request;
-  if (pr === undefined || pr === null) throw new ConfigError("EVENT_MALFORMED");
+  // §8 SKEMA STRIKTE (kontrata e GitHub Actions pull_request):
+  // root = object jo-array; pull_request = object jo-array; base/head = object
+  // jo-array; body = string (me cap) OSE null/mungues = body bosh — çdo tip
+  // tjetër (object/array/number/boolean) = EVENT_MALFORMED.
+  const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+    typeof v === "object" && v !== null && !Array.isArray(v);
+  if (!isPlainObject(parsed)) throw new ConfigError("EVENT_MALFORMED");
+  const pr = parsed["pull_request"];
+  if (!isPlainObject(pr)) throw new ConfigError("EVENT_MALFORMED");
   const ev: PullRequestEvent = {};
-  if (pr.base?.sha !== undefined) {
-    if (typeof pr.base.sha !== "string" || !SHA40.test(pr.base.sha)) throw new ConfigError("EVENT_SHA_INVALID");
-    ev.baseSha = pr.base.sha;
+  for (const side of ["base", "head"] as const) {
+    const node = pr[side];
+    if (node === undefined || node === null) continue;
+    if (!isPlainObject(node)) throw new ConfigError("EVENT_MALFORMED");
+    const sha = node["sha"];
+    if (sha === undefined) continue;
+    if (typeof sha !== "string" || !SHA40.test(sha)) throw new ConfigError("EVENT_SHA_INVALID");
+    if (side === "base") ev.baseSha = sha;
+    else ev.headSha = sha;
   }
-  if (pr.head?.sha !== undefined) {
-    if (typeof pr.head.sha !== "string" || !SHA40.test(pr.head.sha)) throw new ConfigError("EVENT_SHA_INVALID");
-    ev.headSha = pr.head.sha;
-  }
-  if (typeof pr.body === "string") {
-    if (Buffer.byteLength(pr.body, "utf8") > MAX_BODY_BYTES) throw new ConfigError("EVENT_BODY_OVERSIZE");
-    ev.body = pr.body;
+  const body = pr["body"];
+  if (body === undefined || body === null) {
+    // eksplicit: body mungues/null = body bosh sipas kontratës — JO object valid
+  } else if (typeof body === "string") {
+    if (Buffer.byteLength(body, "utf8") > MAX_BODY_BYTES) throw new ConfigError("EVENT_BODY_OVERSIZE");
+    ev.body = body;
+  } else {
+    throw new ConfigError("EVENT_MALFORMED"); // object/array/number/boolean
   }
   return ev;
 }
