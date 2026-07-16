@@ -37,12 +37,34 @@ export interface AuthorityClass {
   /** Normalizues i përbashkët për authority + consumers (statuset). */
   normalize?: (raw: string) => string;
   /**
-   * Activation boundary per-commit (§1.2, eksplicit në metadata):
-   *  - "ONCE_PRESENT" (default): klasa aktivizohet nga commit-i i PARË i range-ut
-   *    ku authority file ekziston; PARA aktivizimit mungesa lejohet nga kontrata;
-   *    PAS aktivizimit mungesa = ScanError (activation s'fsheh commit-et e PR-së).
+   * Activation boundary per-commit (§1.2; ngurtësuar në Hardening IV §2):
+   *  - "ONCE_PRESENT" (default): klasa aktivizohet sapo authority FILE EKZISTON
+   *    në snapshot — përfshirë base snapshot-in (aktive nga commit-i i parë i
+   *    skanuar). PARA aktivizimit kontrata lejon VETËM mungesën e file-it;
+   *    PAS aktivizimit bosh / zero match / vlerë ambige / unreadable / file i
+   *    hequr = ScanError me kod fiks (exit 2) — kurrë ONCE_VALID, aktivizimi
+   *    s'fsheh shfaqjen e parë të prishur dhe s'printon vlerën problematike.
    */
   activation?: "ONCE_PRESENT";
+  /**
+   * §4A (P-IV) — COMPATIBILITY MECHANISM me pranim të kushtëzuar: vetëm për
+   * authority surface që NUK ekzistonte semantikisht para futjes së seksionit,
+   * edhe pse file-i prind ekzistonte. KUFIJ TË DETYRUESHËM:
+   *  - default-i mbetet FILE PRESENCE; anchor = opt-in i RRALLË;
+   *  - në PR #21 lejohet VETËM për `profile-registry-set` dhe
+   *    `hg-linter-required-status` (zgjerim te klasa të tjera kërkon
+   *    review/Human Gate);
+   *  - anchor-i duhet të jetë structural label UNIK dhe path-bound — KURRË
+   *    vetë statusi/versioni/vlera e authority-t;
+   *  - para anchor-it klasa është NOT_APPLICABLE; në commit-in e lindjes
+   *    bosh/zero-match/ambige → exit 2 PO NË ATË COMMIT;
+   *  - pas aktivizimit sticky: anchor i hequr → ANCHOR_MISSING; anchor i
+   *    duplikuar → ANCHOR_DUPLICATE; authority e prishur/hequr/ambige ose
+   *    file unreadable → exit 2;
+   *  - heqja e ardhshme e anchor-it kërkon PR + review më vete (pa premtim
+   *    heqjeje automatike pas merge-it).
+   */
+  activationAnchor?: RegExp;
   consumers: ConsumerSpec[];
 }
 
@@ -231,7 +253,10 @@ export function defaultAuthorityClasses(): AuthorityClass[] {
     })(),
     {
       // set/profile registry: "14 profilet e tjera = NOT_IMPLEMENTED" (authority = 07 §Linter)
+      // Asertimi i statusit LINDI me v2.3 (§Linter status block) — jo me file-in v2.2;
+      // anchor-i e deklaron lindjen e seksionit (P-IV §2, kontratë reale).
       id: "profile-registry-set", kind: "set", authorityFile: MATRIX07,
+      activationAnchor: /Status \(effective on merge të PR-së tooling GOV-001\)/,
       authorityPattern: /(\d+) profilet e tjera = `?NOT_IMPLEMENTED`?/g,
       consumers: [TRACKER, SSOT, INDEX, ROADMAP, PM].map((file) => ({
         file, requirement: "SCAN_IF_PRESENT" as const,
@@ -239,7 +264,10 @@ export function defaultAuthorityClasses(): AuthorityClass[] {
       })),
     },
     {
+      // Statusi eksplicit i HG-LINTER-REQUIRED lindi me §Linter status block (v2.3) —
+      // v2.2 e përmend gate-in pa asertim statusi; anchor si më sipër.
       id: "hg-linter-required-status", kind: "status", authorityFile: MATRIX07,
+      activationAnchor: /Status \(effective on merge të PR-së tooling GOV-001\)/,
       authorityPattern: /HG-LINTER-REQUIRED[`*,]{0,3} ?(?:mbetet |është )?(i paaprovuar|pending|gated|APPROVED)/gi,
       normalize: normalizeHgRequired,
       consumers: [TRACKER, SSOT, INDEX, ROADMAP, PM, GATE].map((file) => ({
@@ -248,15 +276,17 @@ export function defaultAuthorityClasses(): AuthorityClass[] {
       })),
     },
     {
-      // §5 PHASE REAL: faza e domenit Fiskalizim/SEF nga kolona "Faza" e 07
-      // (hierarkia dokumentare: 07 Parity Matrix = authority i fazës së domenit);
-      // konsumatorë PATH-BOUND: çelësat e mbylljes FISCAL-F*/BLOCKS-F* në Ledger.
-      // F-numra të parëndësishëm në prozë NUK kapen (pattern-et janë të lidhur).
-      id: "sef-fiscal-phase", kind: "phase", authorityFile: MATRIX07,
-      authorityPattern: /\| Fiskalizim \/ SEF \|[^\n]*\| (F\d+) \|/g,
+      // §6 P-IV PHASE: NJË authority i vetëm = rreshti path-bound `ATK-002` në
+      // Roadmap, kolona "Faza" (Roadmap NUK është njëkohësisht consumer i kësaj
+      // klase). Konsumatorë row/path-bound: rreshti `Fiskalizim / SEF` në 07
+      // (qeliza F<n>) + çelësat FISCAL-F*/BLOCKS-F* në Ledger. F-numra në prozë
+      // të zakonshme NUK numërohen (pattern-et janë të lidhur me rresht/çelës).
+      id: "sef-fiscal-phase", kind: "phase", authorityFile: ROADMAP,
+      authorityPattern: /\| ATK-002 \|[^\n]*\| Faza (\d+) \|/g,
       consumers: [
-        { file: LEDGER, requirement: "SCAN_IF_PRESENT" as const, pattern: /FISCAL-(F\d+)/g },
-        { file: LEDGER, requirement: "SCAN_IF_PRESENT" as const, pattern: /BLOCKS-(F\d+)/g },
+        { file: MATRIX07, requirement: "SCAN_IF_PRESENT" as const, pattern: /\| Fiskalizim \/ SEF \|[^\n]*\| F(\d+) \|/g },
+        { file: LEDGER, requirement: "SCAN_IF_PRESENT" as const, pattern: /FISCAL-F(\d+)/g },
+        { file: LEDGER, requirement: "SCAN_IF_PRESENT" as const, pattern: /BLOCKS-F(\d+)/g },
       ],
     },
   ];
@@ -264,6 +294,16 @@ export function defaultAuthorityClasses(): AuthorityClass[] {
 
 /** Sipërfaqet default që DUHET të mbajnë chain-in e plotë aktiv (§4). */
 export const DEFAULT_CHAIN_REQUIRED = [INDEX, ROADMAP, GATE, SSOT, PM];
+
+/**
+ * §9 P-IV — lista MACHINE-READABLE e canonical active surfaces për
+ * role/privacy coverage. Sipërfaqe e detyrueshme që mungon/s'lexohet → exit 2.
+ */
+export const ROLE_REQUIRED_SURFACES = [
+  SSOT, ROADMAP, TRACKER, PM, INDEX, GATE, REGISTER, LEDGER, MATRIX07,
+];
+/** README/ANALIZA skanohen kur ekzistojnë si consumers canonical aktivë. */
+export const ROLE_OPTIONAL_SURFACES = [POC5README, ANALIZA];
 
 /** Etiketë historike ROW-SCOPED — vlen vetëm në rreshtin ku gjendet vlera. */
 export function isHistoryLabeledRow(line: string): boolean {

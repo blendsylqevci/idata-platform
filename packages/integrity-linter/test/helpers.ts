@@ -134,13 +134,22 @@ export function writeFullCanonicalRepo(repo: TempRepo, opts?: { staleIndexLedger
   ].join("\n") + "\n";
   const indexStale = staleLine + "\nATK-011 OPEN / PENDING_INDEPENDENT_REVIEW · Tier 2 NOT IMPLEMENTED/NO-GO\nGOV-001 hapi 0\n\n" + CHAIN + "\n";
   repo.write(INDEX, opts?.staleIndexLedger === true ? indexStale : indexOk);
-  repo.write(ROADMAP, CHAIN + "\nLedger v1.6 · Register v2.4 · 132 source-rows · 46 closure keys · 45 konfirmime\nGOV-001 1a\n");
+  repo.write(ROADMAP, [
+    CHAIN,
+    "Ledger v1.6 · Register v2.4 · 132 source-rows · 46 closure keys · 45 konfirmime",
+    "GOV-001 1a",
+    "",
+    "| ID | Statusi | Detyra | Ekipi | Faza | Afati | Rreziku |",
+    "|---|---|---|---|---|---|---|",
+    "| ATK-002 | REOPENED | SEF PoC teknik | icode dev | Faza 5 | 2026-08-15 | y |",
+  ].join("\n") + "\n");
   repo.write(PM, "GOV-001 scope; Ledger v1.6 · 132 source-rows\n\n" + CHAIN + "\n");
   repo.write(MATRIX07, [
     "**Versioni:** 2.3",
     "| Domeni | Source | Target | Treatment | Target Maturity | PROVEN-PoC | Proof | Faza | Gap |",
     "|---|---|---|---|---|---|---|---|---|",
     "| Fiskalizim / SEF | src | tgt | `REQ+REF+NO` | **SPECIFIED** | PO | x | F5 | y |",
+    "Status (effective on merge të PR-së tooling GOV-001):", // anchor §4A
     "linter section — 14 profilet e tjera = NOT_IMPLEMENTED",
     "HG-LINTER-REQUIRED, i paaprovuar",
   ].join("\n") + "\n");

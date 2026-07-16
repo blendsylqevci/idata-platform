@@ -73,14 +73,17 @@ export function buildContentRules(): ContentRule[] {
   const implWord = frag("IMPLE", "MENTED");
   const testWord = frag("TES", "TED");
   const prodReady = frag("PRODUCTION", "[- ]READY");
-  const promo = new RegExp(`\\b(${implWord}|${testWord}|${prodReady})\\b`);
+  const promo = new RegExp(`\\b(${implWord}|${testWord}|${prodReady})\\b`, "g");
   const provenPoc = new RegExp(frag("PROVEN", "[- ]PoC"), "i");
-  // strukturë mohimi SPECIFIKE (jo fjala e lirë "jo"): JO-TESTED / JO-production
-  const structuredJo = new RegExp(`JO(?:-|\\s)(production|${testWord})|vetëm mock|mock lokal|mock evidence`, "i");
+  // §5 P-IV: mohimi strukturor JO- lidhet me MATCH-in konkret (dritarja
+  // menjëherë para tij), JO me gjithë rreshtin — "PoC JO-TESTED; PoC
+  // IMPLEMENTED now" e kap IMPLEMENTED. "jo" brenda fjale s'është operator.
+  const joBeforeMatch = /(^|[^A-Za-zë])JO[-\s]$/;
+  const mockQualifierBefore = /(vetëm mock|mock lokal|mock evidence)[^A-Za-z0-9]{0,10}$/i;
   const maturityAlt = MATURITY_STAGES.map((st) => st.replace("-", "[- ]")).join("|");
   const operationalClaim = new RegExp(
     "(xhiro(ja|n)?\\s+(ditore|mujore|reale)|qarkullim(i)?\\s+(ditor|mujor|real)\\b|shitjet\\s+(ditore|reale)|barazim(i|et)?\\s+(ditor|real)\\w*|saldo\\s+reale?\\b|gjendja\\s+(reale|aktuale)\\s+e\\s+(arkës|stokut|barazimit)|operon\\s+(aktualisht|çdo ditë|realisht)|klient[ëe]?\\s+aktiv|fatura(t)?\\s+reale\\s+t[ëe]\\s+(muajit|ditës)|arka\\s+(bosh|aktive|e mbyllur)|legacy\\s+\\w+\\s+(count|numër))",
-    "i",
+    "ig",
   );
 
   return [
@@ -106,13 +109,18 @@ export function buildContentRules(): ContentRule[] {
         /(backup|extraction|nxjerr|eksport|dump|restore|MDF|LDF|evidence)/i.test(c.line),
     },
 
-    // ── 4) operational-state claims — mohim LOKAL; pa blanket exemptions (§6C) ──
+    // ── 4) operational-state claims — mohim LOKAL PER-MATCH (§5 P-IV): çdo
+    //      match gjykohet veçmas; mohimi i claim-it të parë NUK e përjashton
+    //      claim-in pasues në të njëjtin rresht ──────────────────────────────
     {
       ruleId: "HP-OPERATIONAL-CLAIM", category: "privacy", severity: "REVIEW",
       test: (c) => {
-        const m = operationalClaim.exec(c.line);
-        if (m === null) return false;
-        return !locallyNegated(c.line, m.index);
+        operationalClaim.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = operationalClaim.exec(c.line)) !== null) {
+          if (!locallyNegated(c.line, m.index)) return true;
+        }
+        return false;
       },
     },
 
@@ -122,7 +130,7 @@ export function buildContentRules(): ContentRule[] {
       test: (c) => {
         if (!c.line.includes("|") || isSeparatorRow(c.line)) return false;
         const snap = c.snapshot();
-        if (snap !== undefined && c.line.trimStart().startsWith("|")) {
+        if (snap !== undefined) {
           const tctx = tableContextAt(snap, c.lineNo);
           const col = tctx?.columnIndex(/^Treatment$/i);
           if (tctx !== undefined && col !== undefined) {
@@ -147,16 +155,24 @@ export function buildContentRules(): ContentRule[] {
       },
     },
 
-    // ── 6) PoC promotion — mohim LOKAL para stage-tokenit (§6C) ─────────────
+    // ── 6) PoC promotion — mohim PER-MATCH (§5 P-IV): "JO-TESTED" e mohon
+    //      VETËM token-in e vet; "PoC JO-TESTED; PoC IMPLEMENTED" e kap
+    //      IMPLEMENTED. Kualifikuesit mock janë gjithashtu match-lokalë. ─────
     {
       ruleId: "HP-POC-PROMOTION", category: "maturity", severity: "WARNING",
       test: (c) => {
         if (!/\b(PoC(?:-\d+)?|simulator|mock|feasibility[- ]only)\b/i.test(c.line)) return false;
         const cleaned = c.line.replace(provenPoc, " ");
-        const m = promo.exec(cleaned);
-        if (m === null) return false;
-        if (structuredJo.test(cleaned)) return false; // JO-TESTED / JO-production etj.
-        return !locallyNegated(cleaned, m.index);
+        promo.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = promo.exec(cleaned)) !== null) {
+          const before = cleaned.slice(Math.max(0, m.index - 28), m.index);
+          if (joBeforeMatch.test(before.slice(-4))) continue;      // JO-TESTED etj.
+          if (mockQualifierBefore.test(before)) continue;          // "vetëm mock ..."
+          if (locallyNegated(cleaned, m.index)) continue;
+          return true;
+        }
+        return false;
       },
     },
 
@@ -164,7 +180,7 @@ export function buildContentRules(): ContentRule[] {
     {
       ruleId: "HP-MIXED-MATURITY", category: "maturity", severity: "REVIEW",
       test: (c) => {
-        if (!c.line.trimStart().startsWith("|") || isSeparatorRow(c.line)) return false;
+        if (!c.line.includes("|") || isSeparatorRow(c.line)) return false; // outer pipes opsionale (§4 P-IV)
         const snap = c.snapshot();
         if (snap === undefined) return false;
         const tctx = tableContextAt(snap, c.lineNo);
@@ -189,7 +205,7 @@ export function buildContentRules(): ContentRule[] {
     {
       ruleId: "HP-EMPTY-MANDATORY-CELL", category: "structure", severity: "REVIEW",
       test: (c) => {
-        if (!c.line.trimStart().startsWith("|") || isSeparatorRow(c.line)) return false;
+        if (!c.line.includes("|") || isSeparatorRow(c.line)) return false; // outer pipes opsionale (§4 P-IV)
         const snap = c.snapshot();
         if (snap === undefined) return false;
         const tctx = tableContextAt(snap, c.lineNo);
@@ -202,14 +218,18 @@ export function buildContentRules(): ContentRule[] {
     {
       ruleId: "HP-TABLE-MALFORMED", category: "structure", severity: "WARNING",
       test: (c) => {
-        if (!c.line.trimStart().startsWith("|") || isSeparatorRow(c.line)) return false;
-        return parseTableRow(c.line).malformed;
+        if (!c.line.includes("|") || isSeparatorRow(c.line)) return false;
+        if (!parseTableRow(c.line).malformed) return false;
+        if (c.line.trimStart().startsWith("|")) return true; // synim eksplicit tabele
+        // pa leading pipe: vetëm brenda konteksti tabele real — jo prozë me ` dhe |
+        const snap = c.snapshot();
+        return snap !== undefined && tableContextAt(snap, c.lineNo) !== undefined;
       },
     },
     {
       ruleId: "HP-TABLE-ARITY", category: "structure", severity: "REVIEW",
       test: (c) => {
-        if (!c.line.trimStart().startsWith("|") || isSeparatorRow(c.line)) return false;
+        if (!c.line.includes("|") || isSeparatorRow(c.line)) return false; // outer pipes opsionale (§4 P-IV)
         const snap = c.snapshot();
         if (snap === undefined) return false;
         const tctx = tableContextAt(snap, c.lineNo);

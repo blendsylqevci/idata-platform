@@ -3,7 +3,7 @@
  * Fixtures sintetike; pa asnjë vlerë reale.
  */
 import { describe, expect, it } from "vitest";
-import { isSeparatorRow, parseTableRow, tableContextAt } from "../src/markdown-table.js";
+import { isSeparatorRow, isTableRowCandidate, parseTableRow, tableContextAt } from "../src/markdown-table.js";
 
 describe("parseTableRow — qeliza logjike sipas GFM", () => {
   it("rresht bazik me leading+trailing pipe", () => {
@@ -118,5 +118,64 @@ describe("tableContextAt — header i tabelës që mbulon rreshtin", () => {
 
   it("lineNo jashtë kufijve → undefined", () => {
     expect(tableContextAt(SNAP, 99)).toBeUndefined();
+  });
+});
+
+describe("P-IV §4 — outer pipes OPSIONALE + fence exclusion + delimiter/arity", () => {
+  const PIPELESS = [
+    "Domeni | Prova | Maturity | Treatment",
+    "--- | --- | --- | ---",
+    "x |  | MODELED TESTED | LATER",
+  ].join("\n");
+
+  it("tabelë PA outer pipes: header, aritet dhe kolonat zgjidhen saktë", () => {
+    const ctx = tableContextAt(PIPELESS, 3);
+    expect(ctx).toBeDefined();
+    expect(ctx?.headerArity).toBe(4);
+    expect(ctx?.columnIndex(/Maturity/i)).toBe(2);
+    expect(ctx?.columnIndex(/Treatment/i)).toBe(3);
+    const row = parseTableRow("x |  | MODELED TESTED | LATER");
+    expect(row.cells).toEqual(["x", "", "MODELED TESTED", "LATER"]);
+  });
+
+  it("prozë me pipe PA delimiter row → JO tabelë", () => {
+    const s = ["ky është tekst | me pipe", "dhe vazhdon | këtu"].join("\n");
+    expect(tableContextAt(s, 2)).toBeUndefined();
+  });
+
+  it("tabelë brenda fenced code block → JO tabelë; pas mbylljes së fence NJIHET (inverse)", () => {
+    const s = ["```", "A | B", "--- | ---", "x | y", "```", "", "A | B", "--- | ---", "x | y"].join("\n");
+    expect(tableContextAt(s, 4)).toBeUndefined();
+    expect(tableContextAt(s, 9)?.headerArity).toBe(2);
+  });
+
+  it("fence me ~~~ dhe fence i pambyllur → rreshtat brenda s'janë tabelë", () => {
+    const s = ["~~~", "A | B", "--- | ---", "x | y"].join("\n");
+    expect(tableContextAt(s, 4)).toBeUndefined();
+  });
+
+  it("header/delimiter me aritet të NDRYSHËM → JO tabelë (asnjë kontekst i gabuar)", () => {
+    const s = ["A | B | C", "--- | ---", "x | y | z"].join("\n");
+    expect(tableContextAt(s, 3)).toBeUndefined();
+  });
+
+  it("'---' i vetëm pa pipe NUK është delimiter; me pipe është", () => {
+    expect(isSeparatorRow("---")).toBe(false);
+    expect(isSeparatorRow("--- | ---")).toBe(true);
+    expect(isSeparatorRow(":-- | --:")).toBe(true);
+    expect(isSeparatorRow("|---|")).toBe(true);
+  });
+
+  it("isTableRowCandidate: kufi real qelize kërkohet; escaped pipe s'kualifikon", () => {
+    expect(isTableRowCandidate("a | b")).toBe(true);
+    expect(isTableRowCandidate("| vetëm një |")).toBe(true);
+    expect(isTableRowCandidate("prozë e thjeshtë")).toBe(false);
+    expect(isTableRowCandidate("a \\| b")).toBe(false);
+  });
+
+  it("rreshta me trailing pipe të përzier me pa-pipe: konteksti mbetet konsistent", () => {
+    const s = ["A | B |", "--- | --- |", "x | y", "z | w |"].join("\n");
+    expect(tableContextAt(s, 3)?.headerArity).toBe(2);
+    expect(tableContextAt(s, 4)?.headerArity).toBe(2);
   });
 });

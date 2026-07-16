@@ -19,9 +19,10 @@ import { profileStatus } from "../profile-registry.js";
 import {
   AuthorityError, defaultAuthorityClasses, extractAuthorityValue, isHistoryLabeledRow,
   GATE, INDEX, LEDGER, PM, POC5README, ROADMAP, SSOT, TRACKER,
+  ROLE_OPTIONAL_SURFACES, ROLE_REQUIRED_SURFACES,
   type AuthorityClass,
 } from "../authority-classes.js";
-import { isSeparatorRow, parseTableRow, tableContextAt } from "../markdown-table.js";
+import { isSeparatorRow, isTableRowCandidate, parseTableRow, tableContextAt } from "../markdown-table.js";
 
 const P = "DOC-CORE" as const;
 
@@ -33,6 +34,10 @@ export interface DocCoreSurfaces {
   milestoneSurfaces: string[];
   authorities: AuthorityClass[];
   approvedRolePhrases: string[];
+  /** §9 P-IV: canonical active surfaces për role/privacy — mungesa = exit 2. */
+  roleRequiredSurfaces: string[];
+  /** §9 P-IV: consumers canonical aktivë që skanohen VETËM kur ekzistojnë. */
+  roleOptionalSurfaces: string[];
 }
 
 /**
@@ -57,6 +62,8 @@ export function defaultSurfaces(): DocCoreSurfaces {
     milestoneSurfaces: [INDEX, ROADMAP, SSOT, PM],
     authorities: defaultAuthorityClasses(),
     approvedRolePhrases: APPROVED_ROLE_PHRASES,
+    roleRequiredSurfaces: ROLE_REQUIRED_SURFACES,
+    roleOptionalSurfaces: ROLE_OPTIONAL_SURFACES,
   };
 }
 
@@ -85,40 +92,113 @@ function firstIndex(paragraph: string, res: RegExp[]): number {
   return best;
 }
 
+const ALL_CHAIN_RES = CHAIN_TOKENS.flatMap((t) => t.res);
+
+/** Etiketë historike ROW-scoped: vetëm si prefiks rreshti (§7 P-IV). */
+const ROW_HISTORY_PREFIX = /^\s*[*_>\-\s]*(Historia\s*:|HISTORIK\w*\s*[:|·—–-]|ish-)/i;
+
 /**
- * Nxjerr "chain text" nga një grup rreshtash — vetëm segmentet që janë
- * pretendime reale rendi (→ / "pastaj" / artikuj liste / bullets), me
- * parenteza të hequra, tabela/historikë të përjashtuar; dritare ±80 rreth
- * markerëve; subjekte 48-kar. për artikuj liste pa marker.
+ * §7 P-IV — mohim CLAIM-scoped i zinxhirit: "NUK është ky rendi: Step B → …"
+ * s'është chain aktiv. Mohuesi duhet të lidhet me foljen/emrin e rendit në
+ * fjalinë MENJËHERË para token-it të parë — "nuk ndryshon"/"mbetet i
+ * pandryshuar" NUK e mohojnë zinxhirin (false-negative guard).
  */
-export function extractChainText(lines: string[]): string {
-  const chainParts: string[] = [];
+export function negatedChainClaim(line: string): boolean {
+  const idx = firstIndex(line, ALL_CHAIN_RES);
+  if (idx < 0) return false;
+  const prefix = line.slice(0, idx);
+  const tail = prefix.split(/[.!?;·]/).pop() ?? "";
+  return /\b(?:nuk|s'|jo|mos|not)\b[^\n]{0,40}?\b(?:është|janë|rend\w*|sekuenc\w*|zinxhir\w*|order)\b/i.test(tail);
+}
+
+/** §7 P-IV — blanko VETËM segmentet (midis →/pastaj) me etiketë historike. */
+function blankHistoricalSegments(line: string): string {
+  const label = /HISTORICAL|SUPERSEDED|\bHISTORIK\w*\b|\bsuperseded\b|\bish\b|atëhersh/;
+  const bounds: number[] = [0];
+  for (const mk of line.matchAll(/→|\bpastaj\b/g)) {
+    if (mk.index !== undefined) bounds.push(mk.index);
+  }
+  bounds.push(line.length);
+  let out = "";
+  for (let b = 0; b + 1 < bounds.length; b++) {
+    const seg = line.slice(bounds[b], bounds[b + 1]);
+    out += label.test(seg) ? " ".repeat(seg.length) : seg;
+  }
+  return out;
+}
+
+/**
+ * §7 P-IV — CLAIMS të rendit: çdo rresht me marker (→/"pastaj") është
+ * pretendim rendi MË VETE (dy bullets të pavarura në një paragraf NUK
+ * krahasohen mes tyre); vetëm run-et e njëpasnjëshme të artikujve të listës
+ * numerike/bullet pa marker bashkohen si NJË claim i renditur. Parenteza të
+ * hequra; tabela të përjashtuara; etiketa historike row-prefiks ose
+ * segment-scoped ("Step A (HISTORICAL)" s'i përjashton hallkat pas tij);
+ * zinxhir i MOHUAR s'është claim; dritare e VAZHDUESHME
+ * [markeri i parë − 160, i fundit + 160] që të mos pritet "Step B".
+ */
+export function extractChainClaims(lines: string[]): string[] {
+  const claims: string[] = [];
+  let subjectRun: string[] = [];
+  const flush = (): void => {
+    if (subjectRun.length > 0) {
+      claims.push(subjectRun.join("\n"));
+      subjectRun = [];
+    }
+  };
   for (const rawLine of lines) {
-    if (rawLine.trimStart().startsWith("|")) continue; // tabelat s'janë zinxhirë
-    if (isHistoryLabeledRow(rawLine)) continue; // chain historik ≠ chain aktiv
-    const line = rawLine.replace(/\([^)]*\)/g, " ");
+    if (isTableRowCandidate(rawLine)) { flush(); continue; } // tabelat s'janë zinxhirë
+    if (ROW_HISTORY_PREFIX.test(rawLine)) { flush(); continue; } // historik ROW-scoped
+    const line = blankHistoricalSegments(rawLine.replace(/\([^)]*\)/g, " "));
+    if (negatedChainClaim(line)) { flush(); continue; } // i mohuar ≠ claim aktiv
     const isNumbered = /^\s*(?:\d+[a-z]?\.|[-*])\s/.test(line);
     const markers: number[] = [];
     for (const mk of line.matchAll(/→|\bpastaj\b/g)) markers.push(mk.index ?? 0);
     if (isNumbered && markers.length === 0) {
       const subject = line.slice(0, 48);
-      if (!/(\bnuk\b|\bs'|\bjo\b|vetëm pas)/i.test(subject)) chainParts.push(subject);
+      if (!/(\bnuk\b|\bs'|\bjo\b|vetëm pas)/i.test(subject)) subjectRun.push(subject);
     } else if (markers.length > 0) {
-      const keep = new Array<boolean>(line.length).fill(false);
-      for (const mi of markers) {
-        for (let k = Math.max(0, mi - 80); k < Math.min(line.length, mi + 80); k++) keep[k] = true;
-      }
-      let windowed = "";
-      for (let k = 0; k < line.length; k++) windowed += keep[k] === true ? line[k] : " ";
-      chainParts.push(windowed);
+      flush();
+      const first = markers[0] ?? 0;
+      const last = markers[markers.length - 1] ?? 0;
+      const from = Math.max(0, first - 160);
+      const to = Math.min(line.length, last + 160);
+      claims.push(" ".repeat(from) + line.slice(from, to));
+    } else {
+      flush(); // prozë pa marker e ndan run-in e listës
     }
   }
-  return chainParts.join("\n");
+  flush();
+  return claims;
+}
+
+/** Bashkimi i claims — për PRANI të hallkave (jo për rend ndër-claims). */
+export function extractChainText(lines: string[]): string {
+  return extractChainClaims(lines).join("\n");
+}
+
+/**
+ * §7 P-IV — indeksi i parë JO-I-MOHUAR i një tokeni: "JO Tier 2 direkt" /
+ * "nuk … Tier 2" NUK numërohet as si prani, as për rend.
+ */
+function firstActiveIndex(text: string, res: RegExp[]): number {
+  let best = -1;
+  for (const re of res) {
+    const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+    let m: RegExpExecArray | null;
+    while ((m = g.exec(text)) !== null) {
+      const before = text.slice(Math.max(0, m.index - 12), m.index);
+      if (/(?:\bJO\b|\bnuk\b|\bjo\b|\bs'|\bmos\b|\basnjë\b)[^A-Za-zë]{0,6}$/i.test(before)) continue;
+      if (best === -1 || m.index < best) best = m.index;
+      break; // i pari jo-i-mohuar për këtë variant
+    }
+  }
+  return best;
 }
 
 export function chainOrderViolations(chainText: string): Array<{ later: string; earlier: string }> {
   const present = CHAIN_TOKENS
-    .map((t) => ({ key: t.key, idx: firstIndex(chainText, t.res) }))
+    .map((t) => ({ key: t.key, idx: firstActiveIndex(chainText, t.res) }))
     .filter((t) => t.idx >= 0);
   const out: Array<{ later: string; earlier: string }> = [];
   for (let i = 1; i < present.length; i++) {
@@ -149,11 +229,13 @@ export function evaluateChainPresence(text: string): ChainEvaluation {
   const paragraphs = text.split(/\n\s*\n/);
   let best: { count: number; missing: string[]; violations: Array<{ later: string; earlier: string }> } | undefined;
   for (const para of paragraphs) {
-    const chainText = extractChainText(para.split("\n"));
-    const present = CHAIN_TOKENS.filter((t) => firstIndex(chainText, t.res) >= 0);
+    const claims = extractChainClaims(para.split("\n"));
+    const chainText = claims.join("\n");
+    const present = CHAIN_TOKENS.filter((t) => firstActiveIndex(chainText, t.res) >= 0);
     if (present.length < 2) continue; // jo pretendim zinxhiri (partial prose near-miss)
-    const missing = CHAIN_TOKENS.filter((t) => firstIndex(chainText, t.res) < 0).map((t) => t.key);
-    const violations = chainOrderViolations(chainText);
+    const missing = CHAIN_TOKENS.filter((t) => firstActiveIndex(chainText, t.res) < 0).map((t) => t.key);
+    // §7 P-IV: rendi vlerësohet PER-CLAIM — jo ndër-claims të pavarura
+    const violations = claims.flatMap((c) => chainOrderViolations(c));
     const score = present.length - violations.length * 0.5;
     if (best === undefined || score > best.count) {
       best = { count: score, missing, violations };
@@ -165,13 +247,31 @@ export function evaluateChainPresence(text: string): ChainEvaluation {
 
 /** Header-at e kolonave role-bearing (§7) — barazi e plotë e emrit të kolonës. */
 const ROLE_HEADER_RE = /^(Owner( \/ burimi)?|Pronari?|Kush|Përgjegjës\w*|Approver|Human Gate)$/i;
-/** Etiketat metadata role-bearing. */
-const ROLE_LABEL_RE = /^\*{0,2}(Pronar(?:i)?(?: i dokumentit)?|Owner|Përgjegjës\w*|Approver)\s*:\*{0,2}\s*(.+)$/i;
+/** Etiketat metadata role-bearing — "Human Gate" njihet si label (§9 P-IV). */
+const ROLE_LABEL_RE = /^\*{0,2}(Pronar(?:i)?(?: i dokumentit)?|Owner|Përgjegjës\w*|Approver|Human Gate)\s*:\*{0,2}\s*(.+)$/i;
+
+/**
+ * §9 P-IV — parentetikat NUK hidhen blanket: kandidat identiteti personal
+ * brenda `(…)` të një vlere role → privacy REVIEW (pa publikuar content-in).
+ * Kandidat = sekuencë TitleCase ≥2 fjalë OSE fjalë e vetme TitleCase ≥4
+ * shkronja, që nuk është frazë e aprovuar roli.
+ */
+export function parentheticalIdentityCandidate(cellRaw: string, approvedPhrases: string[]): boolean {
+  const approved = new Set(approvedPhrases.map((p) => p.toLowerCase()));
+  for (const m of cellRaw.matchAll(/\(([^)]*)\)/g)) {
+    const inner = (m[1] ?? "").replace(/[`*]/g, "").trim();
+    if (inner === "" || approved.has(inner.toLowerCase())) continue;
+    const multi = /\p{Lu}\p{Ll}+(?:[ \t]+\p{Lu}\p{Ll}+)+/u.exec(inner);
+    if (multi !== null && !approved.has(multi[0].toLowerCase())) return true;
+    if (/^\p{Lu}\p{Ll}{3,}$/u.test(inner)) return true;
+  }
+  return false;
+}
 
 /** Tokenizon një vlerë role-bearing dhe kthen numrin e tokenëve JO të aprovuar. */
 export function roleTokensUnknown(cellRaw: string, approvedPhrases: string[]): number {
   const cell = cellRaw
-    .replace(/\([^)]*\)/g, " ")           // kualifikuesit në parenteza hiqen
+    .replace(/\([^)]*\)/g, " ")           // parentetikat trajtohen veçmas (§9: identity scan)
     .replace(/[`*]/g, "")
     .trim();
   if (cell === "" || cell === "—" || cell === "-") return 0;
@@ -221,9 +321,23 @@ export function runDocCore(
     return text;
   };
 
+  // §4A: gjendja e anchor-it strukturor në docsRef — NOT_APPLICABLE para
+  // lindjes së seksionit; duplikimi = exit 2 (surface ambig).
+  const anchorState = (cls: AuthorityClass, text: string): "none" | "absent" | "present" => {
+    if (cls.activationAnchor === undefined) return "none";
+    const flags = cls.activationAnchor.flags.includes("g")
+      ? cls.activationAnchor.flags : cls.activationAnchor.flags + "g";
+    const re = new RegExp(cls.activationAnchor.source, flags);
+    let n = 0;
+    while (re.exec(text) !== null) n += 1;
+    if (n > 1) throw new ScanError("INCOMPLETE_SCAN:AUTHORITY_ANCHOR_DUPLICATE");
+    return n === 1 ? "present" : "absent";
+  };
+
   // ── 1) kontrata bidirectional authority → consumers (validator i përbashkët) ─
   for (const cls of surfaces.authorities) {
     const authorityText = readDoc(cls.authorityFile); // missing → exit 2
+    if (anchorState(cls, authorityText) === "absent") continue; // §4A.7 NOT_APPLICABLE
     let current: string;
     try {
       current = extractAuthorityValue(authorityText, cls);
@@ -282,13 +396,15 @@ export function runDocCore(
     let lineNo = 1;
     for (const para of paragraphs) {
       const paraLines = para.split("\n");
-      const chainText = extractChainText(paraLines);
-      for (const v of chainOrderViolations(chainText)) {
-        findings.push({
-          profile: P, profileStatus: status, severity: "WARNING",
-          ruleId: "DC-GATE-ORDER", category: "sequence",
-          locator: `${file}:${lineNo} (${v.later} para ${v.earlier})`,
-        });
+      // §7 P-IV: rendi PER-CLAIM — bullets të pavarura nuk krahasohen mes tyre
+      for (const claim of extractChainClaims(paraLines)) {
+        for (const v of chainOrderViolations(claim)) {
+          findings.push({
+            profile: P, profileStatus: status, severity: "WARNING",
+            ruleId: "DC-GATE-ORDER", category: "sequence",
+            locator: `${file}:${lineNo} (${v.later} para ${v.earlier})`,
+          });
+        }
       }
       lineNo += paraLines.length + 1;
     }
@@ -332,45 +448,54 @@ export function runDocCore(
     }
   }
 
-  // ── 4) role/privacy vocabulary — kontekste të STRUKTURUARA kudo (§7) ────
-  const roleSurfaces = [...surfaces.orderSurfaces, ...(surfaces.trackerFile ? [surfaces.trackerFile] : [])];
-  for (const file of roleSurfaces) {
-    const text = readDoc(file);
+  // ── 4) role/privacy vocabulary — canonical active surfaces (§9 P-IV):
+  //      lista machine-readable; required missing → exit 2; optional if-present ─
+  const roleTexts: Array<[string, string]> = [];
+  for (const file of surfaces.roleRequiredSurfaces) roleTexts.push([file, readDoc(file)]);
+  for (const file of surfaces.roleOptionalSurfaces) {
+    const t = readDocIfPresent(file);
+    if (t !== undefined) roleTexts.push([file, t]);
+  }
+  const roleValueFindings = (file: string, lineNo: number, value: string): void => {
+    if (roleTokensUnknown(value, surfaces.approvedRolePhrases) > 0) {
+      findings.push({
+        profile: P, profileStatus: status, severity: "REVIEW",
+        ruleId: "DC-ROLE-VOCAB", category: "privacy-review",
+        locator: `${file}:${lineNo}`,
+      });
+    }
+    if (parentheticalIdentityCandidate(value, surfaces.approvedRolePhrases)) {
+      findings.push({
+        profile: P, profileStatus: status, severity: "REVIEW",
+        ruleId: "DC-ROLE-IDENTITY", category: "privacy-review",
+        locator: `${file}:${lineNo}`,
+      });
+    }
+  };
+  for (const [file, text] of roleTexts) {
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] ?? "";
-      // (a) rreshta tabele nën kolonë role-bearing
-      if (line.trimStart().startsWith("|") && !isSeparatorRow(line)) {
+      // (a) rreshta tabele nën kolonë role-bearing (outer pipes opsionale, §4 P-IV)
+      if (isTableRowCandidate(line) && !isSeparatorRow(line)) {
         const tctx = tableContextAt(text, i + 1);
         const col = tctx?.columnIndex(ROLE_HEADER_RE);
         if (tctx !== undefined && col !== undefined) {
           const row = parseTableRow(line);
           const cell = row.cells[col];
-          if (!row.malformed && cell !== undefined &&
-              roleTokensUnknown(cell, surfaces.approvedRolePhrases) > 0) {
-            findings.push({
-              profile: P, profileStatus: status, severity: "REVIEW",
-              ruleId: "DC-ROLE-VOCAB", category: "privacy-review",
-              locator: `${file}:${i + 1}`,
-            });
-          }
+          if (!row.malformed && cell !== undefined) roleValueFindings(file, i + 1, cell);
           continue;
         }
       }
-      // (b) etiketa metadata role-bearing
+      // (b) etiketa metadata role-bearing (përfshirë "Human Gate:")
       const lm = ROLE_LABEL_RE.exec(line.trim());
-      if (lm?.[2] !== undefined && roleTokensUnknown(lm[2], surfaces.approvedRolePhrases) > 0) {
-        findings.push({
-          profile: P, profileStatus: status, severity: "REVIEW",
-          ruleId: "DC-ROLE-VOCAB", category: "privacy-review",
-          locator: `${file}:${i + 1}`,
-        });
-      }
+      if (lm?.[2] !== undefined) roleValueFindings(file, i + 1, lm[2]);
     }
   }
 
   // ── 5) pretendime absolute — kontekstuale per-rresht ────────────────────
-  for (const file of roleSurfaces) {
+  const claimSurfaces = [...surfaces.orderSurfaces, ...(surfaces.trackerFile ? [surfaces.trackerFile] : [])];
+  for (const file of claimSurfaces) {
     const text = readDoc(file);
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
@@ -402,6 +527,7 @@ export function runDocCore(
     for (const cls of surfaces.authorities) {
       const authorityText = readDocIfPresent(cls.authorityFile);
       if (authorityText === undefined) continue;
+      if (anchorState(cls, authorityText) === "absent") continue; // §4A.7
       let current: string;
       try {
         current = extractAuthorityValue(authorityText, cls);
@@ -410,25 +536,31 @@ export function runDocCore(
         throw err;
       }
       const norm = cls.normalize ?? ((v: string) => v);
-      const consumer0 = cls.consumers[0];
-      if (consumer0 === undefined) continue;
-      for (let i = 0; i < bodyLines.length; i++) {
-        const line = bodyLines[i] ?? "";
-        if (isHistoryLabeledRow(line)) continue;
-        const re2 = globalized(consumer0.pattern);
-        let cm: RegExpExecArray | null;
-        while ((cm = re2.exec(line)) !== null) {
-          if (cm[1] === undefined) continue;
-          if (consumer0.excludeBefore !== undefined &&
-              consumer0.excludeBefore.test(line.slice(Math.max(0, cm.index - 24), cm.index))) {
-            continue;
-          }
-          if (norm(cm[1]) !== current) {
-            findings.push({
-              profile: P, profileStatus: status, severity: "WARNING",
-              ruleId: "DC-PR-BODY-STALE", category: "pr-body",
-              locator: `pr-body:${i + 1} (${cls.id})`,
-            });
+      // §6 P-IV: PR body kontrollohet kundrejt TË GJITHË consumers (pattern-e
+      // të dallueshëm), jo vetëm consumers[0] — dedup për pattern identikë.
+      const seenPatterns = new Set<string>();
+      for (const consumer of cls.consumers) {
+        const pkey = `${consumer.pattern.source}\\u0000${consumer.pattern.flags}`;
+        if (seenPatterns.has(pkey)) continue;
+        seenPatterns.add(pkey);
+        for (let i = 0; i < bodyLines.length; i++) {
+          const line = bodyLines[i] ?? "";
+          if (isHistoryLabeledRow(line)) continue;
+          const re2 = globalized(consumer.pattern);
+          let cm: RegExpExecArray | null;
+          while ((cm = re2.exec(line)) !== null) {
+            if (cm[1] === undefined) continue;
+            if (consumer.excludeBefore !== undefined &&
+                consumer.excludeBefore.test(line.slice(Math.max(0, cm.index - 24), cm.index))) {
+              continue;
+            }
+            if (norm(cm[1]) !== current) {
+              findings.push({
+                profile: P, profileStatus: status, severity: "WARNING",
+                ruleId: "DC-PR-BODY-STALE", category: "pr-body",
+                locator: `pr-body:${i + 1} (${cls.id})`,
+              });
+            }
           }
         }
       }

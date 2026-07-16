@@ -1,11 +1,16 @@
 /**
- * GFM-AWARE MARKDOWN TABLE PARSER (§7, Hardening III) — parser i VETËM i
- * qelizave logjike, i përdorur nga Treatment/Maturity/empty-cells/role-fields.
+ * GFM-AWARE MARKDOWN TABLE PARSER (§7 Hardening III; §4 Hardening IV) — parser i
+ * VETËM i qelizave logjike, i përdorur nga Treatment/Maturity/empty-cells/
+ * role-fields/phase-version-status tables.
  *
- * Trajton: escaped pipe `\|`, pipe brenda inline code span, leading/trailing
- * pipe opsional, aritetin rresht/header, qelizën e fundit bosh me/pa trailing
- * pipe, kolonën finale që mungon, placeholder `—`.
- * Rresht i paqartë/malformuar NUK kalon silent — raportohet nga thirrësi.
+ * Trajton: escaped pipe `\|`, pipe brenda inline code span, LEADING/TRAILING
+ * PIPE OPSIONAL (GFM lejon tabela pa pipe të jashtëm), aritetin header/delimiter,
+ * qelizën e fundit bosh, kolonën finale që mungon, placeholder `—`.
+ *
+ * NUK klasifikohen si tabelë: proza pa kufi qelizash, rreshtat brenda fenced
+ * code blocks, rreshtat pa delimiter row valid, header/delimiter me aritet të
+ * ndryshëm. Rresht i paqartë/malformuar NUK kalon silent — raportohet nga
+ * thirrësi (HP-TABLE-MALFORMED / HP-TABLE-ARITY).
  */
 
 export interface ParsedRow {
@@ -70,8 +75,43 @@ export function parseTableRow(line: string): ParsedRow {
   return { cells: cells.map((c) => c.trim()), malformed, hadLeadingPipe, hadTrailingPipe };
 }
 
+/**
+ * Rresht kandidat tabele (§4 P-IV): të paktën NJË kufi qelize real (pipe i
+ * pa-escaped jashtë code span) — me ose pa pipe të jashtëm. Proza pa asnjë
+ * pipe s'kualifikohet; rreshti malformed s'është kandidat i sigurt.
+ */
+export function isTableRowCandidate(line: string): boolean {
+  const p = parseTableRow(line);
+  if (p.malformed) return false;
+  return p.cells.length >= 2 || p.hadLeadingPipe || p.hadTrailingPipe;
+}
+
+/**
+ * Delimiter row valid GFM: çdo qelizë `:?-+:?`, me/pa pipe të jashtëm; "---"
+ * i vetëm PA pipe s'është delimiter (thematic break/setext heading).
+ */
 export function isSeparatorRow(line: string): boolean {
-  return /^\s*\|?[\s\-:|]+\|?\s*$/.test(line) && line.includes("-");
+  const p = parseTableRow(line);
+  if (p.malformed || p.cells.length === 0) return false;
+  if (!p.cells.every((c) => /^:?-+:?$/.test(c))) return false;
+  return p.cells.length >= 2 || p.hadLeadingPipe || p.hadTrailingPipe;
+}
+
+/** A ndodhet rreshti idx (0-based) brenda një fenced code block (``` / ~~~)? */
+function inFencedBlockAt(lines: string[], idx: number): boolean {
+  let open: { ch: string; len: number } | undefined;
+  for (let i = 0; i < idx; i++) {
+    const m = /^\s{0,3}(`{3,}|~{3,})/.exec(lines[i] ?? "");
+    if (!m || m[1] === undefined) continue;
+    const ch = m[1][0] as string;
+    const len = m[1].length;
+    if (open === undefined) {
+      open = { ch, len };
+    } else if (ch === open.ch && len >= open.len && (lines[i] ?? "").trim() === m[1]) {
+      open = undefined; // fence mbyllës: vetëm run-i, pa info string
+    }
+  }
+  return open !== undefined;
 }
 
 export interface TableContext {
@@ -83,21 +123,31 @@ export interface TableContext {
 
 /**
  * Gjen header-in e tabelës që mbulon rreshtin `lineNo` (1-based) në snapshot.
- * Kthen undefined kur rreshti s'është brenda një tabele me header të vërtetë.
+ * Kthen undefined kur rreshti s'është brenda një tabele GFM valide: kërkohet
+ * header + delimiter row me ARITET IDENTIK, rreshta të njëpasnjëshëm kandidatë,
+ * jashtë fenced code blocks; outer pipes OPSIONALE (§4 P-IV).
  */
 export function tableContextAt(snapshot: string, lineNo: number): TableContext | undefined {
   const lines = snapshot.split("\n");
   const idx = lineNo - 1;
   const target = lines[idx];
-  if (target === undefined || !target.trimStart().startsWith("|")) return undefined;
+  if (target === undefined) return undefined;
+  // target duhet të jetë kandidat OSE i malformuar (i malformuari merr kontekst
+  // që HP-TABLE-MALFORMED të mund të vendosë me informacion tabele)
+  if (!isTableRowCandidate(target) && !parseTableRow(target).malformed) return undefined;
+  if (inFencedBlockAt(lines, idx)) return undefined;
   for (let i = idx - 1; i >= 0; i--) {
     const l = lines[i] ?? "";
-    if (!l.trimStart().startsWith("|")) return undefined;
+    // tabela është bllok rreshtash të NJËPASNJËSHËM kandidatë — prishja e ndan
+    if (!isTableRowCandidate(l) && !isSeparatorRow(l)) return undefined;
     const next = lines[i + 1] ?? "";
     if (isSeparatorRow(next) && !isSeparatorRow(l)) {
       const parsed = parseTableRow(l);
       if (parsed.malformed) return undefined;
       const headerCells = parsed.cells;
+      // GFM: header + delimiter DUHET të kenë aritet identik — përndryshe
+      // s'është tabelë (asnjë kontekst i gabuar për rregullat strukturore)
+      if (parseTableRow(next).cells.length !== headerCells.length) return undefined;
       return {
         headerCells,
         headerArity: headerCells.length,
