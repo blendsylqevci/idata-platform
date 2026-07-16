@@ -37,7 +37,7 @@ describe("GitCliReader — Git objects only, fail-closed, error codes fikse", ()
     expect(() => reader.mergeBase("deadbeef", "HEAD")).toThrow(ScanError);
   });
 
-  it("blobSizeByOid me OBJECT-ID (jo path) + addedContent detekton binarin pa content", () => {
+  it("blobSizeByOid + blobByOid me OBJECT-ID (jo path): byte-t RAW janë burimi i klasifikimit", () => {
     const repo = makeTempRepo();
     repo.write("t.md", "text\n");
     repo.commitAll("c1");
@@ -47,9 +47,10 @@ describe("GitCliReader — Git objects only, fail-closed, error codes fikse", ()
     const entry = reader.rawEntries(c2).find((e) => e.path === "blob.bin");
     expect(entry).toBeDefined();
     expect(reader.blobSizeByOid(entry!.newOid)).toBe(6);
-    const content = reader.addedContent(c2, "blob.bin");
-    expect(content.binary).toBe(true);
-    expect(content.lines).toHaveLength(0);
+    const raw = reader.blobByOid(entry!.newOid);
+    expect(raw.equals(Buffer.from([0, 1, 2, 3, 0, 255]))).toBe(true);
+    expect(raw.includes(0)).toBe(true); // NUL → engine-i e refuzon si BINARY_BLOB
+    expect(() => reader.blobByOid("jo-oid")).toThrow("BLOB_OID_INVALID");
   });
 
   it("§4D: path me TAB dhe path me NEWLINE → INCOMPLETE_SCAN pa publikim path-i", () => {

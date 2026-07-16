@@ -107,10 +107,12 @@ export function readPullRequestEvent(eventPath: string | undefined): PullRequest
   } catch {
     throw new ConfigError("EVENT_MALFORMED");
   }
-  // §8 SKEMA STRIKTE (kontrata e GitHub Actions pull_request):
-  // root = object jo-array; pull_request = object jo-array; base/head = object
-  // jo-array; body = string (me cap) OSE null/mungues = body bosh — çdo tip
-  // tjetër (object/array/number/boolean) = EVENT_MALFORMED.
+  // §8 SKEMA STRIKTE (P-IV; kontrata e GitHub Actions pull_request):
+  // root = object jo-array; pull_request = object jo-array;
+  // base/head = MANDATORY plain objects me sha MANDATORY SHA-40 —
+  // node/sha mungues/null ose tip invalid = exit 2;
+  // body = string (me cap) OSE null/mungues = BODY I NJOHUR BOSH ("") —
+  // event prezent ≠ "pa event": PR-body vlerësohet EVALUATED me body bosh.
   const isPlainObject = (v: unknown): v is Record<string, unknown> =>
     typeof v === "object" && v !== null && !Array.isArray(v);
   if (!isPlainObject(parsed)) throw new ConfigError("EVENT_MALFORMED");
@@ -119,17 +121,16 @@ export function readPullRequestEvent(eventPath: string | undefined): PullRequest
   const ev: PullRequestEvent = {};
   for (const side of ["base", "head"] as const) {
     const node = pr[side];
-    if (node === undefined || node === null) continue;
-    if (!isPlainObject(node)) throw new ConfigError("EVENT_MALFORMED");
+    if (!isPlainObject(node)) throw new ConfigError("EVENT_MALFORMED"); // mungues/null/tip
     const sha = node["sha"];
-    if (sha === undefined) continue;
+    if (sha === undefined || sha === null) throw new ConfigError("EVENT_MALFORMED");
     if (typeof sha !== "string" || !SHA40.test(sha)) throw new ConfigError("EVENT_SHA_INVALID");
     if (side === "base") ev.baseSha = sha;
     else ev.headSha = sha;
   }
   const body = pr["body"];
   if (body === undefined || body === null) {
-    // eksplicit: body mungues/null = body bosh sipas kontratës — JO object valid
+    ev.body = ""; // §8: i njohur BOSH — jo i barabartë me "pa event"
   } else if (typeof body === "string") {
     if (Buffer.byteLength(body, "utf8") > MAX_BODY_BYTES) throw new ConfigError("EVENT_BODY_OVERSIZE");
     ev.body = body;

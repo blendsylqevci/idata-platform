@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { addSymlink, commitWithRawTree, frag, hashBlob, makeTempRepo } from "./helpers.js";
 import { GitCliReader } from "../src/git-repository.js";
 import { runHistoryPriv, parseScopeBlock, pathInScope } from "../src/profiles/history-priv.js";
+import { defaultAuthorityClasses } from "../src/authority-classes.js";
 import { toJsonReport } from "../src/reporter.js";
 import { ConfigError, ScanError } from "../src/types.js";
 
@@ -465,5 +466,256 @@ describe("HISTORY-PRIV — fail-closed, per-commit, privacy-safe", () => {
     const head = reader.revParse("HEAD");
     const r = runHistoryPriv(reader, base, head, undefined);
     expect(r.findings.filter((f) => f.severity === "ERROR")).toEqual([]);
+  });
+});
+
+describe("P-IV §2 — ONCE_PRESENT: PRANIA e authority-t aktivizon, jo leximi i parë valid", () => {
+  const mk = () => [{
+    id: "syn-present", kind: "count" as const, authorityFile: "auth.md",
+    authorityPattern: /VLERA: (\d+)/g,
+    consumers: [{ file: "cons.md", requirement: "SCAN_IF_PRESENT" as const, pattern: /REF (\d+)/g }],
+  }];
+  const opts = () => ({ driftClasses: mk(), chainRequiredSurfaces: [] });
+  const run = (dir: string, b: string, h: string) =>
+    runHistoryPriv(new GitCliReader(dir), b, h, undefined, opts());
+
+  it("F1: file shfaqet BOSH → exit 2 UNREADABLE (jo tolerim deri në leximin e parë valid)", () => {
+    const { repo, base } = repoWithBase();
+    repo.write("auth.md", "");
+    const c1 = repo.commitAll("shfaqet bosh");
+    expect(() => run(repo.dir, base, c1)).toThrow("INCOMPLETE_SCAN:AUTHORITY_UNREADABLE");
+  });
+
+  it("F2: file shfaqet me ZERO regex match → exit 2 UNREADABLE", () => {
+    const { repo, base } = repoWithBase();
+    repo.write("auth.md", "tekst pa asnjë vlerë të vlefshme\n");
+    const c1 = repo.commitAll("shfaqet pa match");
+    expect(() => run(repo.dir, base, c1)).toThrow("INCOMPLETE_SCAN:AUTHORITY_UNREADABLE");
+  });
+
+  it("F3: file shfaqet me dy vlera AMBIGE → exit 2 AMBIGUOUS", () => {
+    const { repo, base } = repoWithBase();
+    repo.write("auth.md", "VLERA: 100\nVLERA: 200\n");
+    const c1 = repo.commitAll("shfaqet ambige");
+    expect(() => run(repo.dir, base, c1)).toThrow("INCOMPLETE_SCAN:AUTHORITY_AMBIGUOUS");
+  });
+
+  it("F4: bosh/ambige në A → valid në B: dështimi historik NUK zhduket (range përmes A = exit 2)", () => {
+    const { repo, base } = repoWithBase();
+    repo.write("auth.md", "");
+    repo.commitAll("A e prishur");
+    repo.write("auth.md", "VLERA: 100\n");
+    const cB = repo.commitAll("B e rregullon");
+    expect(() => run(repo.dir, base, cB)).toThrow("INCOMPLETE_SCAN:AUTHORITY_UNREADABLE");
+  });
+
+  it("F5: authority ekziston në BAZË → prishet në commit-in e PARË → exit 2", () => {
+    const { repo } = repoWithBase();
+    repo.write("auth.md", "VLERA: 100\n");
+    const baseWithAuth = repo.commitAll("baza me authority");
+    repo.write("auth.md", "u zëvendësua pa vlerë\n");
+    const c1 = repo.commitAll("prishet menjëherë");
+    expect(() => run(repo.dir, baseWithAuth, c1)).toThrow("INCOMPLETE_SCAN:AUTHORITY_UNREADABLE");
+  });
+
+  it("F6: mungesa e FILE-it para aktivizimit lejohet nga kontrata; pas aktivizimit heqja → MISSING", () => {
+    const { repo, base } = repoWithBase();
+    repo.write("cons.md", "REF 100\n");
+    const c1 = repo.commitAll("vetëm consumer");
+    expect(() => run(repo.dir, base, c1)).not.toThrow();
+    repo.write("auth.md", "VLERA: 100\n");
+    const c2 = repo.commitAll("aktivizohet valide");
+    execFileSync("git", ["rm", "-q", "auth.md"], { cwd: repo.dir });
+    const c3 = repo.commitAll("hiqet pas aktivizimit");
+    expect(() => run(repo.dir, c2, c3)).toThrow("INCOMPLETE_SCAN:AUTHORITY_MISSING");
+  });
+
+  it("activationAnchor (kontratë e deklaruar): para lindjes së seksionit lejohet; lind i prishur → exit 2; sticky pas heqjes", () => {
+    const cls = () => [{
+      id: "syn-anchor", kind: "status" as const, authorityFile: "auth.md",
+      activationAnchor: /SEKSIONI-STATUS/,
+      authorityPattern: /GJENDJA: (OK|JO)/g,
+      consumers: [{ file: "cons.md", requirement: "SCAN_IF_PRESENT" as const, pattern: /SHIH (OK|JO)/g }],
+    }];
+    const runA = (dir: string, b: string, h: string) =>
+      runHistoryPriv(new GitCliReader(dir), b, h, undefined, { driftClasses: cls(), chainRequiredSurfaces: [] });
+
+    // file ekziston PA anchor dhe PA vlerë → e lejuar (seksioni s'ka lindur)
+    const { repo, base } = repoWithBase();
+    repo.write("auth.md", "material tjetër i vjetër\n");
+    const c1 = repo.commitAll("file pa seksion");
+    expect(() => runA(repo.dir, base, c1)).not.toThrow();
+
+    // seksioni LIND i prishur (anchor pa vlerë) → exit 2 që në lindje
+    repo.write("auth.md", "material i vjetër\nSEKSIONI-STATUS\n");
+    const c2 = repo.commitAll("anchor lind pa vlerë");
+    expect(() => runA(repo.dir, c1, c2)).toThrow("INCOMPLETE_SCAN:AUTHORITY_UNREADABLE");
+
+    // rikthim valid → aktivizimi sticky: heqja e anchor-it S'e çaktivizon
+    const { repo: r2 } = repoWithBase();
+    r2.write("auth.md", "SEKSIONI-STATUS\nGJENDJA: OK\n");
+    const d1 = r2.commitAll("aktiv valid");
+    r2.write("auth.md", "pa anchor dhe pa vlerë tani\n");
+    const d2 = r2.commitAll("fshihet seksioni");
+    expect(() => runA(r2.dir, d1, d2)).toThrow("INCOMPLETE_SCAN:AUTHORITY_ANCHOR_MISSING");
+  });
+});
+
+describe("P-IV §4 — tabela PA outer pipes: rregullat strukturore mbi të njëjtin parser", () => {
+  it("Maturity/Treatment/empty-cell kapen NJËSOJ si me pipe të jashtëm", () => {
+    const { repo, base } = repoWithBase();
+    repo.write("docs/t.md", [
+      "Domeni | Prova | Maturity | Treatment",
+      "--- | --- | --- | ---",
+      "x |  | MODELED TESTED | LATER",
+    ].join("\n") + "\n");
+    const head = repo.commitAll("pipe-less table");
+    const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined,
+      { driftClasses: [], chainRequiredSurfaces: [] });
+    const ids = r.findings.map((f) => f.ruleId);
+    expect(ids).toContain("HP-MIXED-MATURITY");
+    expect(ids).toContain("HP-TREATMENT-VOCAB");
+    expect(ids).toContain("HP-EMPTY-MANDATORY-CELL");
+  });
+
+  it("inverse: e njëjta strukturë me vlera valide → zero findings strukturore", () => {
+    const { repo, base } = repoWithBase();
+    repo.write("docs/t2.md", [
+      "Domeni | Prova | Maturity | Treatment",
+      "--- | --- | --- | ---",
+      "y | prova-x | MODELED | REQ+REF",
+    ].join("\n") + "\n");
+    const head = repo.commitAll("pipe-less valid");
+    const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined,
+      { driftClasses: [], chainRequiredSurfaces: [] });
+    const bad = r.findings.filter((f) =>
+      ["HP-MIXED-MATURITY", "HP-TREATMENT-VOCAB", "HP-EMPTY-MANDATORY-CELL", "HP-TABLE-ARITY", "HP-TABLE-MALFORMED"].includes(f.ruleId));
+    expect(bad).toEqual([]);
+  });
+
+  it("prozë me pipe (pa delimiter row) → asnjë finding strukturor tabele", () => {
+    const { repo, base } = repoWithBase();
+    repo.write("docs/p.md", "ky tekst | ka pipe | por s'është tabelë\nedhe ky | vazhdon | i lirë\n");
+    const head = repo.commitAll("proza me pipe");
+    const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined,
+      { driftClasses: [], chainRequiredSurfaces: [] });
+    const bad = r.findings.filter((f) => f.ruleId.startsWith("HP-TABLE") ||
+      ["HP-MIXED-MATURITY", "HP-EMPTY-MANDATORY-CELL"].includes(f.ruleId));
+    expect(bad).toEqual([]);
+  });
+});
+
+describe("P-IV \u00a74A \u2014 activationAnchor: kufijt\u00eb e kontrat\u00ebs", () => {
+  const mkCls = (id: string) => [{
+    id, kind: "status" as const, authorityFile: "auth.md",
+    activationAnchor: /SEKSIONI-STATUS/,
+    authorityPattern: /GJENDJA: (OK|JO)/g,
+    consumers: [{ file: "cons.md", requirement: "SCAN_IF_PRESENT" as const, pattern: /SHIH (OK|JO)/g }],
+  }];
+  const runA = (dir: string, b: string, h: string, id = "syn-a") =>
+    runHistoryPriv(new GitCliReader(dir), b, h, undefined, { driftClasses: mkCls(id), chainRequiredSurfaces: [] });
+
+  it("anchor i hequr me vler\u00eb ende PREZENTE \u2192 exit 2 ANCHOR_MISSING (sticky)", () => {
+    const { repo } = repoWithBase();
+    repo.write("auth.md", "SEKSIONI-STATUS\nGJENDJA: OK\n");
+    const c1 = repo.commitAll("aktiv valid");
+    repo.write("auth.md", "GJENDJA: OK\n");
+    const c2 = repo.commitAll("heq vet\u00ebm anchor-in");
+    expect(() => runA(repo.dir, c1, c2)).toThrow("INCOMPLETE_SCAN:AUTHORITY_ANCHOR_MISSING");
+  });
+
+  it("anchor i duplikuar \u2192 exit 2 ANCHOR_DUPLICATE (edhe n\u00eb lindje)", () => {
+    const { repo, base } = repoWithBase();
+    repo.write("auth.md", "SEKSIONI-STATUS\nGJENDJA: OK\nSEKSIONI-STATUS\n");
+    const c1 = repo.commitAll("duplikat n\u00eb lindje");
+    expect(() => runA(repo.dir, base, c1)).toThrow("INCOMPLETE_SCAN:AUTHORITY_ANCHOR_DUPLICATE");
+    const { repo: r2 } = repoWithBase();
+    r2.write("auth.md", "SEKSIONI-STATUS\nGJENDJA: OK\n");
+    const d1 = r2.commitAll("aktiv");
+    r2.write("auth.md", "SEKSIONI-STATUS\nGJENDJA: OK\nSEKSIONI-STATUS\n");
+    const d2 = r2.commitAll("duplikohet pas aktivizimit");
+    expect(() => runA(r2.dir, d1, d2)).toThrow("INCOMPLETE_SCAN:AUTHORITY_ANCHOR_DUPLICATE");
+  });
+
+  it("anchor+vlera valide \u2192 AKTIVE: drifti i consumer-it kapet", () => {
+    const { repo, base } = repoWithBase();
+    repo.write("auth.md", "SEKSIONI-STATUS\nGJENDJA: OK\n");
+    repo.commitAll("aktiv valid");
+    repo.write("cons.md", "SHIH JO\n");
+    const c2 = repo.commitAll("consumer stale");
+    const r = runA(repo.dir, base, c2);
+    expect(r.findings.filter((f) => f.ruleId === "HP-DRIFT-STATUS")).toHaveLength(1);
+  });
+
+  it("lindje e prishur n\u00eb A \u2192 riparim n\u00eb B: range p\u00ebrmes A mbetet exit 2", () => {
+    const { repo, base } = repoWithBase();
+    repo.write("auth.md", "SEKSIONI-STATUS\npa vler\u00eb\n");
+    repo.commitAll("A lind i prishur");
+    repo.write("auth.md", "SEKSIONI-STATUS\nGJENDJA: OK\n");
+    const cB = repo.commitAll("B riparon");
+    expect(() => runA(repo.dir, base, cB)).toThrow("INCOMPLETE_SCAN:AUTHORITY_UNREADABLE");
+  });
+
+  it("VET\u00cbM dy klasat e lejuara p\u00ebrdorin activationAnchor n\u00eb config default", () => {
+    const anchored = defaultAuthorityClasses().filter((c) => c.activationAnchor !== undefined).map((c) => c.id).sort();
+    expect(anchored).toEqual(["hg-linter-required-status", "profile-registry-set"]);
+  });
+});
+
+describe("P-IV \u00a75 \u2014 mohim lokal PER-MATCH: \u00e7do match gjykohet ve\u00e7mas", () => {
+  const run = (content: string) => {
+    const { repo, base } = repoWithBase();
+    repo.write("docs/n.md", content);
+    const head = repo.commitAll("content");
+    return runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined, { driftClasses: [], chainRequiredSurfaces: [] });
+  };
+
+  it("F1: mohimi i claim-it t\u00eb par\u00eb NUK e p\u00ebrjashton t\u00eb dytin n\u00eb t\u00eb nj\u00ebjtin rresht", () => {
+    const r = run("nuk raportohet xhiroja ditore; shitjet reale jan\u00eb 123\n");
+    expect(r.findings.filter((f) => f.ruleId === "HP-OPERATIONAL-CLAIM")).toHaveLength(1);
+  });
+
+  it("F2: PoC JO-TESTED historically; PoC IMPLEMENTED now \u2192 IMPLEMENTED kapet", () => {
+    const r = run("PoC JO-" + ["TES", "TED"].join("") + " historically; PoC " + ["IMPLE", "MENTED"].join("") + " now\n");
+    expect(r.findings.filter((f) => f.ruleId === "HP-POC-PROMOTION")).toHaveLength(1);
+  });
+
+  it("F3: vet\u00ebm claim i mohuar \u2192 zero finding", () => {
+    const r = run("nuk raportohet xhiroja ditore k\u00ebtu\n");
+    expect(r.findings.filter((f) => f.ruleId === "HP-OPERATIONAL-CLAIM")).toHaveLength(0);
+    const r2 = run("PoC JO-" + ["TES", "TED"].join("") + " dhe asgj\u00eb tjet\u00ebr\n");
+    expect(r2.findings.filter((f) => f.ruleId === "HP-POC-PROMOTION")).toHaveLength(0);
+  });
+
+  it("F4: dy claims operacionale, vet\u00ebm i pari i mohuar \u2192 i dyti kapet (rend i kund\u00ebrt gjithashtu)", () => {
+    const r = run("saldo reale \u00ebsht\u00eb 7; nuk raportohet xhiroja ditore\n");
+    expect(r.findings.filter((f) => f.ruleId === "HP-OPERATIONAL-CLAIM")).toHaveLength(1);
+  });
+
+  it("F5: \u2018jo\u2019 brenda nj\u00eb fjale NUK \u00ebsht\u00eb operator mohimi", () => {
+    const r = run("PoC VA" + ["JO-TES", "TED"].join("") + " sintetik\n"); // JO- brenda fjale
+    expect(r.findings.filter((f) => f.ruleId === "HP-POC-PROMOTION")).toHaveLength(1);
+  });
+
+  it("F6: mohim n\u00eb fjalin\u00eb e par\u00eb, claim real n\u00eb t\u00eb dyt\u00ebn \u2192 kapet; output pa matched content", () => {
+    const r = run("nuk ka raportim k\u00ebtu. gjendja reale e ark\u00ebs \u00ebsht\u00eb 9\n");
+    const hits = r.findings.filter((f) => f.ruleId === "HP-OPERATIONAL-CLAIM");
+    expect(hits).toHaveLength(1);
+    const json = toJsonReport({ mode: "advisory", evaluations: r.evaluations, findings: r.findings });
+    expect(json).not.toContain("ark\u00ebs");
+  });
+
+  it("near-miss i ri: kualifikuesi mock lidhet me match-in e vet, jo me gjith\u00eb rreshtin", () => {
+    const r = run("regression = vet\u00ebm mock " + ["TES", "TED"].join("") + "; por PoC " + ["IMPLE", "MENTED"].join("") + " në prod\n");
+    expect(r.findings.filter((f) => f.ruleId === "HP-POC-PROMOTION")).toHaveLength(1);
+  });
+});
+
+describe("P-IV \u00a73 near-miss: kontroll-karakter jo-NUL n\u00eb tekst valid UTF-8 \u2192 skanohet normalisht", () => {
+  it("byte 0x01 nuk trajtohet si binar dhe nuk ndal skanimin", () => {
+    const { repo, base } = repoWithBase();
+    writeFileSync(join(repo.dir, "ctl.md"), Buffer.concat([Buffer.from("tekst i past\u00ebr "), Buffer.from([1]), Buffer.from(" fund\n")]));
+    const head = repo.commitAll("kontroll-karakter");
+    expect(() => runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined)).not.toThrow();
   });
 });

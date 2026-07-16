@@ -113,6 +113,12 @@ export interface GitReader {
   rawEntries(sha: string): RawEntry[];
   /** Madhësia e blob-it me OBJECT-ID (pa path). */
   blobSizeByOid(oid: string): number;
+  /**
+   * Blob-i RAW me OBJECT-ID (P-IV §3): klasifikimi binar/encoding bëhet mbi
+   * byte-t e vërtetë të objektit — i PAVARUR nga .gitattributes/extension/diff.
+   * Thirret VETËM pas path/mode/scope/size gate.
+   */
+  blobByOid(oid: string): Buffer;
   /** Added-lines me numra realë; thirret VETËM për paths të aprovuara nga policy. */
   addedContent(sha: string, path: string): AddedContent;
   showFile(ref: string, path: string): string;

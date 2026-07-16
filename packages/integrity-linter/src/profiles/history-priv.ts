@@ -23,7 +23,7 @@ import {
   AuthorityError, DEFAULT_CHAIN_REQUIRED, defaultAuthorityClasses, extractAuthorityValue,
   isHistoryLabeledRow, type AuthorityClass,
 } from "../authority-classes.js";
-import { chainOrderViolations, evaluateChainPresence, extractChainText } from "./doc-core.js";
+import { chainOrderViolations, evaluateChainPresence, extractChainClaims } from "./doc-core.js";
 
 const P = "HISTORY-PRIV" as const;
 const REDACTED = "[REDACTED_PATH]";
@@ -69,6 +69,21 @@ export interface HistoryPrivOptions {
 interface SnapshotReaderAt {
   has(path: string): boolean;
   read(path: string): string;
+}
+
+/**
+ * P-IV §3 — klasifikim binar/encoding mbi BYTE-t RAW të blob-it (pas size gate):
+ * NUL byte → BINARY_BLOB; UTF-8 invalid → INVALID_ENCODING — të dyja exit 2,
+ * i PAVARUR nga .gitattributes/extension/diff classification. Pa content/OID
+ * në gabim.
+ */
+function assertScannableBlob(buf: Buffer): void {
+  if (buf.includes(0)) throw new ScanError("INCOMPLETE_SCAN:BINARY_BLOB");
+  try {
+    new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    throw new ScanError("INCOMPLETE_SCAN:INVALID_ENCODING");
+  }
 }
 
 /**
@@ -210,23 +225,37 @@ export function runHistoryPriv(
   // §3: OID-et e blob-eve të fshira nga path privat — gjatë TËRË range-it (in-memory).
   const deletedPrivateOids = new Set<string>();
   // §1: activation ONCE_PRESENT per klasë + gjendja parent e defekteve për dedup.
-  // Activation ONCE_PRESENT (§1.2): klasa aktivizohet nga snapshot-i i PARË ku
-  // authority ekziston DHE vlera nxirret pa ambiguitet; para aktivizimit mungesa/
-  // palexueshmëria lejohet nga METADATA (jo silent skip — kontratë e deklaruar);
-  // PAS aktivizimit çdo mungesë/palexueshmëri/ambiguitet = ScanError (exit 2).
+  // Activation ONCE_PRESENT (Hardening IV §2): klasa aktivizohet sapo authority
+  // FILE EKZISTON në snapshot — JO kur vlera lexohet për herë të parë (ONCE_VALID
+  // do të tolerontе shfaqje bosh/ambige). Para aktivizimit lejohet nga metadata
+  // VETËM mungesa e file-it; PAS aktivizimit bosh / zero match / ambige /
+  // unreadable / i hequr = ScanError (exit 2). Vlera problematike s'printohet.
   const activated = new Map<string, boolean>();
+  // §4A: numri i përputhjeve të anchor-it strukturor në authority file
+  // (undefined = klasa s'ka anchor; aktivizimi default = prania e FILE-it).
+  const anchorCount = (cls: AuthorityClass, snap: SnapshotReaderAt): number | undefined => {
+    if (cls.activationAnchor === undefined) return undefined;
+    const flags = cls.activationAnchor.flags.includes("g")
+      ? cls.activationAnchor.flags : cls.activationAnchor.flags + "g";
+    const re = new RegExp(cls.activationAnchor.source, flags);
+    let n = 0;
+    while (re.exec(snap.read(cls.authorityFile)) !== null) n += 1;
+    return n;
+  };
   const baseSnap = snapAt(mergeBase);
   let parentDriftDefects = new Map<string, string>();
   for (const cls of driftClasses) {
-    if (baseSnap.has(cls.authorityFile)) {
-      try {
-        const d = evaluateClassOnSnapshot(cls, baseSnap);
-        activated.set(cls.id, true);
-        for (const [k, v] of d) parentDriftDefects.set(k, v);
-      } catch (err) {
-        if (!(err instanceof AuthorityError)) throw err;
-        // e palexueshme NË BAZË → klasa ende e paaktivizuar (aktivizohet më vonë)
-      }
+    if (!baseSnap.has(cls.authorityFile)) continue;
+    const n = anchorCount(cls, baseSnap);
+    if (n === 0) continue; // anchor s'ka lindur në bazë → NOT_APPLICABLE (§4A.7)
+    activated.set(cls.id, true); // prania në bazë aktivizon nga commit-i i parë
+    try {
+      const d = evaluateClassOnSnapshot(cls, baseSnap);
+      for (const [k, v] of d) parentDriftDefects.set(k, v);
+    } catch (err) {
+      if (!(err instanceof AuthorityError)) throw err;
+      // baza (jashtë range-ut të skanuar) e palexueshme: s'ka dedup baseline;
+      // commit-i i PARË që e trashëgon gjendjen dështon me exit 2 më poshtë.
     }
   }
   let parentChainDefects = evaluateChainOnSnapshot(chainSurfaces, baseSnap);
@@ -288,16 +317,21 @@ export function runHistoryPriv(
 
     // ── CONTENT — §2: e pa-skanueshme = SKANIM I PAPLOTË = exit 2 ──
     for (const entry of approved) {
-      if (entry.status === "M" && !/^0+$/.test(entry.oldOid)) {
-        if (reader.blobSizeByOid(entry.oldOid) > OVERSIZE_BYTES) {
-          throw new ScanError("INCOMPLETE_SCAN:OVERSIZE_BLOB");
-        }
+      const hasOld = entry.status === "M" && !/^0+$/.test(entry.oldOid);
+      if (hasOld && reader.blobSizeByOid(entry.oldOid) > OVERSIZE_BYTES) {
+        throw new ScanError("INCOMPLETE_SCAN:OVERSIZE_BLOB");
       }
       if (reader.blobSizeByOid(entry.newOid) > OVERSIZE_BYTES) {
         throw new ScanError("INCOMPLETE_SCAN:OVERSIZE_BLOB");
       }
+      // P-IV §3: klasifikimi bëhet mbi blob-in RAW sipas OID (brenda cap),
+      // JO mbi diff output — .gitattributes s'mund ta shndërrojë binarin në
+      // "tekst" e as tekstin valid në "binar" të pa-skanuar.
+      if (hasOld) assertScannableBlob(reader.blobByOid(entry.oldOid));
+      assertScannableBlob(reader.blobByOid(entry.newOid));
       const content = reader.addedContent(sha, entry.path);
       if (content.binary) {
+        // me --text s'duhet të ndodhë kurrë; nëse ndodh = strukturë e papritur
         throw new ScanError("INCOMPLETE_SCAN:BINARY_BLOB");
       }
 
@@ -327,14 +361,16 @@ export function runHistoryPriv(
       }
       if (cur.length > 0) blocks.push(cur);
       for (const block of blocks) {
-        const chainText = extractChainText(block.map((b) => b.text));
-        for (const v of chainOrderViolations(chainText)) {
-          findings.push({
-            profile: P, profileStatus: status, severity: "WARNING",
-            ruleId: "HP-GATE-ORDER", category: "sequence",
-            locator: `${entry.path}:${block[0]?.line ?? 0} (${v.later} para ${v.earlier})`,
-            commit: short,
-          });
+        // §7 P-IV: rendi PER-CLAIM — bullets të pavarura nuk krahasohen mes tyre
+        for (const claim of extractChainClaims(block.map((b) => b.text))) {
+          for (const v of chainOrderViolations(claim)) {
+            findings.push({
+              profile: P, profileStatus: status, severity: "WARNING",
+              ruleId: "HP-GATE-ORDER", category: "sequence",
+              locator: `${entry.path}:${block[0]?.line ?? 0} (${v.later} para ${v.earlier})`,
+              commit: short,
+            });
+          }
         }
       }
     }
@@ -348,19 +384,30 @@ export function runHistoryPriv(
           // pas aktivizimit ONCE_PRESENT mungesa = dështim (activation s'fsheh commits)
           throw new ScanError("INCOMPLETE_SCAN:AUTHORITY_MISSING");
         }
-        continue; // para aktivizimit — e lejuar nga metadata e klasës
+        continue; // mungesa e file-it lejohet vetëm para aktivizimit (§2 P-IV)
+      }
+      const n = anchorCount(cls, snap);
+      if (n !== undefined && n > 1) {
+        // §4A.9: anchor i duplikuar = surface ambig — exit 2 (edhe në lindje)
+        throw new ScanError("INCOMPLETE_SCAN:AUTHORITY_ANCHOR_DUPLICATE");
+      }
+      if (activated.get(cls.id) !== true) {
+        if (n === 0) {
+          continue; // seksioni/anchor-i s'ka lindur ende → NOT_APPLICABLE (§4A.7)
+        }
+        activated.set(cls.id, true); // ONCE_PRESENT: PRANIA aktivizon — edhe kur
+        // shfaqja e parë është bosh/ambige; leximi më poshtë dështon me exit 2.
+      } else if (n === 0) {
+        // §4A.9 sticky: heqja e anchor-it pas aktivizimit = exit 2, edhe me vlerë prezente
+        throw new ScanError("INCOMPLETE_SCAN:AUTHORITY_ANCHOR_MISSING");
       }
       let clsDefects: Map<string, string>;
       try {
         clsDefects = evaluateClassOnSnapshot(cls, snap);
       } catch (err) {
-        if (err instanceof AuthorityError) {
-          if (activated.get(cls.id) === true) throw new ScanError(err.code); // pas aktivizimit → exit 2
-          continue; // para aktivizimit — e lejuar nga metadata ONCE_PRESENT
-        }
+        if (err instanceof AuthorityError) throw new ScanError(err.code); // exit 2
         throw err;
       }
-      activated.set(cls.id, true);
       for (const [k, v] of clsDefects) currentDriftDefects.set(k, v);
     }
     for (const [sig, locator] of currentDriftDefects) {

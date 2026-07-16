@@ -121,11 +121,19 @@ export class GitCliReader implements GitReader {
     return n;
   }
 
+  blobByOid(oid: string): Buffer {
+    if (!/^[0-9a-f]{40}$/.test(oid)) throw new ScanError("BLOB_OID_INVALID");
+    return this.git("cat-file-blob", ["cat-file", "blob", oid]);
+  }
+
   addedContent(sha: string, path: string): AddedContent {
     // --no-ext-diff / --no-textconv: asnjë driver i jashtëm ose textconv nuk
     // ekzekutohet kurrë (edhe kur .gitattributes e kërkon) — provohet me fixture.
+    // --text (P-IV §3): klasifikimi tekst/binar NUK i besohet diff-it —
+    // .gitattributes `binary`/`-diff` s'mund ta fshehë tekstin nga skanimi;
+    // blob-et realisht binare refuzohen PËRPARA kësaj me blobByOid (NUL/UTF-8).
     const buf = this.git("show-diff", [
-      "show", sha, "--format=", "--unified=0", "--no-renames", "--no-ext-diff", "--no-textconv", "--", path,
+      "show", sha, "--format=", "--unified=0", "--no-renames", "--no-ext-diff", "--no-textconv", "--text", "--", path,
     ]);
     const text = decodeStrictUtf8(buf, "DIFF_CONTENT_ENCODING");
     return parseUnifiedAddedLines(text);

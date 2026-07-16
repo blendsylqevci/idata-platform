@@ -121,7 +121,7 @@ describe("§9 EVENT hardening — input i jashtëm i pabesuar", () => {
   });
 
   it("SHA jo-40-hex → EVENT_SHA_INVALID; JSON i prishur → EVENT_MALFORMED", () => {
-    const bad = writeEvent({ pull_request: { base: { sha: "short" } } });
+    const bad = writeEvent({ pull_request: { base: { sha: "short" }, head: { sha: sha("b") } } });
     expect(() => readPullRequestEvent(bad)).toThrow("EVENT_SHA_INVALID");
     const dir = mkdtempSync(join(tmpdir(), "linter-event-"));
     const p = join(dir, "event.json");
@@ -137,7 +137,7 @@ describe("§9 EVENT hardening — input i jashtëm i pabesuar", () => {
     symlinkSync(real, link);
     expect(() => readPullRequestEvent(link)).toThrow("EVENT_NOT_REGULAR_FILE");
 
-    const big = writeEvent({ pull_request: { body: "a".repeat(70_000) } });
+    const big = writeEvent({ pull_request: { base: { sha: sha("a") }, head: { sha: sha("b") }, body: "a".repeat(70_000) } });
     expect(() => readPullRequestEvent(big)).toThrow("EVENT_BODY_OVERSIZE");
   });
 
@@ -151,7 +151,7 @@ describe("§9 EVENT hardening — input i jashtëm i pabesuar", () => {
   it("§8 trust boundary: env NUK lexohet pa GITHUB_ACTIONS+pull_request; --event-file eksplicit funksionon; wrong event name injorohet", () => {
     const repo = makeTempRepo();
     writeFullCanonicalRepo(repo);
-    const p = writeEvent({ pull_request: { body: "x" } });
+    const p = writeEvent({ pull_request: { base: { sha: sha("a") }, head: { sha: sha("b") }, body: "x" } });
     // env i vendosur POR jo në Actions → NUK lexohet (scan OK pa event)
     const r1 = runCli(["--profiles", "DOC-CORE", "--format", "json"], repo.dir, { GITHUB_EVENT_PATH: p });
     expect(r1.status).toBe(0);
@@ -173,14 +173,55 @@ describe("§9 EVENT hardening — input i jashtëm i pabesuar", () => {
   });
 
   it("§8 boundary: body limit ekzakt OK; limit+1 → EVENT_BODY_OVERSIZE; pull_request null → EVENT_MALFORMED", () => {
-    const exact = writeEvent({ pull_request: { body: "a".repeat(65_536) } });
+    const exact = writeEvent({ pull_request: { base: { sha: sha("a") }, head: { sha: sha("b") }, body: "a".repeat(65_536) } });
     expect(readPullRequestEvent(exact)?.body?.length).toBe(65_536);
-    const plus1 = writeEvent({ pull_request: { body: "a".repeat(65_537) } });
+    const plus1 = writeEvent({ pull_request: { base: { sha: sha("a") }, head: { sha: sha("b") }, body: "a".repeat(65_537) } });
     expect(() => readPullRequestEvent(plus1)).toThrow("EVENT_BODY_OVERSIZE");
     const nullPr = writeEvent({ pull_request: null });
     expect(() => readPullRequestEvent(nullPr)).toThrow("EVENT_MALFORMED");
     const noPr = writeEvent({ something_else: 1 });
     expect(() => readPullRequestEvent(noPr)).toThrow("EVENT_MALFORMED");
+  });
+
+  it("§8 P-IV: base/head + sha MANDATORY — mungesa/null/tip invalid → EVENT_MALFORMED", () => {
+    expect(() => readPullRequestEvent(writeEvent({ pull_request: { head: { sha: sha("b") }, body: "x" } })))
+      .toThrow("EVENT_MALFORMED"); // pa base
+    expect(() => readPullRequestEvent(writeEvent({ pull_request: { base: { sha: sha("a") }, body: "x" } })))
+      .toThrow("EVENT_MALFORMED"); // pa head
+    expect(() => readPullRequestEvent(writeEvent({ pull_request: { base: {}, head: { sha: sha("b") } } })))
+      .toThrow("EVENT_MALFORMED"); // pa base.sha
+    expect(() => readPullRequestEvent(writeEvent({ pull_request: { base: { sha: null }, head: { sha: sha("b") } } })))
+      .toThrow("EVENT_MALFORMED"); // sha null
+    expect(() => readPullRequestEvent(writeEvent({ pull_request: { base: { sha: 42 }, head: { sha: sha("b") } } })))
+      .toThrow("EVENT_SHA_INVALID"); // tip invalid
+    expect(() => readPullRequestEvent(writeEvent({ pull_request: { base: [sha("a")], head: { sha: sha("b") } } })))
+      .toThrow("EVENT_MALFORMED"); // node array
+  });
+
+  it("§8 P-IV: body null/mungues me event prezent = BOSH i njohur → EVALUATED (jo 'pa event')", () => {
+    const evNull = readPullRequestEvent(writeEvent({ pull_request: { base: { sha: sha("a") }, head: { sha: sha("b") }, body: null } }));
+    expect(evNull?.body).toBe("");
+    const evMissing = readPullRequestEvent(writeEvent({ pull_request: { base: { sha: sha("a") }, head: { sha: sha("b") } } }));
+    expect(evMissing?.body).toBe("");
+    expect(() => readPullRequestEvent(writeEvent({ pull_request: { base: { sha: sha("a") }, head: { sha: sha("b") }, body: 42 } })))
+      .toThrow("EVENT_MALFORMED"); // number
+    expect(() => readPullRequestEvent(writeEvent({ pull_request: { base: { sha: sha("a") }, head: { sha: sha("b") }, body: {} } })))
+      .toThrow("EVENT_MALFORMED"); // object
+    expect(() => readPullRequestEvent(writeEvent({ pull_request: { base: { sha: sha("a") }, head: { sha: sha("b") }, body: ["a"] } })))
+      .toThrow("EVENT_MALFORMED"); // array
+
+    // rrjedhë e plotë: body i njohur bosh → pr-body EVALUATED + HP-SCOPE-BLOCK missing sipas kontratës
+    const repo = makeTempRepo();
+    writeFullCanonicalRepo(repo);
+    repo.write("docs/extra.md", "shtesë\n");
+    const head = repo.commitAll("delta");
+    const base = execFileSync("git", ["rev-parse", `${head}~1`], { cwd: repo.dir }).toString().trim();
+    const p = writeEvent({ pull_request: { base: { sha: base }, head: { sha: head }, body: null } });
+    const r = runCli(["--profiles", "DOC-CORE,HISTORY-PRIV", "--base", base, "--head", head, "--format", "json", "--event-file", p], repo.dir, {});
+    expect(r.status).toBe(0);
+    const doc = JSON.parse(r.stdout) as { evaluations: Array<{ check?: string; evaluation: string }>; findings: Array<{ ruleId: string; locator: string }> };
+    expect(doc.evaluations.some((e) => e.check === "pr-body" && e.evaluation === "NOT_EVALUATED")).toBe(false); // JO "pa event"
+    expect(doc.findings.some((f) => f.ruleId === "HP-SCOPE-BLOCK" && f.locator.includes("missing"))).toBe(true);
   });
 
   it("event i pranishëm live (proces real): scope block i vlefshëm → zero HP-SCOPE findings", () => {

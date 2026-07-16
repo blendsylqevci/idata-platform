@@ -30,7 +30,7 @@ describe("§3 CALL-ORDER — policy mbi TË GJITHA entries PARA çdo content acc
         const orig = Reflect.get(target, prop, receiver);
         if (typeof orig !== "function") return orig;
         return (...args: unknown[]) => {
-          if (prop === "blobSizeByOid" || prop === "addedContent" || prop === "showFile") {
+          if (prop === "blobSizeByOid" || prop === "blobByOid" || prop === "addedContent" || prop === "showFile") {
             calls.push(`${String(prop)}:${String(args[1] ?? args[0])}`);
           } else if (prop === "rawEntries") {
             calls.push("rawEntries");
@@ -46,7 +46,7 @@ describe("§3 CALL-ORDER — policy mbi TË GJITHA entries PARA çdo content acc
     expect(calls.some((c) => c.includes(privDir))).toBe(false);
     expect(calls.some((c) => c.includes("leak.md"))).toBe(false);
     // metadata (rawEntries) vjen PARA çdo content access:
-    const firstContent = calls.findIndex((c) => c.startsWith("blobSizeByOid") || c.startsWith("addedContent"));
+    const firstContent = calls.findIndex((c) => c.startsWith("blobSizeByOid") || c.startsWith("blobByOid") || c.startsWith("addedContent"));
     const firstMeta = calls.indexOf("rawEntries");
     expect(firstMeta).toBeGreaterThanOrEqual(0);
     if (firstContent !== -1) expect(firstMeta).toBeLessThan(firstContent);
@@ -169,7 +169,29 @@ describe("§2 boundary — content i pa-skanueshëm = exit 2 (fail-closed, Pass 
     const b2 = repo2.commitAll("base");
     writeFileSync(`${repo2.dir}/bad.txt`, Buffer.from([0x61, 0xc3, 0x28, 0x62, 0x0a]));
     const h2 = repo2.commitAll("bad encoding");
-    expect(() => runHistoryPriv(new GitCliReader(repo2.dir), b2, h2, undefined)).toThrow(ScanError);
+    expect(() => runHistoryPriv(new GitCliReader(repo2.dir), b2, h2, undefined))
+      .toThrow("INCOMPLETE_SCAN:INVALID_ENCODING"); // P-IV §3: kod specifik, pa NUL
+  });
+
+  it("P-IV §3: .gitattributes `*.bin diff` NUK e fsheh NUL-blobin → BINARY_BLOB exit 2", () => {
+    const { repo } = repoWithBase();
+    repo.write(".gitattributes", "*.bin diff\n");
+    const c0 = repo.commitAll("attrs diff force-text");
+    writeFileSync(`${repo.dir}/data.bin`, Buffer.concat([Buffer.from("abc"), Buffer.from([0]), Buffer.from("def")]));
+    const c1 = repo.commitAll("nul blob me attr diff");
+    expect(() => runHistoryPriv(new GitCliReader(repo.dir), c0, c1, undefined))
+      .toThrow("INCOMPLETE_SCAN:BINARY_BLOB");
+  });
+
+  it("P-IV §3: `.bin` VALID UTF-8 me attr `binary` → SKANOHET si tekst (attr s'e fsheh nga rregullat)", () => {
+    const { repo } = repoWithBase();
+    repo.write(".gitattributes", "*.bin binary\n");
+    const c0 = repo.commitAll("attrs binary force");
+    repo.write("note.bin", "xhiroja ditore e arkës këtu\n"); // trigger sintetik operational
+    const c1 = repo.commitAll("tekst valid me extension bin");
+    const r = runHistoryPriv(new GitCliReader(repo.dir), c0, c1, undefined);
+    const hit = r.findings.filter((f) => f.ruleId === "HP-OPERATIONAL-CLAIM" && f.locator.startsWith("note.bin:1"));
+    expect(hit).toHaveLength(1); // provë që content-i u skanua realisht
   });
 });
 
