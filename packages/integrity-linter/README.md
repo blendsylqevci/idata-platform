@@ -30,7 +30,36 @@ gjithë** consumers.
 
 - Vetëm **Git objects të tracked** (`show/diff-tree/rev-list/merge-base/cat-file/ls-tree`);
   zero filesystem walk; zero network; `execFileSync` me argument arrays;
-  `--no-ext-diff --no-textconv` (provohet me sentinel fixture).
+  `--no-ext-diff --no-textconv` (provohet me sentinel fixture);
+  **`--literal-pathspecs` i centralizuar (P-V C1)** — çdo repo path nga metadata
+  trajtohet LITERAL: zero glob/pathspec magic, sibling i bllokuar s'lexohet dot
+  përmes emrash si `[x].md`/`*.md`.
+- **Path-policy ancestor-aware (P-V C2):** klasifikuesit privatë (.env/.env.*,
+  `*.secret.md`, stems owner-only, prapashtesa kredencialesh) kontrollohen mbi
+  ÇDO segment të path-it, jo vetëm basename-in final; allowlist-i env
+  (.env.example/.env.sef.example) vlen VETËM si file final; absolute/`..`/
+  segment bosh/NUL → BLOCKED. Parity me .gitignore + guard + PROJECT_RULES.
+- **Protected machine tokens (P-V F1/F2):** authority e obfuskuar me
+  homoglyph/zero-width/format-char → exit 2 `AUTHORITY_OBFUSCATED`; consumer i
+  obfuskuar → `DC/HP-MACHINE-TOKEN-OBFUSCATED` (kurrë silent no-match). RAW
+  teksti mbetet burimi; projeksioni i detektimit vetëm ZBULON — zero NFKC
+  global, zero heqje të heshtur zero-width, zero auto-zëvendësim homoglyph-i.
+- **GFM container-aware (P-V F3):** tabelat brenda blockquote (edhe nested)
+  japin të njëjtat findings strukturore; depth i përzier header/delimiter/data
+  s'kalon silent; fence brenda quote ndiqet me thellësi.
+- **Role identity (P-V F4/C4):** `<br>`/HTML comments/whitespace entities →
+  separator vetëm në role-bearing values; markup i papritur → `DC-ROLE-MARKUP`
+  REVIEW; kandidati i identitetit njihet në çdo casing. Ambiguiteti → REVIEW,
+  kurrë auto-approval; zero matched content në output.
+- **Etiketa historike (P-V C3):** vetëm etiketa strukturore row-scoped
+  eksplicite (HISTORICAL/SUPERSEDED/HISTORIK/Historia:); krahasimet e lira
+  `vs <n>` NUK fitojnë exemption. **Mohimi (P-V F5):** vetëm një mohim i vetëm
+  i lidhur direkt me claim-in (ose forma eksplicite `JO-...`) suppress-on;
+  mohim i dyfishtë/ambig → finding-u primar mbetet.
+- **CLI/engine determinist (P-V H1–H4):** direct-exec guard me URL/realpath
+  real; duplicate profiles → `DUPLICATE_PROFILE` exit 2; sanitizer i paekuivok
+  (backslash i pari — zero kolizione në corpus); event read loop me `bytesRead`
+  → `EVENT_SHORT_READ` fail-closed.
 - **Policy para blob-it:** path/mode/scope zbatohet mbi TË GJITHA entries e commit-it
   para çdo content access (call-order spy test). Path privat → `[REDACTED_PATH]`,
   zero content/hash; delete-only cleanup lejohet; relocation privat→publik → REVIEW.
@@ -83,6 +112,12 @@ node dist/cli.js ... --event-file event.json           # event eksplicit lokalis
 
 Exit 0 = scan i plotë (advisory findings lejohen; WARNING/REVIEW **janë findings, jo PASS**).
 Exit 2 = config/git/parser/incomplete-scan error.
+
+Linter-i mbulon klasat e regjistruara në 07_PRODATA §Linter për 2/16 profile —
+statusi mbetet i KUFIZUAR në atë katalog: kontroll strukture/konsistence, JO
+provë privacy/compliance. **Semantika ligjore mbetet gjithmonë human review +
+Human Gate** — linter-i nuk jep opinion ligjor dhe nuk vendos semantikën e
+asnjë neni.
 
 ## Workflow
 
