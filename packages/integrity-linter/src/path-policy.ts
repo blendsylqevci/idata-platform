@@ -76,18 +76,21 @@ export type PathVerdict = "ALLOWED" | "BLOCKED";
 /**
  * Vlerëson një path repo-relativ TË TRACKED (asnjë qasje në filesystem).
  * BLOCKED = klasë private/owner-only; raportohet gjithmonë vetëm si [REDACTED_PATH].
+ *
+ * P-V C2: klasifikuesit privatë kontrollohen mbi ÇDO SEGMENT të path-it —
+ * jo vetëm mbi basename-in final: `.env/secret.txt`, `nested/.env/x`,
+ * `notes.secret.md/x`, `docs/OfertaClient/x` = BLOCKED. Allowlist-i i env
+ * (.env.example / .env.sef.example) vlen VETËM si FILE FINAL — kurrë si
+ * directory ancestor. Absolute / `..` / segment bosh / NUL → BLOCKED
+ * (fail-closed drejt privatësisë; kufijtë e encoding-ut mbeten te reader-i).
  */
 export function evaluatePath(path: string): PathVerdict {
+  if (path.includes("\u0000")) return "BLOCKED";
+  if (path.startsWith("/") || path.startsWith("\\") || /^[A-Za-z]:[\\/]/.test(path)) return "BLOCKED";
   const norm = path.replace(/\\/g, "/").replace(/^\/+/, "");
   const lower = norm.toLowerCase();
   const segments = norm.split("/");
-  const basename = segments[segments.length - 1] ?? "";
-  const basenameLower = basename.toLowerCase();
-
-  // 1) env: .env dhe .env.* bllokohen; .env.example / .env.sef.example lejohen
-  if (basenameLower === ENV_BASENAME || basenameLower.startsWith(ENV_BASENAME + ".")) {
-    if (!ENV_ALLOWED.has(basenameLower)) return "BLOCKED";
-  }
+  if (segments.some((s) => s === "" || s === "." || s === "..")) return "BLOCKED";
 
   // 2) direktori të bllokuara kudo
   for (const dir of BLOCKED_DIRS) {
@@ -100,22 +103,34 @@ export function evaluatePath(path: string): PathVerdict {
     if (lower === sub.toLowerCase() || lower.startsWith(sub.toLowerCase() + "/")) return "BLOCKED";
   }
 
-  // 4) prapashtesa
-  const ext = basenameLower.includes(".") ? basenameLower.slice(basenameLower.lastIndexOf(".") + 1) : "";
-  if (BLOCKED_EXTENSIONS.includes(ext)) return "BLOCKED";
+  // 1/4/5) klasifikues privatë mbi ÇDO segment (C2)
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i] ?? "";
+    const segLower = seg.toLowerCase();
+    const isFinal = i === segments.length - 1;
 
-  // 4b) *.secret.md — klasë kudo, çfarëdo case/nesting
-  if (basenameLower.endsWith(frag(".", "secret", ".md"))) return "BLOCKED";
+    // env: .env dhe .env.* bllokohen KUDO; allowlist VETËM si file final
+    if (segLower === ENV_BASENAME || segLower.startsWith(ENV_BASENAME + ".")) {
+      if (!(isFinal && ENV_ALLOWED.has(segLower))) return "BLOCKED";
+    }
 
-  // 5) stema owner-only SUBSTRING kudo në basename (§6A: parity e saktë me
-  // guard-in, i cili bën grep -iE substring mbi path — pa kufij fjale)
-  for (const stem of BLOCKED_BASENAME_STEMS) {
-    if (basenameLower.includes(stem.toLowerCase())) return "BLOCKED";
+    // *.secret.md — klasë kudo, edhe si directory ancestor
+    if (segLower.endsWith(frag(".", "secret", ".md"))) return "BLOCKED";
+
+    // prapashtesa binare/kredencialesh — edhe si emër direktorie
+    const ext = segLower.includes(".") ? segLower.slice(segLower.lastIndexOf(".") + 1) : "";
+    if (BLOCKED_EXTENSIONS.includes(ext)) return "BLOCKED";
+
+    // stema owner-only SUBSTRING në çdo segment (parity me guard-in: grep -iE
+    // substring mbi PATH e plotë — pa kufij fjale, pa kufizim në basename)
+    for (const stem of BLOCKED_BASENAME_STEMS) {
+      if (segLower.includes(stem.toLowerCase())) return "BLOCKED";
+    }
+    for (const sub of BLOCKED_BASENAME_SUBSTRINGS) {
+      if (segLower.includes(sub.toLowerCase())) return "BLOCKED";
+    }
+    if (BLOCKED_KEY_BASENAMES.test(seg)) return "BLOCKED";
   }
-  for (const sub of BLOCKED_BASENAME_SUBSTRINGS) {
-    if (basenameLower.includes(sub.toLowerCase())) return "BLOCKED";
-  }
-  if (BLOCKED_KEY_BASENAMES.test(basename)) return "BLOCKED";
 
   return "ALLOWED";
 }

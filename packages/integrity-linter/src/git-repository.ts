@@ -21,10 +21,16 @@ const MAX_GIT_OUTPUT = 64 * 1024 * 1024;
 export class GitCliReader implements GitReader {
   constructor(private readonly cwd: string) {}
 
-  /** Ekzekutim i sigurt; dështimi kthen VETËM kod fiks (pa message/argv/path). */
+  /**
+   * Ekzekutim i sigurt; dështimi kthen VETËM kod fiks (pa message/argv/path).
+   * P-V C1: `--literal-pathspecs` GLOBAL dhe I CENTRALIZUAR — çdo path që
+   * vjen nga metadata trajtohet LITERAL: `[x].md` s'përputhet me `x.md`,
+   * `*.md` s'bën glob, asnjë pathspec magic. Mbulon show/ls-tree/diff-tree
+   * dhe çdo command të ardhshëm pa patch ad-hoc per-command.
+   */
   private git(opLabel: string, args: string[]): Buffer {
     try {
-      return execFileSync("git", args, {
+      return execFileSync("git", ["--literal-pathspecs", ...args], {
         cwd: this.cwd,
         maxBuffer: MAX_GIT_OUTPUT,
         stdio: ["ignore", "pipe", "pipe"],
