@@ -24,6 +24,7 @@ import {
   isHistoryLabeledRow, type AuthorityClass,
 } from "../authority-classes.js";
 import { chainOrderViolations, evaluateChainPresence, extractChainClaims } from "./doc-core.js";
+import { hasObfuscatedMatch } from "../machine-token.js";
 
 const P = "HISTORY-PRIV" as const;
 const REDACTED = "[REDACTED_PATH]";
@@ -111,6 +112,11 @@ function evaluateClassOnSnapshot(
     let currentSeenActive = false;
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] ?? "";
+      // P-V F1/F2: token i mbrojtur i pranishëm VETËM i obfuskuar (zero-width/
+      // homoglyph) NUK kalon si "no match" — finding i dedikuar, pa content.
+      if (hasObfuscatedMatch(line, consumer.pattern)) {
+        defects.set(`${cls.id}|${consumer.file}|obfuscated:${i + 1}`, `${consumer.file}:${i + 1} (${cls.id})`);
+      }
       const re = new RegExp(consumer.pattern.source, consumer.pattern.flags.includes("g") ? consumer.pattern.flags : consumer.pattern.flags + "g");
       let cm: RegExpExecArray | null;
       while ((cm = re.exec(line)) !== null) {
@@ -415,10 +421,12 @@ export function runHistoryPriv(
       const cls = driftClasses.find((c) => sig.startsWith(`${c.id}|`));
       const kind = cls?.kind.toUpperCase() ?? "VALUE";
       const isMissing = sig.endsWith("|missing") || sig.endsWith("|missing-file");
+      const isObfuscated = sig.includes("|obfuscated:");
       findings.push({
         profile: P, profileStatus: status, severity: "WARNING",
-        ruleId: isMissing ? "HP-CURRENT-VALUE-MISSING" : `HP-DRIFT-${kind}`,
-        category: "drift", locator, commit: short,
+        ruleId: isObfuscated ? "HP-MACHINE-TOKEN-OBFUSCATED"
+          : isMissing ? "HP-CURRENT-VALUE-MISSING" : `HP-DRIFT-${kind}`,
+        category: isObfuscated ? "obfuscation" : "drift", locator, commit: short,
       });
     }
     parentDriftDefects = currentDriftDefects;

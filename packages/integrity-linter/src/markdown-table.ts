@@ -22,9 +22,28 @@ export interface ParsedRow {
   hadTrailingPipe: boolean;
 }
 
-/** Ndarja e një rreshti tabele në qeliza logjike sipas GFM. */
+/**
+ * P-V F3 — konteksti i kontejnerit GFM: 0–3 hapësira + një a më shumë nivele
+ * `>` (me hapësirë opsionale pas secilit marker). Kthen thellësinë e quote-s
+ * dhe përmbajtjen pa prefiksin e kontejnerit. NUK bëhet asnjë replace global —
+ * prefiksi hiqet vetëm në kufirin e analizës strukturore, rresht-për-rresht.
+ */
+export function containerOf(line: string): { depth: number; content: string } {
+  let i = 0;
+  let depth = 0;
+  let spaces = 0;
+  while (i < line.length) {
+    const ch = line[i];
+    if (ch === " " && spaces < 3) { spaces += 1; i += 1; continue; }
+    if (ch === ">") { depth += 1; i += 1; spaces = 0; if (line[i] === " ") i += 1; continue; }
+    break;
+  }
+  return { depth, content: line.slice(i) };
+}
+
+/** Ndarja e një rreshti tabele në qeliza logjike sipas GFM (container-aware). */
 export function parseTableRow(line: string): ParsedRow {
-  const s = line.trim();
+  const s = containerOf(line).content.trim();
   const hadLeadingPipe = s.startsWith("|");
   const cells: string[] = [];
   let cur = "";
@@ -97,21 +116,53 @@ export function isSeparatorRow(line: string): boolean {
   return p.cells.length >= 2 || p.hadLeadingPipe || p.hadTrailingPipe;
 }
 
-/** A ndodhet rreshti idx (0-based) brenda një fenced code block (``` / ~~~)? */
+/**
+ * A ndodhet rreshti idx (0-based) brenda një fenced code block (``` / ~~~)?
+ * P-V F3 — container-aware: fence-t brenda blockquote (`> ```) ndiqen me
+ * thellësinë e tyre; dalja nga kontejneri i mbyll fence-t e hapura më thellë;
+ * fence i hapur në depth d mbulon rreshtat pasues me depth >= d.
+ */
 function inFencedBlockAt(lines: string[], idx: number): boolean {
-  let open: { ch: string; len: number } | undefined;
+  const stack: Array<{ depth: number; ch: string; len: number }> = [];
   for (let i = 0; i < idx; i++) {
-    const m = /^\s{0,3}(`{3,}|~{3,})/.exec(lines[i] ?? "");
+    const { depth, content } = containerOf(lines[i] ?? "");
+    while (stack.length > 0 && depth < (stack[stack.length - 1] as { depth: number }).depth) stack.pop();
+    const m = /^\s{0,3}(`{3,}|~{3,})/.exec(content);
     if (!m || m[1] === undefined) continue;
     const ch = m[1][0] as string;
     const len = m[1].length;
-    if (open === undefined) {
-      open = { ch, len };
-    } else if (ch === open.ch && len >= open.len && (lines[i] ?? "").trim() === m[1]) {
-      open = undefined; // fence mbyllës: vetëm run-i, pa info string
+    const top = stack[stack.length - 1];
+    if (top !== undefined && top.depth === depth && ch === top.ch && len >= top.len && content.trim() === m[1]) {
+      stack.pop(); // fence mbyllës: vetëm run-i, pa info string, në të njëjtën thellësi
+    } else {
+      stack.push({ depth, ch, len });
     }
   }
-  return open !== undefined;
+  const tDepth = containerOf(lines[idx] ?? "").depth;
+  while (stack.length > 0 && tDepth < (stack[stack.length - 1] as { depth: number }).depth) stack.pop();
+  return stack.length > 0;
+}
+
+/**
+ * P-V F3 — bllok "table-like" me THELLËSI të përzier kontejneri (header/
+ * delimiter/data në depth të ndryshme): i paqartë — s'kalon silent (thirrësi
+ * e raporton si strukturor). true kur rreshti është kandidat dhe brenda
+ * run-it të tij të njëpasnjëshëm ka separator me depth tjetër.
+ */
+export function mixedDepthTableRow(snapshot: string, lineNo: number): boolean {
+  const lines = snapshot.split("\n");
+  const idx = lineNo - 1;
+  const target = lines[idx];
+  if (target === undefined || !isTableRowCandidate(target)) return false;
+  const tDepth = containerOf(target).depth;
+  for (const dir of [-1, 1]) {
+    for (let i = idx + dir; i >= 0 && i < lines.length; i += dir) {
+      const l = lines[i] ?? "";
+      if (!isTableRowCandidate(l) && !isSeparatorRow(l)) break;
+      if (isSeparatorRow(l) && containerOf(l).depth !== tDepth) return true;
+    }
+  }
+  return false;
 }
 
 export interface TableContext {
@@ -136,10 +187,13 @@ export function tableContextAt(snapshot: string, lineNo: number): TableContext |
   // që HP-TABLE-MALFORMED të mund të vendosë me informacion tabele)
   if (!isTableRowCandidate(target) && !parseTableRow(target).malformed) return undefined;
   if (inFencedBlockAt(lines, idx)) return undefined;
+  // P-V F3: header/delimiter/data duhet të kenë THELLËSI konsistente kontejneri
+  const tDepth = containerOf(target).depth;
   for (let i = idx - 1; i >= 0; i--) {
     const l = lines[i] ?? "";
     // tabela është bllok rreshtash të NJËPASNJËSHËM kandidatë — prishja e ndan
     if (!isTableRowCandidate(l) && !isSeparatorRow(l)) return undefined;
+    if (containerOf(l).depth !== tDepth) return undefined; // mixed depth ≠ tabelë e qartë
     const next = lines[i + 1] ?? "";
     if (isSeparatorRow(next) && !isSeparatorRow(l)) {
       const parsed = parseTableRow(l);

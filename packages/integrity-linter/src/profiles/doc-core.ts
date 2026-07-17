@@ -23,6 +23,7 @@ import {
   type AuthorityClass,
 } from "../authority-classes.js";
 import { isSeparatorRow, isTableRowCandidate, parseTableRow, tableContextAt } from "../markdown-table.js";
+import { hasObfuscatedMatch } from "../machine-token.js";
 
 const P = "DOC-CORE" as const;
 
@@ -251,19 +252,60 @@ const ROLE_HEADER_RE = /^(Owner( \/ burimi)?|Pronari?|Kush|Përgjegjës\w*|Appro
 const ROLE_LABEL_RE = /^\*{0,2}(Pronar(?:i)?(?: i dokumentit)?|Owner|Përgjegjës\w*|Approver|Human Gate)\s*:\*{0,2}\s*(.+)$/i;
 
 /**
- * §9 P-IV — parentetikat NUK hidhen blanket: kandidat identiteti personal
+ * P-V F4 — projeksion identiteti VETËM për role-bearing values (pa HTML
+ * normalization global): <br> variantet, HTML comments dhe whitespace
+ * entities → separator; markup/entity i papritur i mbetur → sinjal
+ * DC-ROLE-MARKUP (REVIEW) te thirrësi. Asnjë content në output.
+ */
+export function projectRoleMarkup(value: string): { text: string; unexpectedMarkup: boolean } {
+  const text = value
+    .replace(/<br\s*\/?\s*>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/&(?:nbsp|ensp|emsp|thinsp|zwsp|#0*160|#0*8194|#0*8195|#0*8201|#0*8203|#x0*A0);/gi, " ");
+  const unexpectedMarkup = /<[A-Za-z!/]|&[A-Za-z#][A-Za-z0-9]{1,10};/.test(text);
+  return { text, unexpectedMarkup };
+}
+
+/** Fjalë funksionale të annotation-eve sintaktike — JO pjesë identiteti. */
+const FUNCTIONAL_ANNOTATION_WORDS = new Set([
+  "aprovon", "miraton", "çdo", "ndryshim", "ndryshimet", "ndryshimin", "dokument",
+  "dokumentit", "dokumenti", "rresht", "rreshtit", "nëse", "kur", "duhet", "sipas",
+  "vetëm", "pas", "para", "për", "nga", "dhe", "ose", "me", "pa", "të", "e", "i",
+  "u", "në", "që", "këtij", "kësaj", "atij", "asaj", "review", "approval",
+]);
+
+/**
+ * §9 P-IV + P-V C4 — parentetikat NUK hidhen blanket: kandidat identiteti
  * brenda `(…)` të një vlere role → privacy REVIEW (pa publikuar content-in).
- * Kandidat = sekuencë TitleCase ≥2 fjalë OSE fjalë e vetme TitleCase ≥4
- * shkronja, që nuk është frazë e aprovuar roli.
+ * C4: kandidati njihet në ÇDO casing (TitleCase/UPPERCASE/lowercase/Unicode):
+ * run ≥2 fjalësh jo-funksionale e jo-të-aprovuara = kandidat; fjalë e vetme
+ * me shkronjë të madhe nistore ≥4 shkronja jo e aprovuar = kandidat.
+ * Ambiguiteti identitet-vs-annotation zgjidhet me REVIEW — kurrë auto-approval.
  */
 export function parentheticalIdentityCandidate(cellRaw: string, approvedPhrases: string[]): boolean {
   const approved = new Set(approvedPhrases.map((p) => p.toLowerCase()));
   for (const m of cellRaw.matchAll(/\(([^)]*)\)/g)) {
     const inner = (m[1] ?? "").replace(/[`*]/g, "").trim();
     if (inner === "" || approved.has(inner.toLowerCase())) continue;
-    const multi = /\p{Lu}\p{Ll}+(?:[ \t]+\p{Lu}\p{Ll}+)+/u.exec(inner);
-    if (multi !== null && !approved.has(multi[0].toLowerCase())) return true;
-    if (/^\p{Lu}\p{Ll}{3,}$/u.test(inner)) return true;
+    const words = [...inner.matchAll(/\p{L}[\p{L}'’-]*/gu)].map((w) => w[0]);
+    let run: string[] = [];
+    let hit = false;
+    const runHits = (): boolean => run.length >= 2 && !approved.has(run.join(" ").toLowerCase());
+    for (const w of words) {
+      const lw = w.toLowerCase();
+      if (FUNCTIONAL_ANNOTATION_WORDS.has(lw) || approved.has(lw)) {
+        if (runHits()) hit = true;
+        run = [];
+        continue;
+      }
+      run.push(w);
+    }
+    if (runHits()) hit = true;
+    if (hit) return true;
+    if (words.length === 1) {
+      const w = words[0] as string;
+      if (w.length >= 4 && /^\p{Lu}/u.test(w) && !approved.has(w.toLowerCase())) return true;
+    }
   }
   return false;
 }
@@ -357,6 +399,15 @@ export function runDocCore(
       let anyMatch = false;
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i] ?? "";
+        // P-V F1/F2: token i mbrojtur i pranishëm VETËM i obfuskuar nuk kalon
+        // si "no match" — finding i dedikuar (raw mbetet burimi i vlerësimit).
+        if (hasObfuscatedMatch(line, consumer.pattern)) {
+          findings.push({
+            profile: P, profileStatus: status, severity: "WARNING",
+            ruleId: "DC-MACHINE-TOKEN-OBFUSCATED", category: "obfuscation",
+            locator: `${consumer.file}:${i + 1} (${cls.id})`,
+          });
+        }
         const cre = globalized(consumer.pattern);
         let cm: RegExpExecArray | null;
         while ((cm = cre.exec(line)) !== null) {
@@ -457,14 +508,23 @@ export function runDocCore(
     if (t !== undefined) roleTexts.push([file, t]);
   }
   const roleValueFindings = (file: string, lineNo: number, value: string): void => {
-    if (roleTokensUnknown(value, surfaces.approvedRolePhrases) > 0) {
+    // P-V F4: projeksioni i markup-it zbatohet VETËM këtu (role-bearing value)
+    const proj = projectRoleMarkup(value);
+    if (proj.unexpectedMarkup) {
+      findings.push({
+        profile: P, profileStatus: status, severity: "REVIEW",
+        ruleId: "DC-ROLE-MARKUP", category: "privacy-review",
+        locator: `${file}:${lineNo}`,
+      });
+    }
+    if (roleTokensUnknown(proj.text, surfaces.approvedRolePhrases) > 0) {
       findings.push({
         profile: P, profileStatus: status, severity: "REVIEW",
         ruleId: "DC-ROLE-VOCAB", category: "privacy-review",
         locator: `${file}:${lineNo}`,
       });
     }
-    if (parentheticalIdentityCandidate(value, surfaces.approvedRolePhrases)) {
+    if (parentheticalIdentityCandidate(proj.text, surfaces.approvedRolePhrases)) {
       findings.push({
         profile: P, profileStatus: status, severity: "REVIEW",
         ruleId: "DC-ROLE-IDENTITY", category: "privacy-review",
@@ -546,6 +606,13 @@ export function runDocCore(
         for (let i = 0; i < bodyLines.length; i++) {
           const line = bodyLines[i] ?? "";
           if (isHistoryLabeledRow(line)) continue;
+          if (hasObfuscatedMatch(line, consumer.pattern)) {
+            findings.push({
+              profile: P, profileStatus: status, severity: "WARNING",
+              ruleId: "DC-MACHINE-TOKEN-OBFUSCATED", category: "obfuscation",
+              locator: `pr-body:${i + 1} (${cls.id})`,
+            });
+          }
           const re2 = globalized(consumer.pattern);
           let cm: RegExpExecArray | null;
           while ((cm = re2.exec(line)) !== null) {

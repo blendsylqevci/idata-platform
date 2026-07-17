@@ -12,7 +12,7 @@
  * §7 — qelizat lexohen me parser-in GFM të përbashkët (escaped pipe/code-span/arity).
  */
 
-import { parseTableRow, tableContextAt, isSeparatorRow } from "../markdown-table.js";
+import { mixedDepthTableRow, parseTableRow, tableContextAt, isSeparatorRow } from "../markdown-table.js";
 
 export interface RuleContext {
   line: string;
@@ -34,12 +34,30 @@ function frag(...parts: string[]): string {
 }
 
 /**
- * Mohim LOKAL (§6C): tokeni mohues duhet të qëndrojë në dritaren 24-karaktere
- * MENJËHERË para claim-it — "…, jo 0" në fund të rreshtit nuk e anulon claim-in.
+ * Mohim LOKAL (§6C + P-V F5): tokeni mohues duhet të qëndrojë në dritaren
+ * 24-karaktere MENJËHERË para claim-it — "…, jo 0" në fund të rreshtit nuk e
+ * anulon claim-in. F5: VETËM një mohim i VETËM i lidhur drejtpërdrejt me
+ * claim-in mund ta suppress-ojë; DY a më shumë mohues në fjalinë e claim-it
+ * ("s'është që PoC NUK është …") = mohim AMBIG → NUK suppress-ohet (finding-u
+ * primar mbetet). Pa NLP — numërim i thjeshtë mohuesish në sentence scope.
  */
 export function locallyNegated(line: string, matchIndex: number): boolean {
   const win = line.slice(Math.max(0, matchIndex - 24), matchIndex);
-  return /(\bnuk\b|\bs'|\bmos\b|ndalohet|NUK)\s*\S*\s*$/i.test(win);
+  if (!/(\bnuk\b|\bs'|\bmos\b|ndalohet|NUK)\s*\S*\s*$/i.test(win)) return false;
+  // F5: kufiri i fjalisë së claim-it
+  let start = 0;
+  for (const d of [".", ";", "!", "?", "·"]) {
+    const p = line.lastIndexOf(d, matchIndex);
+    if (p + 1 > start) start = p + 1;
+  }
+  let end = line.length;
+  for (const d of [".", ";", "!", "?", "·"]) {
+    const p = line.indexOf(d, matchIndex);
+    if (p !== -1 && p < end) end = p;
+  }
+  const sentence = line.slice(start, end);
+  const negators = sentence.match(/\bnuk\b|s'|\bmos\b|\bNUK\b|ndalohet/gi) ?? [];
+  return negators.length === 1;
 }
 
 /** Tag-set-i i Treatment sipas canonical 07_PRODATA §1A (REQ/MD/OB/REF/NO). */
@@ -219,6 +237,10 @@ export function buildContentRules(): ContentRule[] {
       ruleId: "HP-TABLE-MALFORMED", category: "structure", severity: "WARNING",
       test: (c) => {
         if (!c.line.includes("|") || isSeparatorRow(c.line)) return false;
+        // P-V F3: bllok table-like me thellësi kontejneri të përzier — i paqartë,
+        // s'kalon silent
+        const snapEarly = c.snapshot();
+        if (snapEarly !== undefined && mixedDepthTableRow(snapEarly, c.lineNo)) return true;
         if (!parseTableRow(c.line).malformed) return false;
         if (c.line.trimStart().startsWith("|")) return true; // synim eksplicit tabele
         // pa leading pipe: vetëm brenda konteksti tabele real — jo prozë me ` dhe |

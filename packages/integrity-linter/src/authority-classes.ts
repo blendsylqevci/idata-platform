@@ -12,6 +12,8 @@
  * Etiketa historike vlen VETËM same-row (row-scoped) — kurrë për gjithë dokumentin.
  */
 
+import { countMatches, detectionSkeleton } from "./machine-token.js";
+
 export type ConsumerRequirement = "REQUIRED_CURRENT" | "SCAN_IF_PRESENT";
 export type AuthorityKind = "version" | "count" | "status" | "set" | "phase";
 
@@ -82,10 +84,17 @@ export function extractAuthorityValue(text: string, cls: AuthorityClass): string
     cls.authorityPattern.flags.includes("g") ? cls.authorityPattern.flags : cls.authorityPattern.flags + "g",
   );
   const values = new Set<string>();
+  let rawCount = 0;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
+    rawCount += 1;
     if (m[1] !== undefined) values.add(norm(m[1]));
   }
+  // P-V F1/F2 — authority FAIL-CLOSED me kod specifik: token i obfuskuar
+  // (zero-width / homoglyph / format-char) zbulohet me projeksionin e
+  // detektimit; RAW mbetet burimi — projeksioni s'e pranon kurrë vlerën.
+  const skCount = countMatches(detectionSkeleton(text), cls.authorityPattern);
+  if (skCount > rawCount) throw new AuthorityError("INCOMPLETE_SCAN:AUTHORITY_OBFUSCATED");
   if (values.size === 0) throw new AuthorityError("INCOMPLETE_SCAN:AUTHORITY_UNREADABLE");
   if (values.size > 1) throw new AuthorityError("INCOMPLETE_SCAN:AUTHORITY_AMBIGUOUS");
   return [...values][0] as string;
@@ -307,8 +316,10 @@ export const ROLE_OPTIONAL_SURFACES = [POC5README, ANALIZA];
 
 /** Etiketë historike ROW-SCOPED — vlen vetëm në rreshtin ku gjendet vlera. */
 export function isHistoryLabeledRow(line: string): boolean {
-  // Etiketa duhet të jetë EKSPLICITE dhe row-scoped: HISTORICAL/SUPERSEDED/HISTORIK
-  // (uppercase si etiketa), "Historia:", "superseded", "ish ", "i/e atëhershëm/e".
-  // Mbiemri i thjeshtë "historike" (p.sh. "evidence historike mock") NUK është etiketë.
-  return /(HISTORICAL|SUPERSEDED|Historia\b|\bHISTORIK(E|U)?\b|superseded|\bish\b|atëhersh|numërator(i)? historik|vs \d)/.test(line);
+  // P-V C3: etiketa duhet të jetë EKSPLICITE, strukturore dhe row-scoped:
+  // HISTORICAL/SUPERSEDED/HISTORIK (uppercase si etiketa), "Historia:",
+  // "superseded", "ish ", "i/e atëhershëm/e", "numërator historik".
+  // Mbiemri i thjeshtë "historike" NUK është etiketë; krahasimet e lira
+  // "… v1 vs 2 …" NUK fitojnë exemption (fshihnin drift aktiv — hequr).
+  return /(HISTORICAL|SUPERSEDED|Historia\b|\bHISTORIK(E|U)?\b|superseded|\bish\b|atëhersh|numërator(i)? historik)/.test(line);
 }
