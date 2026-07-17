@@ -32,6 +32,10 @@ export function runScan(reader: GitReader, config: ScanConfig, options: EngineOp
   for (const p of config.profiles as string[]) {
     if (!isProfileId(p)) throw new ConfigError("UNKNOWN_PROFILE");
   }
+  // P-V H2 — duplicate profiles refuzohen fail-closed (pa dedup të heshtur)
+  if (new Set(config.profiles).size !== config.profiles.length) {
+    throw new ConfigError("DUPLICATE_PROFILE");
+  }
 
   const findings: Finding[] = [];
   const evaluations: ProfileEvaluation[] = [];

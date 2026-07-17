@@ -19,7 +19,9 @@
  * body, SHA 40-hex, përputhje e detyrueshme me --base/--head kur jepen të dyja.
  */
 
-import { closeSync, constants as fsConstants, fstatSync, openSync, readSync } from "node:fs";
+import { closeSync, constants as fsConstants, fstatSync, openSync, readSync, realpathSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
+import { pathToFileURL } from "node:url";
 import { GitCliReader } from "./git-repository.js";
 import { runScan } from "./engine.js";
 import { toJsonReport, toTextReport, countBySeverity } from "./reporter.js";
@@ -95,9 +97,7 @@ export function readPullRequestEvent(eventPath: string | undefined): PullRequest
     const st = fstatSync(fd);
     if (!st.isFile()) throw new ConfigError("EVENT_NOT_REGULAR_FILE");
     if (st.size > MAX_EVENT_BYTES) throw new ConfigError("EVENT_OVERSIZE");
-    const buf = Buffer.alloc(Number(st.size));
-    readSync(fd, buf, 0, buf.length, 0);
-    raw = buf.toString("utf8");
+    raw = readExactly(fd, Number(st.size)).toString("utf8");
   } finally {
     closeSync(fd);
   }
@@ -138,6 +138,27 @@ export function readPullRequestEvent(eventPath: string | undefined): PullRequest
     throw new ConfigError("EVENT_MALFORMED"); // object/array/number/boolean
   }
   return ev;
+}
+
+/**
+ * P-V H4 — lexim i PLOTË nga i njëjti FD: readSync në loop deri në madhësinë
+ * e pritur; bytesRead=0 para plotësimit (file shrink / partial read) →
+ * ConfigError EVENT_SHORT_READ (fail-closed, pa raw content në error).
+ * `readFn` i injektueshëm vetëm për testueshmëri — trust boundary i pandryshuar.
+ */
+export function readExactly(
+  fd: number,
+  size: number,
+  readFn: (fd: number, buf: Buffer, offset: number, length: number, position: number) => number = readSync,
+): Buffer {
+  const buf = Buffer.alloc(size);
+  let off = 0;
+  while (off < size) {
+    const n = readFn(fd, buf, off, size - off, off);
+    if (n === 0) throw new ConfigError("EVENT_SHORT_READ");
+    off += n;
+  }
+  return buf;
 }
 
 /** Kur CLI merr --base/--head DHE event-i mban SHA, duhet të përputhen. */
@@ -198,7 +219,19 @@ export function main(argv: string[], env: NodeJS.ProcessEnv): number {
   }
 }
 
-const invokedDirectly = process.argv[1] !== undefined && import.meta.url.endsWith(process.argv[1].split("/").pop() ?? "");
+// P-V H1 — krahasim REAL URL/path (cross-platform), jo vetëm basename:
+// import-i i këtij moduli nga një file tjetër me basename "cli.js" NUK e
+// ekzekuton main; ekzekutimi direkt (edhe me hapësira/symlink në path)
+// funksionon — realpath si Node-i për entry-n kryesor.
+const invokedDirectly = ((): boolean => {
+  const argv1 = process.argv[1];
+  if (argv1 === undefined) return false;
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(resolvePath(argv1))).href;
+  } catch {
+    return false; // path i pazgjidhshëm ⇒ sigurisht jo ky modul
+  }
+})();
 if (invokedDirectly) {
   process.exitCode = main(process.argv.slice(2), process.env);
 }

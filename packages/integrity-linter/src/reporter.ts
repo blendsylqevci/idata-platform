@@ -11,10 +11,14 @@
 import type { Finding, ProfileEvaluation, ScanResult } from "./types.js";
 
 export function sanitizeLocator(raw: string): string {
+  // P-V H3 — encoding DETERMINISTIK dhe JO-KOLIZIV: backslash-i escape-ohet
+  // I PARI, kështu raw `a|b` dhe raw literal "a|b" japin output TË
+  // NDRYSHËM (dekodimi është i paekuivok); zero kontroll-karaktere raw.
   let out = "";
   for (const ch of raw) {
     const code = ch.codePointAt(0) ?? 0;
-    if (ch === "|") out += "\\u007c";
+    if (ch === "\\") out += "\\\\";
+    else if (ch === "|") out += "\\u007c";
     else if (ch === "`") out += "\\u0060";
     else if (ch === "\r") out += "\\r";
     else if (ch === "\n") out += "\\n";
