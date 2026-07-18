@@ -123,24 +123,34 @@ export function isSeparatorRow(line: string): boolean {
  * fence i hapur në depth d mbulon rreshtat pasues me depth >= d.
  */
 function inFencedBlockAt(lines: string[], idx: number): boolean {
-  const stack: Array<{ depth: number; ch: string; len: number }> = [];
+  // P-VI §3 — STATE MACHINE CommonMark për fenced blocks (kontrata e linter-it,
+  // JO parser i përgjithshëm Markdown):
+  //  - opener: run >=3 backticks/tildes (info string i lejuar);
+  //  - BRENDA një fence aktive NUK hapet fence nested — çdo run më i shkurtër,
+  //    me karakter tjetër, me info string ose me thellësi tjetër është CONTENT;
+  //  - closer: i NJËJTI karakter, gjatësi >= opener-it, PA info string (vetëm
+  //    whitespace rreth run-it), në të njëjtën thellësi kontejneri;
+  //  - dalja nga kontejneri (depth < depth-i i fence-s) e mbyll fence-n;
+  //  - fence e pambyllur përjashton përmbajtjen deri në fund;
+  //  - pas closer-it valid parsing-u normal rifillon.
+  let open: { depth: number; ch: string; len: number } | undefined;
   for (let i = 0; i < idx; i++) {
     const { depth, content } = containerOf(lines[i] ?? "");
-    while (stack.length > 0 && depth < (stack[stack.length - 1] as { depth: number }).depth) stack.pop();
+    if (open !== undefined && depth < open.depth) open = undefined; // dalje kontejneri
     const m = /^\s{0,3}(`{3,}|~{3,})/.exec(content);
     if (!m || m[1] === undefined) continue;
     const ch = m[1][0] as string;
     const len = m[1].length;
-    const top = stack[stack.length - 1];
-    if (top !== undefined && top.depth === depth && ch === top.ch && len >= top.len && content.trim() === m[1]) {
-      stack.pop(); // fence mbyllës: vetëm run-i, pa info string, në të njëjtën thellësi
-    } else {
-      stack.push({ depth, ch, len });
+    if (open === undefined) {
+      open = { depth, ch, len }; // opener (me ose pa info string)
+    } else if (depth === open.depth && ch === open.ch && len >= open.len && content.trim() === m[1]) {
+      open = undefined; // closer valid — parsing-u normal rifillon
     }
+    // përndryshe: CONTENT brenda fence-s — kurrë nested opener
   }
+  if (open === undefined) return false;
   const tDepth = containerOf(lines[idx] ?? "").depth;
-  while (stack.length > 0 && tDepth < (stack[stack.length - 1] as { depth: number }).depth) stack.pop();
-  return stack.length > 0;
+  return tDepth >= open.depth; // target-i brenda kontejnerit të fence-s së hapur
 }
 
 /**

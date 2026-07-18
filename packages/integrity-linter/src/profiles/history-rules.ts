@@ -14,6 +14,7 @@
 
 import { mixedDepthTableRow, parseTableRow, tableContextAt, isSeparatorRow } from "../markdown-table.js";
 import { normalizeApostrophesForDetection, NOT_LETTER_AFTER, NOT_LETTER_BEFORE } from "../machine-token.js";
+import { containsLocalAbsolutePath } from "../path-policy.js";
 
 export interface RuleContext {
   line: string;
@@ -91,7 +92,7 @@ export function buildContentRules(): ContentRule[] {
   // §6B PARITY me guard-in: ÇDO vlerë non-space e caktuar (edhe 1 karakter,
   // edhe punctuation, edhe me thonjëza) — jo gjatësi minimale.
   const credAssign = new RegExp(frag("(?:^|[^A-Za-z])(?:", credWords, ")\\s*[:=]\\s*\\S+"), "i");
-  const absPaths = new RegExp([frag("/Us", "ers/"), frag("C:\\\\", "Us", "ers"), frag("/ho", "me/[a-z]")].join("|"));
+  // P-VI §4: klasifikuesi i centralizuar (rrënjët POSIX + ~/ + Windows + UNC)
   const idLabels = [
     frag("N", "UI", "\\w{0,2}"), frag("N", "IF"), frag("TV", "SH"), frag("V", "AT"),
     frag("Application", "[ _-]?ID"), frag("Fiscal", "\\w*", "[ _-]?(?:No|Nr|ID)"),
@@ -119,7 +120,7 @@ export function buildContentRules(): ContentRule[] {
     { ruleId: "HP-PRIVATE-KEY-BLOCK", category: "secrets", severity: "ERROR", test: (c) => beginKey.test(c.line) },
     { ruleId: "HP-TOKEN-CLASS", category: "secrets", severity: "WARNING", test: (c) => tokenClass.test(c.line) },
     { ruleId: "HP-CREDENTIAL-ASSIGN", category: "secrets", severity: "WARNING", test: (c) => credAssign.test(c.line) },
-    { ruleId: "HP-ABSOLUTE-LOCAL-PATH", category: "privacy", severity: "WARNING", test: (c) => absPaths.test(c.line) },
+    { ruleId: "HP-ABSOLUTE-LOCAL-PATH", category: "privacy", severity: "WARNING", test: (c) => containsLocalAbsolutePath(c.line) },
     { ruleId: "HP-REGULATED-ID-CLASS", category: "privacy", severity: "WARNING", test: (c) => /(^|\D)\d{12}(\D|$)/.test(c.line) },
     { ruleId: "HP-REGULATED-ID-CONTEXT", category: "privacy", severity: "WARNING", test: (c) => regulatedIdContext.test(c.line) },
     {

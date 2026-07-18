@@ -9,6 +9,9 @@ import { GitCliReader } from "../src/git-repository.js";
 import { runDocCore, evaluateChainPresence, negatedChainClaim, type DocCoreSurfaces } from "../src/profiles/doc-core.js";
 import { isHistoryLabeledRow, isHistoryPrefixLabeled } from "../src/authority-classes.js";
 import { runHistoryPriv } from "../src/profiles/history-priv.js";
+import { containsLocalAbsolutePath } from "../src/path-policy.js";
+import { tableContextAt } from "../src/markdown-table.js";
+import { toJsonReport, toTextReport } from "../src/reporter.js";
 
 const CURLY = String.fromCharCode(0x2019);   // ’
 const MODAP = String.fromCharCode(0x02bc);   // ʼ modifier apostrophe
@@ -147,5 +150,105 @@ describe("P-VI §2 — etiketa historike VETËM strukturore", () => {
       chainRequiredSurfaces: [],
     });
     expect(r.findings.filter((f) => f.ruleId === "HP-DRIFT-VERSION")).toHaveLength(1);
+  });
+});
+
+describe("P-VI \u00a73 \u2014 CommonMark fenced-block state machine", () => {
+  const TBL = [
+    "Domeni | Prova | Maturity | Treatment",
+    "--- | --- | --- | ---",
+    "x | prova | MODELED TESTED | LATER",
+  ];
+
+  it("FIXTURE BAZ\u00cb: opener 4-backtick + inner 3-backtick (CONTENT) + closer 4 \u2192 tabela pasuese skanohet", () => {
+    const s = ["````md", "```", "brenda fence", "````", ...TBL].join("\n");
+    const ctx = tableContextAt(s, 7);
+    expect(ctx?.headerArity).toBe(4);
+    expect(ctx?.columnIndex(/Treatment/i)).toBe(3);
+  });
+
+  it("ENGINE: tabela pas closer-it valid prodhon findings Treatment/Maturity ekzistuese", () => {
+    const repo = makeTempRepo();
+    repo.write("README.md", "base\n");
+    const base = repo.commitAll("base");
+    repo.write("docs/f.md", ["````md", "```", "````", ...TBL].join("\n") + "\n");
+    const head = repo.commitAll("fence + tabele");
+    const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined, { driftClasses: [], chainRequiredSurfaces: [] });
+    const ids = r.findings.map((f) => f.ruleId);
+    expect(ids).toContain("HP-TREATMENT-VOCAB");
+    expect(ids).toContain("HP-MIXED-MATURITY");
+  });
+
+  it("opener 4 / inner 3 / closer 5 \u2192 mbyllet; backtick opener + tilde inner = CONTENT; tilde opener/closer OK", () => {
+    const s1 = ["````", "```", "`````", ...TBL].join("\n");
+    expect(tableContextAt(s1, 6)?.headerArity).toBe(4);
+    const s2 = ["````", "~~~", "````", ...TBL].join("\n");
+    expect(tableContextAt(s2, 6)?.headerArity).toBe(4);
+    const s3 = ["~~~info", "```", "~~~", ...TBL].join("\n");
+    expect(tableContextAt(s3, 6)?.headerArity).toBe(4);
+  });
+
+  it("closer me info string NUK mbyll; fence e pambyllur p\u00ebrjashton deri n\u00eb fund", () => {
+    const withInfo = ["````", "```` jo-closer-me-info", ...TBL].join("\n");
+    expect(tableContextAt(withInfo, 5)).toBeUndefined();
+    const unclosed = ["````md", "```", ...TBL].join("\n");
+    expect(tableContextAt(unclosed, 5)).toBeUndefined();
+  });
+
+  it("fence n\u00eb blockquote + nested: inner 3 brenda 4 mbetet content edhe me depth", () => {
+    const s = ["> ````", "> ```", "> ````", "> " + TBL[0], "> " + TBL[1], "> " + TBL[2]].join("\n");
+    expect(tableContextAt(s, 6)?.headerArity).toBe(4);
+    const inside = ["> ````", "> ```", "> " + TBL[0], "> " + TBL[1], "> " + TBL[2]].join("\n");
+    expect(tableContextAt(inside, 5)).toBeUndefined();
+  });
+
+  it("tabela BRENDA fence = e padukshme (inverse)", () => {
+    const s = ["````", ...TBL, "````"].join("\n");
+    expect(tableContextAt(s, 4)).toBeUndefined();
+  });
+});
+
+describe("P-VI \u00a74 \u2014 absolute local path classifier + anti-FP", () => {
+  const R = (a: string, b: string) => a + b;
+  const roots = [
+    R("/Us", "ers/synthetic-user/x"), R("/ho", "me/user/x"), R("/ro", "ot/x"),
+    R("/tm", "p/scratch/f.txt"), R("/priv", "ate/tmp/f"), R("/va", "r/folders/zz/f"),
+    R("/op", "t/tool"), R("/et", "c/hosts"), R("/Volu", "mes/Disk/f"),
+    R("/Applica", "tions/App.app"), R("/Libr", "ary/Pref"), R("/usr/", "local/bin/x"),
+    R("/mn", "t/data"), R("/sr", "v/www"),
+  ];
+
+  it("t\u00eb gjitha rr\u00ebnj\u00ebt pozitive + ~/ + Windows + UNC \u2192 true (edhe n\u00eb code span/proz\u00eb)", () => {
+    for (const p of roots) expect(containsLocalAbsolutePath("shih " + p + " k\u00ebtu"), p).toBe(true);
+    expect(containsLocalAbsolutePath("cfg te ~/config/f.toml")).toBe(true);
+    expect(containsLocalAbsolutePath("C:\\Users\\x\\f.txt")).toBe(true);
+    expect(containsLocalAbsolutePath("D:/data/f.txt")).toBe(true);
+    expect(containsLocalAbsolutePath("\\\\server\\share\\f.txt")).toBe(true);
+    expect(containsLocalAbsolutePath("ekst " + R("\\\\?", "\\") + "C:\\x")).toBe(true);
+    expect(containsLocalAbsolutePath("n\u00eb code span: `" + R("/tm", "p/x.sh") + "`")).toBe(true);
+  });
+
+  it("ANTI-FP: URL, endpoints fiskale, path relative \u2192 false", () => {
+    expect(containsLocalAbsolutePath("shih https://example.com" + R("/Us", "ers/profil"))).toBe(false);
+    expect(containsLocalAbsolutePath("thirrja POST /ca/verify dhe /ca/signcsr")).toBe(false);
+    expect(containsLocalAbsolutePath("endpoint /pos/coupon dhe /citizen/receipts")).toBe(false);
+    expect(containsLocalAbsolutePath("file docs/canonical/x.md dhe packages/y.ts")).toBe(false);
+    expect(containsLocalAbsolutePath("raport 10:30/dita e madhe")).toBe(false);
+  });
+
+  it("ENGINE + PRIVACY: kandidati kurr\u00eb n\u00eb text/JSON output \u2014 vet\u00ebm locator", () => {
+    const repo = makeTempRepo();
+    repo.write("README.md", "base\n");
+    const base = repo.commitAll("base");
+    const marker = R("/priv", "ate/tmp/SECRETDIR-SYN/f.txt");
+    repo.write("docs/n.md", "log: " + marker + "\n");
+    const head = repo.commitAll("abs path mention");
+    const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined, { driftClasses: [], chainRequiredSurfaces: [] });
+    const hits = r.findings.filter((f) => f.ruleId === "HP-ABSOLUTE-LOCAL-PATH");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.locator).toBe("docs/n.md:1");
+    const result = { mode: "advisory" as const, evaluations: r.evaluations, findings: r.findings };
+    expect(toJsonReport(result)).not.toContain("SECRETDIR-SYN");
+    expect(toTextReport(result)).not.toContain("SECRETDIR-SYN");
   });
 });

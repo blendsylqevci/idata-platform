@@ -135,6 +135,50 @@ export function evaluatePath(path: string): PathVerdict {
   return "ALLOWED";
 }
 
+/**
+ * P-VI §4 — KLASIFIKUES I CENTRALIZUAR për përmendje path-esh ABSOLUTE LOKALE
+ * në content (rregulli HP-ABSOLUTE-LOCAL-PATH). Mbulon rrënjët POSIX/macOS/
+ * Linux, `~/`, drive-letters Windows (slash/backslash), UNC dhe extended
+ * `\\?\`. ANTI-FP: URL-të (`scheme://…`) NUK janë local path; endpoints si
+ * `/ca/verify`, `/pos/*`, `/citizen/*` NUK janë në rrënjët e mbuluara;
+ * path-et relative të tracked (`docs/…`) s'kanë prefiks absolut.
+ * Output-i i thirrësit mbetet vetëm rule-id + safe locator — kurrë raw path.
+ */
+const LOCAL_ABS_ROOTS: string[] = [
+  frag("/Us", "ers/"), frag("/ho", "me/"), frag("/ro", "ot/"),
+  frag("/tm", "p/"), frag("/priv", "ate/"), frag("/va", "r/"),
+  frag("/op", "t/"), frag("/et", "c/"), frag("/Volu", "mes/"),
+  frag("/Applica", "tions/"), frag("/Libr", "ary/"), frag("/usr/", "local/"),
+  frag("/mn", "t/"), frag("/sr", "v/"),
+];
+const TILDE_PATH_RE = /(?<![\p{L}\p{N}])~\//u;
+const WIN_DRIVE_RE = /(?<![\p{L}\p{N}])[A-Za-z]:[\\/]/u;
+const UNC_RE = /(?<=^|\s|[("'`])\\\\[\p{L}\p{N}._$-]+\\/u;
+
+function tokenAt(line: string, idx: number): string {
+  let s = idx;
+  while (s > 0 && !/\s/.test(line[s - 1] as string)) s -= 1;
+  return line.slice(s, idx);
+}
+
+export function containsLocalAbsolutePath(line: string): boolean {
+  for (const root of LOCAL_ABS_ROOTS) {
+    let from = 0;
+    for (;;) {
+      const idx = line.indexOf(root, from);
+      if (idx === -1) break;
+      // ANTI-FP: pjesë e një URL-je (token-i para përmban "scheme://")
+      if (!tokenAt(line, idx).includes("://")) return true;
+      from = idx + root.length;
+    }
+  }
+  if (TILDE_PATH_RE.test(line)) return true;
+  if (WIN_DRIVE_RE.test(line)) return true;
+  if (UNC_RE.test(line)) return true;
+  if (line.includes(frag("\\\\?", "\\"))) return true; // extended Windows syntax
+  return false;
+}
+
 /** Mode-t e vetme të lejuara për content access. */
 export const ALLOWED_FILE_MODES = new Set(["100644", "100755"]);
 
