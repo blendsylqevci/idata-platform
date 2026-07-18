@@ -119,6 +119,23 @@ provë privacy/compliance. **Semantika ligjore mbetet gjithmonë human review +
 Human Gate** — linter-i nuk jep opinion ligjor dhe nuk vendos semantikën e
 asnjë neni.
 
+**Kufij residualë të njohur (dokumentim i ndershëm, P-VI):**
+
+- Markdown-i mbulohet vetëm në kontratën që kërkon linter-i (tabela GFM me
+  container/fence semantics të CommonMark) — **JO parser i përgjithshëm
+  Markdown** (p.sh. setext headings, HTML blocks, reference links nuk
+  interpretohen).
+- Mohimi/etiketat trajtohen sintaksorisht (forma të deklaruara + kufij
+  Unicode) — jo kuptim semantik i fjalive; formulime krejt të reja mohimi
+  jashtë formave të mbuluara mund të kërkojnë zgjerim kontrate.
+- Konfuzablat e Unicode mbulohen nga një hartë e KURUAR (cirilike/greke të
+  zakonshme) — jo tabela e plotë UTS #39.
+- Klasifikuesi i path-eve absolute mbulon rrënjët e listuara + Windows/UNC —
+  jo çdo layout ekzotik OS-i.
+- `\b` i ASCII-t mbetet në pattern-e me skaje token-ësh VETËM-ASCII (Step B,
+  Tier 2, IMPLEMENTED, GOV-\d, pastaj, dhe) — auditi P-VI i klasifikoi të
+  sigurta; kufijtë Unicode-adjacent përdorin lookaround \p{L}\p{N}.
+
 ## Workflow
 
 `.github/workflows/governance-advisory.yml` — advisory, **JO-required**; `bash` +
