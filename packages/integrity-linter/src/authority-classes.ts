@@ -13,6 +13,7 @@
  */
 
 import { countMatches, detectionSkeleton } from "./machine-token.js";
+import { isTableRowCandidate, parseTableRow } from "./markdown-table.js";
 
 export type ConsumerRequirement = "REQUIRED_CURRENT" | "SCAN_IF_PRESENT";
 export type AuthorityKind = "version" | "count" | "status" | "set" | "phase";
@@ -315,11 +316,31 @@ export const ROLE_REQUIRED_SURFACES = [
 export const ROLE_OPTIONAL_SURFACES = [POC5README, ANALIZA];
 
 /** Etiketë historike ROW-SCOPED — vlen vetëm në rreshtin ku gjendet vlera. */
+/**
+ * P-VI §2 — etiketa historike VETËM STRUKTURORE, të centralizuara (asnjë
+ * regex kontradiktor nëpër module):
+ *  - PREFIX rreshti: `HISTORICAL:` / `SUPERSEDED:` / `HISTORIK:` / `Historia:`
+ *    (me dekorime markdown-i të lejuara para tyre);
+ *  - MARKER strukturor: `(HISTORICAL…)` / `(SUPERSEDED…)` ose `[HISTORICAL…]`
+ *    / `[SUPERSEDED…]` (kllapa MENJËHERË para fjalës UPPERCASE);
+ *  - QELIZË statusi tabele me vlerë EKZAKTE (parser-i GFM, jo substring).
+ * FJALËT E LIRA nuk përjashtojnë: "nuk është superseded", "nuk është ish",
+ * "versioni i atëhershëm", `ish`/`superseded` në prozë → JO historike.
+ * Etiketa vlen VETËM për rreshtin e vet — kurrë për fqinjët.
+ */
+export function isHistoryPrefixLabeled(line: string): boolean {
+  return /^\s*[*_>\-|\s]*(?:HISTORICAL|SUPERSEDED|HISTORIK[EU]?|Historia)\s*:/.test(line);
+}
+
+const HISTORY_MARKER_RE = /[([](?:HISTORICAL|SUPERSEDED)(?![\p{Ll}])/u;
+const HISTORY_CELL_RE = /^(?:HISTORICAL|SUPERSEDED|HISTORIK[EU]?)$/;
+
 export function isHistoryLabeledRow(line: string): boolean {
-  // P-V C3: etiketa duhet të jetë EKSPLICITE, strukturore dhe row-scoped:
-  // HISTORICAL/SUPERSEDED/HISTORIK (uppercase si etiketa), "Historia:",
-  // "superseded", "ish ", "i/e atëhershëm/e", "numërator historik".
-  // Mbiemri i thjeshtë "historike" NUK është etiketë; krahasimet e lira
-  // "… v1 vs 2 …" NUK fitojnë exemption (fshihnin drift aktiv — hequr).
-  return /(HISTORICAL|SUPERSEDED|Historia\b|\bHISTORIK(E|U)?\b|superseded|\bish\b|atëhersh|numërator(i)? historik)/.test(line);
+  if (isHistoryPrefixLabeled(line)) return true;
+  if (HISTORY_MARKER_RE.test(line)) return true;
+  if (isTableRowCandidate(line)) {
+    const cells = parseTableRow(line).cells;
+    if (cells.some((c) => HISTORY_CELL_RE.test(c.replace(/[`*]/g, "").trim()))) return true;
+  }
+  return false;
 }

@@ -12,9 +12,34 @@
  *    por NUK përputhet mbi tekstin raw (dallim = obfuscation kandidat).
  */
 
-/** Unicode format/invisible characters (Cf + kontrolle drejtimi/bashkimi). */
+/**
+ * Unicode format/invisible characters (Cf + kontrolle drejtimi/bashkimi) +
+ * U+2028/U+2029 (line/paragraph separator \u2014 P-VI \u00A71: brenda nj\u00EB rreshti jan\u00EB
+ * kandidat\u00EB obfuskimi p\u00EBr protected tokens; n\u00EB analiz\u00EBn e fjalive trajtohen
+ * si delimitues \u2014 kurr\u00EB silent bypass).
+ */
 export const FORMAT_CHAR_RE =
-  /[\u00AD\u034F\u061C\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF]/u;
+  /[\u00AD\u034F\u061C\u180E\u200B-\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF]/u;
+
+/**
+ * P-VI \u00A71 \u2014 KUFIJ TOKEN\u00CBSH UNICODE-AWARE t\u00EB centralizuar: `\b` i ASCII-t
+ * d\u00EBshton pran\u00EB shkronjave shqipe (\u00EB, \u00E7) dhe apostrofit \u2014 p\u00EBrdor lookaround
+ * me \p{L}/\p{N} + flag `u`. Fragmentet jan\u00EB STRING-je p\u00EBr t'u kompozuar n\u00EB
+ * RegExp me flag-un e duhur nga thirr\u00EBsi.
+ */
+export const NOT_LETTER_BEFORE = "(?<![\\p{L}\\p{N}])";
+export const NOT_LETTER_AFTER = "(?![\\p{L}\\p{N}])";
+
+/** Delimitues fjalie \u2014 p\u00EBrfshin U+2028/U+2029 (kontrat\u00EB e dokumentuar \u00A71). */
+export const SENTENCE_DELIM_RE = /[.!?;\u00B7\u2028\u2029]/;
+
+/**
+ * Normalizim apostrof\u00EBsh VET\u00CBM P\u00CBR DETECTION (\u2019 \u2018 \u02BC ` \u2192 ') \u2014 raw source-i
+ * nuk ndryshohet kurr\u00EB; gjat\u00EBsia e string-ut ruhet (z\u00EBvend\u00EBsim 1:1).
+ */
+export function normalizeApostrophesForDetection(text: string): string {
+  return text.replace(/[\u2018\u2019\u02BC\u0060]/g, "'");
+}
 
 /**
  * Hartë e KURUAR konfuzablesh (cirilike/greke → latine) — vetëm shkronja që

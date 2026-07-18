@@ -13,6 +13,7 @@
  */
 
 import { mixedDepthTableRow, parseTableRow, tableContextAt, isSeparatorRow } from "../markdown-table.js";
+import { normalizeApostrophesForDetection, NOT_LETTER_AFTER, NOT_LETTER_BEFORE } from "../machine-token.js";
 
 export interface RuleContext {
   line: string;
@@ -42,23 +43,32 @@ function frag(...parts: string[]): string {
  * primar mbetet). Pa NLP — numërim i thjeshtë mohuesish në sentence scope.
  */
 export function locallyNegated(line: string, matchIndex: number): boolean {
-  const win = line.slice(Math.max(0, matchIndex - 24), matchIndex);
-  if (!/(\bnuk\b|\bs'|\bmos\b|ndalohet|NUK)\s*\S*\s*$/i.test(win)) return false;
-  // F5: kufiri i fjalisë së claim-it
+  const nline = normalizeApostrophesForDetection(line);
+  const win = nline.slice(Math.max(0, matchIndex - 24), matchIndex);
+  const winRe = new RegExp(
+    "(?:" + NOT_LETTER_BEFORE + "(?:nuk|mos|ndalohet)" + NOT_LETTER_AFTER + "|" + NOT_LETTER_BEFORE + "s')" +
+    "\\s*\\S*\\s*$", "iu",
+  );
+  if (!winRe.test(win)) return false;
+  // F5: kufiri i fjalisë së claim-it (delimituesit përfshijnë U+2028/U+2029 — §1 P-VI)
   let start = 0;
-  for (const d of [".", ";", "!", "?", "·"]) {
-    const p = line.lastIndexOf(d, matchIndex);
+  for (const d of [".", ";", "!", "?", "\u00B7", "\u2028", "\u2029"]) {
+    const p = nline.lastIndexOf(d, matchIndex);
     if (p + 1 > start) start = p + 1;
   }
-  let end = line.length;
-  for (const d of [".", ";", "!", "?", "·"]) {
-    const p = line.indexOf(d, matchIndex);
+  let end = nline.length;
+  for (const d of [".", ";", "!", "?", "\u00B7", "\u2028", "\u2029"]) {
+    const p = nline.indexOf(d, matchIndex);
     if (p !== -1 && p < end) end = p;
   }
-  const sentence = line.slice(start, end);
-  const negators = sentence.match(/\bnuk\b|s'|\bmos\b|\bNUK\b|ndalohet/gi) ?? [];
+  const sentence = nline.slice(start, end);
+  const negRe = new RegExp(
+    "(?:" + NOT_LETTER_BEFORE + "(?:nuk|mos|ndalohet)" + NOT_LETTER_AFTER + "|" + NOT_LETTER_BEFORE + "s')", "giu",
+  );
+  const negators = sentence.match(negRe) ?? [];
   return negators.length === 1;
 }
+
 
 /** Tag-set-i i Treatment sipas canonical 07_PRODATA §1A (REQ/MD/OB/REF/NO). */
 export const TREATMENT_TOKENS = new Set(["REQ", "MD", "OB", "REF", "NO"]);

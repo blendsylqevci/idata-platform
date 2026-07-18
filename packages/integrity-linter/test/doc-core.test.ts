@@ -347,10 +347,15 @@ describe("P-IV \u00a77 \u2014 chain: negacion claim-scoped, historik segment-sco
     expect(e.violations).toEqual([]);
   });
 
-  it("segment historik JO-parenthetical blankohet vet\u00ebm ai; hallkat e tjera mbeten", () => {
-    const line = "Step B \u2192 Step C \u2192 independent review \u2192 HUMAN GATE \u2192 private PREFLIGHT ish faza \u2192 Tier 2";
-    const e = evaluateChainPresence(line + "\n");
-    expect(e.missing).toEqual(["preflight"]); // segmenti \u201cish\u201d hiqet, t\u00eb tjer\u00ebt aktiv\u00eb
+  it("segment historik me etikete STRUKTURORE blankohet vetem ai; fjala e lire 'ish' NUK blankon (P-VI \u00a72 supersedes fjalen e lire)", () => {
+    // Kontrata e vjeter blankonte segmentin per fjalen e lire 'ish' — hequr me
+    // P-VI \u00a72 (fjala e lire fshihte pretendime aktive). Strukturorja mbetet.
+    const structural = "Step B \u2192 Step C \u2192 independent review \u2192 HUMAN GATE \u2192 private PREFLIGHT SUPERSEDED \u2192 Tier 2";
+    const e = evaluateChainPresence(structural + "\n");
+    expect(e.missing).toEqual(["preflight"]); // segmenti me SUPERSEDED strukturor hiqet
+    const freeWord = "Step B \u2192 Step C \u2192 independent review \u2192 HUMAN GATE \u2192 private PREFLIGHT ish faza \u2192 Tier 2";
+    const e2 = evaluateChainPresence(freeWord + "\n");
+    expect(e2.missing).toEqual([]); // 'ish' i lire s'e ben segmentin historik
   });
 
   it("rresht i gjat\u00eb: Step B ~100 karaktere para markerit t\u00eb par\u00eb NUK pritet", () => {

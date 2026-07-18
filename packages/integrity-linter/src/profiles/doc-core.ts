@@ -17,13 +17,16 @@ import type { Finding, GitReader, ProfileEvaluation, PullRequestEvent } from "..
 import { ScanError } from "../types.js";
 import { profileStatus } from "../profile-registry.js";
 import {
-  AuthorityError, defaultAuthorityClasses, extractAuthorityValue, isHistoryLabeledRow,
+  AuthorityError, defaultAuthorityClasses, extractAuthorityValue, isHistoryLabeledRow, isHistoryPrefixLabeled,
   GATE, INDEX, LEDGER, PM, POC5README, ROADMAP, SSOT, TRACKER,
   ROLE_OPTIONAL_SURFACES, ROLE_REQUIRED_SURFACES,
   type AuthorityClass,
 } from "../authority-classes.js";
 import { isSeparatorRow, isTableRowCandidate, parseTableRow, tableContextAt } from "../markdown-table.js";
-import { hasObfuscatedMatch } from "../machine-token.js";
+import {
+  hasObfuscatedMatch, normalizeApostrophesForDetection,
+  NOT_LETTER_AFTER, NOT_LETTER_BEFORE, SENTENCE_DELIM_RE,
+} from "../machine-token.js";
 
 const P = "DOC-CORE" as const;
 
@@ -95,26 +98,33 @@ function firstIndex(paragraph: string, res: RegExp[]): number {
 
 const ALL_CHAIN_RES = CHAIN_TOKENS.flatMap((t) => t.res);
 
-/** Etiketë historike ROW-scoped: vetëm si prefiks rreshti (§7 P-IV). */
-const ROW_HISTORY_PREFIX = /^\s*[*_>\-\s]*(Historia\s*:|HISTORIK\w*\s*[:|·—–-]|ish-)/i;
-
 /**
- * §7 P-IV — mohim CLAIM-scoped i zinxhirit: "NUK është ky rendi: Step B → …"
- * s'është chain aktiv. Mohuesi duhet të lidhet me foljen/emrin e rendit në
- * fjalinë MENJËHERË para token-it të parë — "nuk ndryshon"/"mbetet i
- * pandryshuar" NUK e mohojnë zinxhirin (false-negative guard).
+ * §7 P-IV + P-VI §1 — mohim CLAIM-scoped i zinxhirit, UNICODE-AWARE:
+ * "NUK është ky rendi:", "s'është ky rendi:", "s’janë …", "ç'është ky rend",
+ * "jo ky rend", "mos e konsidero këtë rend" ≠ chain aktiv. `\b` i ASCII-t
+ * dështonte pranë apostrofit/ë-së — përdoren lookaround-e \p{L}\p{N} me flag
+ * `u` + normalizim apostrofësh VETËM për detection. "zinxhiri nuk ndryshon" /
+ * "rendi mbetet i pandryshuar" mbeten claim AKTIV (mohuesi duhet të NDJEKET
+ * nga folja/emri i rendit); mohimi në fjali tjetër nuk e mohon zinxhirin
+ * (delimituesit përfshijnë U+2028/U+2029 — kontratë §1).
  */
+const CHAIN_NEG_RE = new RegExp(
+  NOT_LETTER_BEFORE + "(?:(?:nuk|mos|jo|not)" + NOT_LETTER_AFTER + "|[sç]')" +
+  "[^\\n]{0,40}?" +
+  NOT_LETTER_BEFORE + "(?:është|janë|rend[\\p{L}]*|sekuenc[\\p{L}]*|zinxhir[\\p{L}]*|order|konsidero[\\p{L}]*)" + NOT_LETTER_AFTER,
+  "iu",
+);
 export function negatedChainClaim(line: string): boolean {
   const idx = firstIndex(line, ALL_CHAIN_RES);
   if (idx < 0) return false;
-  const prefix = line.slice(0, idx);
-  const tail = prefix.split(/[.!?;·]/).pop() ?? "";
-  return /\b(?:nuk|s'|jo|mos|not)\b[^\n]{0,40}?\b(?:është|janë|rend\w*|sekuenc\w*|zinxhir\w*|order)\b/i.test(tail);
+  const prefix = normalizeApostrophesForDetection(line.slice(0, idx));
+  const tail = prefix.split(SENTENCE_DELIM_RE).pop() ?? "";
+  return CHAIN_NEG_RE.test(tail);
 }
 
 /** §7 P-IV — blanko VETËM segmentet (midis →/pastaj) me etiketë historike. */
 function blankHistoricalSegments(line: string): string {
-  const label = /HISTORICAL|SUPERSEDED|\bHISTORIK\w*\b|\bsuperseded\b|\bish\b|atëhersh/;
+  const label = /HISTORICAL|SUPERSEDED|HISTORIK[EU]?\b/; // P-VI §2: vetëm strukturore — jo fjalë të lira
   const bounds: number[] = [0];
   for (const mk of line.matchAll(/→|\bpastaj\b/g)) {
     if (mk.index !== undefined) bounds.push(mk.index);
@@ -149,7 +159,7 @@ export function extractChainClaims(lines: string[]): string[] {
   };
   for (const rawLine of lines) {
     if (isTableRowCandidate(rawLine)) { flush(); continue; } // tabelat s'janë zinxhirë
-    if (ROW_HISTORY_PREFIX.test(rawLine)) { flush(); continue; } // historik ROW-scoped
+    if (isHistoryPrefixLabeled(rawLine)) { flush(); continue; } // historik ROW-scoped (P-VI: prefiks strukturor qendror)
     const line = blankHistoricalSegments(rawLine.replace(/\([^)]*\)/g, " "));
     if (negatedChainClaim(line)) { flush(); continue; } // i mohuar ≠ claim aktiv
     const isNumbered = /^\s*(?:\d+[a-z]?\.|[-*])\s/.test(line);
@@ -182,14 +192,19 @@ export function extractChainText(lines: string[]): string {
  * §7 P-IV — indeksi i parë JO-I-MOHUAR i një tokeni: "JO Tier 2 direkt" /
  * "nuk … Tier 2" NUK numërohet as si prani, as për rend.
  */
+const NEG_TOKEN_BEFORE_RE = new RegExp(
+  NOT_LETTER_BEFORE + "(?:JO|nuk|jo|mos|asnjë|s')" + "[^\\p{L}\\p{N}]{0,6}$", "iu",
+);
+
 function firstActiveIndex(text: string, res: RegExp[]): number {
   let best = -1;
   for (const re of res) {
     const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
     let m: RegExpExecArray | null;
     while ((m = g.exec(text)) !== null) {
-      const before = text.slice(Math.max(0, m.index - 12), m.index);
-      if (/(?:\bJO\b|\bnuk\b|\bjo\b|\bs'|\bmos\b|\basnjë\b)[^A-Za-zë]{0,6}$/i.test(before)) continue;
+      const before = normalizeApostrophesForDetection(text.slice(Math.max(0, m.index - 12), m.index));
+      // P-VI §1: kufij Unicode-aware — `\basnjë\b` i ASCII-t ishte i vdekur (ë)
+      if (NEG_TOKEN_BEFORE_RE.test(before)) continue;
       if (best === -1 || m.index < best) best = m.index;
       break; // i pari jo-i-mohuar për këtë variant
     }
