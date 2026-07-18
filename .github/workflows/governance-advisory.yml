@@ -8,6 +8,13 @@ name: governance-advisory
 
 on:
   pull_request: # kurrë pull_request_target (pa token write, pa secrets mbi kod të huaj)
+    # P-VI §5: `edited` — PR body mund të editohet pas check-ut; body-edit
+    # duhet të ri-skanojë (PR-body drift/scope vlerësohen kundrejt body-t LIVE).
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
 
 permissions:
   contents: read # token read-only (konsistent me hardening-un e Actions)
