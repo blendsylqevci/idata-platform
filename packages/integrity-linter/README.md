@@ -26,6 +26,14 @@ gjithë** consumers.
 **14 profilet e tjera = NOT_IMPLEMENTED** (kurrë PASS). `--mode required` refuzohet —
 `HG-LINTER-REQUIRED` i paaprovuar.
 
+**Hardening VIII (21.07.2026):** kontrolli i governance përdor vetëm Markdown-in
+aktiv: HTML comments/tags (me parser quote-aware), fenced ose indented code, link
+destinations dhe reference definitions nuk plotësojnë authority/chain; label-et e
+dukshme të linkeve dhe inline code mbeten burim semantik aktiv. Çdo chain-claim aktiv kontrollohet; një claim korrekt
+nuk fsheh një claim tjetër të gabuar. Etiketa historike inline është **per-match** në
+DOC-CORE, HISTORY-PRIV dhe PR body; vetëm prefiksi/qeliza `Status` ekzakte janë
+row-wide. Statusi mbetet `IMPLEMENTED_ADVISORY` për 2/16 profile — jo required-CI.
+
 ## Kufij të fortë
 
 - Vetëm **Git objects të tracked** (`show/diff-tree/rev-list/merge-base/cat-file/ls-tree`);
@@ -77,9 +85,12 @@ gjithë** consumers.
   real; duplicate profiles → `DUPLICATE_PROFILE` exit 2; sanitizer i paekuivok
   (backslash i pari — zero kolizione në corpus); event read loop me `bytesRead`
   → `EVENT_SHORT_READ` fail-closed.
-- **Policy para blob-it:** path/mode/scope zbatohet mbi TË GJITHA entries e commit-it
-  para çdo content access (call-order spy test). Path privat → `[REDACTED_PATH]`,
-  zero content/hash; delete-only cleanup lejohet; relocation privat→publik → REVIEW.
+- **Policy para blob-it:** path/mode/scope dhe metadata e TË GJITHË range-it
+  materializohen para çdo content access (call-order spy tests). Path privat →
+  `[REDACTED_PATH]`, zero content/hash; delete-only cleanup lejohet. Kopjimi ekzakt
+  privat→publik kapet në cilindo rend commit-esh; kur ka private-delete + public
+  add/modify por OID-i s'është identik, raportohet privacy REVIEW fail-safe pa lexuar
+  blob-in privat.
 - **Fail-closed (exit 2):** merge commit në range; mode ≠ 100644/100755; path me
   tab/newline/UTF-8 invalid/bidi/format chars/prefiks të dyshimtë; parser failure;
   authority missing/unreadable/ambiguous (validator i përbashkët, per-commit);
@@ -89,6 +100,10 @@ gjithë** consumers.
   e quajnë binar); surface e detyrueshme që mungon; shallow repo; event i
   malformuar/oversize/SHA invalid/range mismatch. Kode gabimi FIKSE — kurrë raw
   git message/argv/ref/path.
+- **Git/diff determinist (P-VIII):** pager/color/locale/pathspec imponohen nga
+  `GitReader`; unified-diff validohet me counters source+target. ANSI, strukturë e
+  papritur, hunk i munguar ose hunk i cunguar → `INCOMPLETE_SCAN` / exit 2; asnjë
+  content-changing A/M nuk certifikohet pa të paktën një hunk të validuar.
 - **Aktivizimi ONCE_PRESENT (P-IV §2):** klasa aktivizohet nga **PRANIA** e
   authority file — jo nga leximi i parë valid; pas aktivizimit bosh/zero-match/
   ambige/i hequr → exit 2; dështimi historik s'zhduket nga riparimi pasues.
@@ -101,7 +116,9 @@ gjithë** consumers.
   anchor i hequr/duplikuar ose authority e prishur → exit 2. Zgjerim te klasa të
   tjera ose heqje e ardhshme: VETËM me PR + review/Human Gate më vete.
 - **Relocation private→publike:** OID-t e blob-eve private të fshira ndiqen nëpër
-  GJITHË range-un — rikthimi në commit tjetër kapet (REVIEW me `[REDACTED_PATH]`).
+  GJITHË range-un — kopja publike kapet edhe pa private-delete ose kur vjen para
+  fshirjes; kur ekziston private source, çdo public content-change jo-identik merr
+  REVIEW fail-safe me `[REDACTED_PATH]`, edhe nëse source-i privat mbahet.
 - **Mohimi lokal PER-MATCH (P-IV §5):** çdo match gjykohet veçmas — mohimi i një
   claim-i s'e përjashton claim-in pasues në të njëjtin rresht; "jo" brenda fjale
   s'është operator mohimi.
@@ -135,6 +152,15 @@ statusi mbetet i KUFIZUAR në atë katalog: kontroll strukture/konsistence, JO
 provë privacy/compliance. **Semantika ligjore mbetet gjithmonë human review +
 Human Gate** — linter-i nuk jep opinion ligjor dhe nuk vendos semantikën e
 asnjë neni.
+
+**Boundary-t e shtuara në Hardening VIII:** parser-i i tabelave dallon odd/even
+backslash parity dhe mbyll code-span vetëm me delimiter me gjatësi ekzakte; role
+comments dhe role-labels brenda listës/blockquote/task-list me nesting arbitrar
+kontrollohen për privacy, por nuk bëhen governance aktiv. Path-et me
+`Default_Ignorable_Code_Point`, combining marks
+ose homoglyph që maskon një klasë private dështojnë fail-closed; i njëjti set hyn në skeleton-in
+e protected tokens. Të gjitha prefikset klasike të dokumentuara të provider-it dhe
+header-at `DSA`/`ENCRYPTED PRIVATE KEY` janë pjesë e katalogut HISTORY-PRIV.
 
 **Kufij residualë të njohur (advisory — P-VII, sjellja AKTUALE e dëshmuar me
 teste KNOWN_LIMITATION në `test/known-limitations.test.ts`):**
