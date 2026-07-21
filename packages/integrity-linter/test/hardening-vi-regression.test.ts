@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { makeTempRepo } from "./helpers.js";
 import { GitCliReader } from "../src/git-repository.js";
 import { runDocCore, evaluateChainPresence, negatedChainClaim, type DocCoreSurfaces } from "../src/profiles/doc-core.js";
-import { isHistoryLabeledRow, isHistoryPrefixLabeled } from "../src/authority-classes.js";
+import { isHistoryLabeledRow, isHistoryLabeledRowInDoc, isHistoryPrefixLabeled } from "../src/authority-classes.js";
 import { runHistoryPriv } from "../src/profiles/history-priv.js";
 import { containsLocalAbsolutePath } from "../src/path-policy.js";
 import { tableContextAt } from "../src/markdown-table.js";
@@ -92,8 +92,14 @@ describe("P-VI §2 — etiketa historike VETËM strukturore", () => {
     expect(isHistoryLabeledRow("HISTORIK: Ledger v1.4")).toBe(true);
     expect(isHistoryLabeledRow("**Historia:** v2.2 — ...")).toBe(true);
     expect(isHistoryLabeledRow("Ledger v1.4 (SUPERSEDED)")).toBe(true);
-    expect(isHistoryLabeledRow("Ledger v1.4 **[SUPERSEDED v2.25: REOPENED]**")).toBe(true);
-    expect(isHistoryLabeledRow("| L01 | Ledger v1.4 | SUPERSEDED | x |")).toBe(true);
+    // P-VII Fix C supersedes P-VI: vetem marker i MBYLLUR ekzakt — bracket-i me
+    // suffix "[SUPERSEDED v2.25: …]" NUK eshte me etikete (behet rresht aktiv).
+    expect(isHistoryLabeledRow("Ledger v1.4 **[SUPERSEDED v2.25: REOPENED]**")).toBe(false);
+    // P-VII: qeliza vleresohet VETEM doc-aware ne kolonen Status (shih testin InDoc)
+    expect(isHistoryLabeledRow("| L01 | Ledger v1.4 | SUPERSEDED | x |")).toBe(false);
+    const doc = ["| ID | Vlera | Status |", "|---|---|---|", "| L01 | Ledger v1.4 | SUPERSEDED |", "| L02 | SUPERSEDED fjale | AKTIV |"].join("\n");
+    expect(isHistoryLabeledRowInDoc(doc, 3)).toBe(true);  // qeliza ekzakte NE kolonen Status
+    expect(isHistoryLabeledRowInDoc(doc, 4)).toBe(false); // fjala ne kolone tjeter s'exempt-on
   });
 
   it("fjalët e lira NUK përjashtojnë: prose superseded/ish/atëhershëm, 'superseded wording'", () => {

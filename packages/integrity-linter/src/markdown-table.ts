@@ -28,7 +28,7 @@ export interface ParsedRow {
  * dhe përmbajtjen pa prefiksin e kontejnerit. NUK bëhet asnjë replace global —
  * prefiksi hiqet vetëm në kufirin e analizës strukturore, rresht-për-rresht.
  */
-export function containerOf(line: string): { depth: number; content: string } {
+export function containerOf(line: string): { depth: number; content: string; indent: number } {
   let i = 0;
   let depth = 0;
   let spaces = 0;
@@ -38,7 +38,9 @@ export function containerOf(line: string): { depth: number; content: string } {
     if (ch === ">") { depth += 1; i += 1; spaces = 0; if (line[i] === " ") i += 1; continue; }
     break;
   }
-  return { depth, content: line.slice(i) };
+  // indent = hapesirat e konsumuara PAS markerit te fundit (P-VII Fix E:
+  // fence-i lejon max 3 hapesira TOTALE indentimi brenda kontejnerit)
+  return { depth, content: line.slice(i), indent: spaces };
 }
 
 /** Ndarja e një rreshti tabele në qeliza logjike sipas GFM (container-aware). */
@@ -135,15 +137,22 @@ function inFencedBlockAt(lines: string[], idx: number): boolean {
   //  - pas closer-it valid parsing-u normal rifillon.
   let open: { depth: number; ch: string; len: number } | undefined;
   for (let i = 0; i < idx; i++) {
-    const { depth, content } = containerOf(lines[i] ?? "");
+    const { depth, content, indent } = containerOf(lines[i] ?? "");
     if (open !== undefined && depth < open.depth) open = undefined; // dalje kontejneri
-    const m = /^\s{0,3}(`{3,}|~{3,})/.exec(content);
-    if (!m || m[1] === undefined) continue;
-    const ch = m[1][0] as string;
-    const len = m[1].length;
+    const m = /^( *)(`{3,}|~{3,})/.exec(content);
+    if (!m || m[1] === undefined || m[2] === undefined) continue;
+    // P-VII Fix E (CommonMark): fence lejon MAX 3 hapesira indentim total —
+    // 4+ hapesira = indented code block, JO fence.
+    if (indent + m[1].length > 3) continue;
+    const ch = m[2][0] as string;
+    const len = m[2].length;
     if (open === undefined) {
-      open = { depth, ch, len }; // opener (me ose pa info string)
-    } else if (depth === open.depth && ch === open.ch && len >= open.len && content.trim() === m[1]) {
+      // P-VII Fix E (CommonMark): info-string i backtick-fence-it NUK lejon
+      // backtick — nje run i tille eshte tekst/inline, jo opener.
+      const info = content.slice(m[1].length + len);
+      if (ch === "`" && info.includes("`")) continue;
+      open = { depth, ch, len }; // opener (me info string te lejuar)
+    } else if (depth === open.depth && ch === open.ch && len >= open.len && content.trim() === m[2]) {
       open = undefined; // closer valid — parsing-u normal rifillon
     }
     // përndryshe: CONTENT brenda fence-s — kurrë nested opener

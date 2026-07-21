@@ -8,6 +8,9 @@ import { makeTempRepo } from "./helpers.js";
 import { GitCliReader } from "../src/git-repository.js";
 import { evaluateChainPresence, negatedChainClaim } from "../src/profiles/doc-core.js";
 import { runHistoryPriv } from "../src/profiles/history-priv.js";
+import { isHistoryLabeledRow, isHistoryLabeledRowInDoc } from "../src/authority-classes.js";
+import { containsLocalAbsolutePath } from "../src/path-policy.js";
+import { tableContextAt } from "../src/markdown-table.js";
 
 const FULL = "Step B → Step C → independent review → HUMAN GATE → private PREFLIGHT → Tier 2";
 const WRONG = "Step C → Step B → independent review → HUMAN GATE → private PREFLIGHT → Tier 2";
@@ -98,3 +101,93 @@ describe("P-VII Fix F — chain-tokens UNICODE-aware ('Step Bë' ≠ token)", ()
     expect(e.missing).toEqual(["tier-2"]);
   });
 });
+
+describe("P-VII Fix C — etiketa historike EKZAKTE (marker i mbyllur / prefix / qelize-status)", () => {
+  it("5 rastet e prishura → JO historike (drift/aktiv kapet)", () => {
+    expect(isHistoryLabeledRow("Ledger v1.4 (SUPERSEDED wording pa mbyllje")).toBe(false);
+    expect(isHistoryLabeledRow("Ledger v1.4 (HISTORICALIZED)")).toBe(false);
+    expect(isHistoryLabeledRow("proza thote SUPERSEDED diku")).toBe(false);
+    const doc = ["| ID | Koment | Status |", "|---|---|---|", "| L01 | SUPERSEDED permendet | AKTIV |"].join("\n");
+    expect(isHistoryLabeledRowInDoc(doc, 3)).toBe(false); // fjala ne qelize JO-status
+    const noStatusCol = ["| ID | Vlera |", "|---|---|", "| L01 | SUPERSEDED |"].join("\n");
+    expect(isHistoryLabeledRowInDoc(noStatusCol, 3)).toBe(false); // pa kolone statusi
+  });
+
+  it("3 sintaksat legjitime → exempt (prefix, marker i mbyllur, qelize-status)", () => {
+    expect(isHistoryLabeledRow("SUPERSEDED: Ledger v1.4")).toBe(true);
+    expect(isHistoryLabeledRow("Ledger v1.4 (HISTORICAL)")).toBe(true);
+    const doc = ["| ID | Vlera | Statusi |", "|---|---|---|", "| L01 | Ledger v1.4 | HISTORICAL |"].join("\n");
+    expect(isHistoryLabeledRowInDoc(doc, 3)).toBe(true);
+  });
+
+  it("'Step B (HISTORICAL) → Step C …': blankohet VETEM Step B — zinxhiri vleresohet me step-b missing", () => {
+    const line = "Step B (HISTORICAL) → Step C → independent review → HUMAN GATE → private PREFLIGHT → Tier 2";
+    const e = evaluateChainPresence(line + "\n");
+    expect(e.noActiveChain).toBe(false);
+    expect(e.missing).toEqual(["step-b"]);
+  });
+})
+
+describe("P-VII Fix D — path classifier: kufi absolut + skema + UNC/file/vscode + case", () => {
+  const R = (a: string, b: string) => a + b;
+
+  it("FALSE-POSITIVE te mbyllura: word/tmp relative; C:/ brenda https URL", () => {
+    expect(containsLocalAbsolutePath("word" + R("/tm", "p/relative"))).toBe(false);
+    expect(containsLocalAbsolutePath("shih https://example.com/C:/temp/file")).toBe(false);
+    expect(containsLocalAbsolutePath("docs" + R("/tm", "p/x"))).toBe(false);
+  });
+
+  it("MISS te mbyllura: UNC (edhe ne pikesim), file:///, vscode://file, /users case", () => {
+    expect(containsLocalAbsolutePath("shih \\\\srv1\\share\\file.txt")).toBe(true);
+    expect(containsLocalAbsolutePath("(\\\\srv1\\share\\f)")).toBe(true);
+    expect(containsLocalAbsolutePath("hape file://" + R("/tm", "p/a"))).toBe(true);
+    expect(containsLocalAbsolutePath("vscode://file" + R("/Us", "ers/synthetic-user/x"))).toBe(true);
+    expect(containsLocalAbsolutePath("log te " + R("/us", "ers/synthetic-user/f"))).toBe(true); // lowercase
+    expect(containsLocalAbsolutePath(R("/Volu", "mes/Disk/f"))).toBe(true); // ne fillim te rreshtit
+  });
+
+  it("URL-only → zero; URL + path i DYTE lokal ne te njejtin rresht → path-i kapet", () => {
+    expect(containsLocalAbsolutePath("shih https://example.com/faqja dhe README")).toBe(false);
+    expect(containsLocalAbsolutePath("https://example.com/x dhe lokal " + R("/tm", "p/f.log"))).toBe(true);
+  });
+
+  it("inverse: endpoints fiskale dhe path relative → zero", () => {
+    expect(containsLocalAbsolutePath("POST /ca/verify pastaj /ca/signcsr")).toBe(false);
+    expect(containsLocalAbsolutePath("endpoint /pos/coupon dhe /citizen/receipts")).toBe(false);
+    expect(containsLocalAbsolutePath("packages/integrity-linter/src/cli.ts")).toBe(false);
+  });
+})
+
+describe("P-VII Fix E — CommonMark fence: indentim 0–3 + info-string pa backtick", () => {
+  const TBL = ["Domeni | Prova | Maturity | Treatment", "--- | --- | --- | ---", "x |  | MODELED TESTED | LATER"];
+
+  it("fence me 4–6 hapesira NUK eshte fence — tabela pas saj skanohet", () => {
+    for (const ind of ["    ", "     ", "      "]) {
+      const st = [ind + "```", ...TBL].join("\n");
+      expect(tableContextAt(st, 3)?.headerArity, JSON.stringify(ind)).toBe(4);
+    }
+  });
+
+  it("backtick ne info-string te backtick-fence → JO fence valid; tilde-fence me backtick ne info → fence", () => {
+    const notFence = ["``` info`me`backtick", ...TBL].join("\n");
+    expect(tableContextAt(notFence, 3)?.headerArity).toBe(4); // s'u hap fence — tabela e dukshme
+    const tilde = ["~~~ info`me`backtick", ...TBL, "~~~"].join("\n");
+    expect(tableContextAt(tilde, 3)).toBeUndefined(); // tilde e lejon — tabela brenda fence
+  });
+
+  it("inverse: fence legjitim 0–3 hapesira hapet/mbyllet normalisht; tabela brenda fence real e fshehur", () => {
+    const legit = ["   ```md", ...TBL, "   ```", ...TBL].join("\n");
+    expect(tableContextAt(legit, 3)).toBeUndefined();      // brenda
+    expect(tableContextAt(legit, 7)?.headerArity).toBe(4); // pas closer-it
+  });
+
+  it("ENGINE: tabela pas fence-it 4-hapesirash prodhon findings Treatment/Maturity", () => {
+    const { repo, base } = repoWithBase();
+    repo.write("docs/f.md", ["    ```", ...TBL].join("\n") + "\n");
+    const head = repo.commitAll("indented pseudo-fence");
+    const r = runHistoryPriv(new GitCliReader(repo.dir), base, head, undefined, { driftClasses: [], chainRequiredSurfaces: [] });
+    const ids = r.findings.map((f) => f.ruleId);
+    expect(ids).toContain("HP-TREATMENT-VOCAB");
+    expect(ids).toContain("HP-MIXED-MATURITY");
+  });
+})

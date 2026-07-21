@@ -150,10 +150,15 @@ const LOCAL_ABS_ROOTS: string[] = [
   frag("/op", "t/"), frag("/et", "c/"), frag("/Volu", "mes/"),
   frag("/Applica", "tions/"), frag("/Libr", "ary/"), frag("/usr/", "local/"),
   frag("/mn", "t/"), frag("/sr", "v/"),
-];
+].map((r) => r.toLowerCase());
+
+// P-VII Fix D: rrenja POSIX = segment ABSOLUT — karakteri para '/' nuk duhet
+// te jete pjese path-i/tokeni ("word/tmp" → relativ, JO local-absolute).
+const PATHISH_BEFORE_RE = /[\p{L}\p{N}\/.\-_~\\]/u;
 const TILDE_PATH_RE = /(?<![\p{L}\p{N}])~\//u;
 const WIN_DRIVE_RE = /(?<![\p{L}\p{N}])[A-Za-z]:[\\/]/u;
-const UNC_RE = /(?<=^|\s|[("'`])\\\\[\p{L}\p{N}._$-]+\\/u;
+const UNC_RE = /(?<![\p{L}\p{N}\\/])\\\\[\p{L}\p{N}._$-]+\\/u;
+const SCHEME_RE = /^([a-z][a-z0-9+.\-]*):\/\//i;
 
 function tokenAt(line: string, idx: number): string {
   let s = idx;
@@ -161,19 +166,42 @@ function tokenAt(line: string, idx: number): string {
   return line.slice(s, idx);
 }
 
+/**
+ * P-VII Fix D — vendimi per nje kandidat brenda nje tokeni:
+ *  - skema file:// dhe vscode://… = path LOKAL → FIRE;
+ *  - skema te tjera (http/https/…) = URL → ky kandidat anashkalohet
+ *    (por kandidate te tjere ne te njejtin rresht vleresohen me vete);
+ *  - pa skeme → kandidat i vlefshem (me kufi absolut kur kerkohet).
+ */
+function candidateFires(line: string, idx: number, requireAbsBoundary: boolean): boolean {
+  const tok = tokenAt(line, idx);
+  const scheme = SCHEME_RE.exec(tok);
+  if (scheme !== null) {
+    const sc = (scheme[1] as string).toLowerCase();
+    return sc === "file" || sc.startsWith("vscode");
+  }
+  if (requireAbsBoundary && idx > 0 && PATHISH_BEFORE_RE.test(line[idx - 1] as string)) return false;
+  return true;
+}
+
 export function containsLocalAbsolutePath(line: string): boolean {
+  const lower = line.toLowerCase(); // /Users dhe /users — case-insensitive
   for (const root of LOCAL_ABS_ROOTS) {
     let from = 0;
     for (;;) {
-      const idx = line.indexOf(root, from);
+      const idx = lower.indexOf(root, from);
       if (idx === -1) break;
-      // ANTI-FP: pjesë e një URL-je (token-i para përmban "scheme://")
-      if (!tokenAt(line, idx).includes("://")) return true;
       from = idx + root.length;
+      if (candidateFires(line, idx, true)) return true;
     }
   }
-  if (TILDE_PATH_RE.test(line)) return true;
-  if (WIN_DRIVE_RE.test(line)) return true;
+  for (const re of [TILDE_PATH_RE, WIN_DRIVE_RE]) {
+    const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+    let m: RegExpExecArray | null;
+    while ((m = g.exec(line)) !== null) {
+      if (candidateFires(line, m.index, false)) return true;
+    }
+  }
   if (UNC_RE.test(line)) return true;
   if (line.includes(frag("\\\\?", "\\"))) return true; // extended Windows syntax
   return false;

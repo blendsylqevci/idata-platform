@@ -21,7 +21,7 @@ import { ALLOWED_FILE_MODES, NULL_MODE, evaluatePath } from "../path-policy.js";
 import { buildContentRules, type RuleContext } from "./history-rules.js";
 import {
   AuthorityError, DEFAULT_CHAIN_REQUIRED, defaultAuthorityClasses, extractAuthorityValue,
-  isHistoryLabeledRow, type AuthorityClass,
+  isHistoryLabeledRowInDoc, type AuthorityClass,
 } from "../authority-classes.js";
 import { chainOrderViolations, evaluateChainPresence, extractChainClaims } from "./doc-core.js";
 import { hasObfuscatedMatch } from "../machine-token.js";
@@ -126,7 +126,7 @@ function evaluateClassOnSnapshot(
           continue;
         }
         const seen = norm(cm[1]);
-        const labeled = isHistoryLabeledRow(line);
+        const labeled = isHistoryLabeledRowInDoc(text, i + 1); // P-VII: doc-aware (qeliza vetem ne kolonen Status)
         if (seen === current) {
           if (!labeled) currentSeenActive = true; // historical row s'plotëson REQUIRED aktiv
         } else if (!labeled) {

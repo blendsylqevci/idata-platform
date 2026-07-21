@@ -13,7 +13,7 @@
  */
 
 import { countMatches, detectionSkeleton } from "./machine-token.js";
-import { isTableRowCandidate, parseTableRow } from "./markdown-table.js";
+import { isTableRowCandidate, parseTableRow, tableContextAt } from "./markdown-table.js";
 
 export type ConsumerRequirement = "REQUIRED_CURRENT" | "SCAN_IF_PRESENT";
 export type AuthorityKind = "version" | "count" | "status" | "set" | "phase";
@@ -329,18 +329,37 @@ export const ROLE_OPTIONAL_SURFACES = [POC5README, ANALIZA];
  * Etiketa vlen VETËM për rreshtin e vet — kurrë për fqinjët.
  */
 export function isHistoryPrefixLabeled(line: string): boolean {
-  return /^\s*[*_>\-|\s]*(?:HISTORICAL|SUPERSEDED|HISTORIK[EU]?|Historia)\s*:/.test(line);
+  return /^\s*[*_>\-|\s]*(?:HISTORICAL|SUPERSEDED|HISTORIK|Historia)\s*:/.test(line);
 }
 
-const HISTORY_MARKER_RE = /[([](?:HISTORICAL|SUPERSEDED)(?![\p{Ll}])/u;
-const HISTORY_CELL_RE = /^(?:HISTORICAL|SUPERSEDED|HISTORIK[EU]?)$/;
+/**
+ * P-VII Fix C — marker inline i MBYLLUR saktë, pa suffix: VETËM "(HISTORICAL)"
+ * ose "(SUPERSEDED)" ekzakt. "(HISTORICALIZED)", "(SUPERSEDED wording",
+ * "[SUPERSEDED v2.25 …]" dhe fjala e lirë në prozë NUK exempt-ojnë.
+ */
+const HISTORY_MARKER_RE = /\((?:HISTORICAL|SUPERSEDED)\)/;
+const HISTORY_CELL_RE = /^(?:HISTORICAL|SUPERSEDED)$/;
+const STATUS_HEADER_RE = /^(?:Status|Statusi|Gjendja|State)$/i;
 
+/** Klasifikimi VETËM-rresht: prefix me dy-pika OSE marker i mbyllur ekzakt. */
 export function isHistoryLabeledRow(line: string): boolean {
-  if (isHistoryPrefixLabeled(line)) return true;
-  if (HISTORY_MARKER_RE.test(line)) return true;
-  if (isTableRowCandidate(line)) {
-    const cells = parseTableRow(line).cells;
-    if (cells.some((c) => HISTORY_CELL_RE.test(c.replace(/[`*]/g, "").trim()))) return true;
-  }
-  return false;
+  return isHistoryPrefixLabeled(line) || HISTORY_MARKER_RE.test(line);
+}
+
+/**
+ * P-VII Fix C — klasifikimi DOC-aware: si më lart, PLUS vlerë qelize statusi
+ * ekzakt "HISTORICAL"/"SUPERSEDED" VETËM në tabelë reale GFM te KOLONA e
+ * statusit (parser + indeks kolone) — kurrë substring rreshti, kurrë qelizë
+ * tjetër.
+ */
+export function isHistoryLabeledRowInDoc(docText: string, lineNo: number): boolean {
+  const line = docText.split("\n")[lineNo - 1] ?? "";
+  if (isHistoryLabeledRow(line)) return true;
+  if (!isTableRowCandidate(line)) return false;
+  const tctx = tableContextAt(docText, lineNo);
+  if (tctx === undefined) return false;
+  const col = tctx.columnIndex(STATUS_HEADER_RE);
+  if (col === undefined) return false;
+  const cell = parseTableRow(line).cells[col]?.replace(/[`*]/g, "").trim() ?? "";
+  return HISTORY_CELL_RE.test(cell);
 }

@@ -350,7 +350,7 @@ describe("P-IV \u00a77 \u2014 chain: negacion claim-scoped, historik segment-sco
   it("segment historik me etikete STRUKTURORE blankohet vetem ai; fjala e lire 'ish' NUK blankon (P-VI \u00a72 supersedes fjalen e lire)", () => {
     // Kontrata e vjeter blankonte segmentin per fjalen e lire 'ish' — hequr me
     // P-VI \u00a72 (fjala e lire fshihte pretendime aktive). Strukturorja mbetet.
-    const structural = "Step B \u2192 Step C \u2192 independent review \u2192 HUMAN GATE \u2192 private PREFLIGHT SUPERSEDED \u2192 Tier 2";
+    const structural = "Step B \u2192 Step C \u2192 independent review \u2192 HUMAN GATE \u2192 private PREFLIGHT (SUPERSEDED) \u2192 Tier 2"; // P-VII: marker i MBYLLUR
     const e = evaluateChainPresence(structural + "\n");
     expect(e.missing).toEqual(["preflight"]); // segmenti me SUPERSEDED strukturor hiqet
     const freeWord = "Step B \u2192 Step C \u2192 independent review \u2192 HUMAN GATE \u2192 private PREFLIGHT ish faza \u2192 Tier 2";

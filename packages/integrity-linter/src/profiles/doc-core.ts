@@ -17,7 +17,7 @@ import type { Finding, GitReader, ProfileEvaluation, PullRequestEvent } from "..
 import { ScanError } from "../types.js";
 import { profileStatus } from "../profile-registry.js";
 import {
-  AuthorityError, defaultAuthorityClasses, extractAuthorityValue, isHistoryLabeledRow, isHistoryPrefixLabeled,
+  AuthorityError, defaultAuthorityClasses, extractAuthorityValue, isHistoryLabeledRow, isHistoryLabeledRowInDoc, isHistoryPrefixLabeled,
   GATE, INDEX, LEDGER, PM, POC5README, ROADMAP, SSOT, TRACKER,
   ROLE_OPTIONAL_SURFACES, ROLE_REQUIRED_SURFACES,
   type AuthorityClass,
@@ -151,7 +151,9 @@ export function negatedChainClaim(line: string): boolean {
 
 /** §7 P-IV — blanko VETËM segmentet (midis →/pastaj) me etiketë historike. */
 function blankHistoricalSegments(line: string): string {
-  const label = /HISTORICAL|SUPERSEDED|HISTORIK[EU]?\b/; // P-VI §2: vetëm strukturore — jo fjalë të lira
+  // P-VII Fix C: VETËM marker i mbyllur ekzakt ose prefiks me dy-pika brenda
+  // segmentit — fjala e lirë UPPERCASE nuk blankon më.
+  const label = /\((?:HISTORICAL|SUPERSEDED)\)|(?:HISTORICAL|SUPERSEDED|HISTORIK|Historia)\s*:/;
   const bounds: number[] = [0];
   for (const mk of line.matchAll(/→|\bpastaj\b/g)) {
     if (mk.index !== undefined) bounds.push(mk.index);
@@ -187,7 +189,9 @@ export function extractChainClaims(lines: string[]): string[] {
   for (const rawLine of lines) {
     if (isTableRowCandidate(rawLine)) { flush(); continue; } // tabelat s'janë zinxhirë
     if (isHistoryPrefixLabeled(rawLine)) { flush(); continue; } // historik ROW-scoped (P-VI: prefiks strukturor qendror)
-    const line = blankHistoricalSegments(rawLine.replace(/\([^)]*\)/g, " "));
+    // P-VII: blanko segmentet historike PARA heqjes së parentezave — ndryshe
+    // "(HISTORICAL)" zhduket dhe "Step B (HISTORICAL)" mbetet gabimisht aktiv.
+    const line = blankHistoricalSegments(rawLine).replace(/\([^)]*\)/g, " ");
     if (negatedChainClaim(line)) { flush(); continue; } // i mohuar ≠ claim aktiv
     const isNumbered = /^\s*(?:\d+[a-z]?\.|[-*])\s/.test(line);
     const markers: number[] = [];
@@ -460,7 +464,7 @@ export function runDocCore(
           }
           anyMatch = true;
           const seen = norm(cm[1]);
-          const labeled = isHistoryLabeledRow(line);
+          const labeled = isHistoryLabeledRowInDoc(text, i + 1); // P-VII doc-aware
           if (seen === current) {
             if (!labeled) currentSeenActive = true; // vetëm current AKTIV plotëson kërkesën
           } else if (!labeled) {
@@ -647,7 +651,7 @@ export function runDocCore(
         seenPatterns.add(pkey);
         for (let i = 0; i < bodyLines.length; i++) {
           const line = bodyLines[i] ?? "";
-          if (isHistoryLabeledRow(line)) continue;
+          if (isHistoryLabeledRowInDoc(event.body, i + 1)) continue; // P-VII doc-aware
           if (hasObfuscatedMatch(line, consumer.pattern)) {
             findings.push({
               profile: P, profileStatus: status, severity: "WARNING",

@@ -124,8 +124,8 @@ describe("F3 — tabela GFM brenda blockquote", () => {
   ].join("\n") + "\n";
 
   it("containerOf/parseTableRow: prefikset e quote hiqen; '>' brenda qelize ruhet", () => {
-    expect(containerOf("> | a | b |")).toEqual({ depth: 1, content: "| a | b |" });
-    expect(containerOf(">> x")).toEqual({ depth: 2, content: "x" });
+    expect(containerOf("> | a | b |")).toEqual({ depth: 1, content: "| a | b |", indent: 0 });
+    expect(containerOf(">> x")).toEqual({ depth: 2, content: "x", indent: 0 });
     expect(parseTableRow("> | a | b |").cells).toEqual(["a", "b"]);
     expect(parseTableRow("| a > b | c |").cells).toEqual(["a > b", "c"]);
   });
