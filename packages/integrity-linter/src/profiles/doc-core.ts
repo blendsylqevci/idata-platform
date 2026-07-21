@@ -191,7 +191,11 @@ export function extractChainClaims(lines: string[]): string[] {
     if (isHistoryPrefixLabeled(rawLine)) { flush(); continue; } // historik ROW-scoped (P-VI: prefiks strukturor qendror)
     // P-VII: blanko segmentet historike PARA heqjes së parentezave — ndryshe
     // "(HISTORICAL)" zhduket dhe "Step B (HISTORICAL)" mbetet gabimisht aktiv.
-    const line = blankHistoricalSegments(rawLine).replace(/\([^)]*\)/g, " ");
+    // P-VII Fix H: aside-t inline `(...)` DHE `[...]` (p.sh. status i ngulitur
+    // `[SUPERSEDED v2.25: … Tier 2 NOT IMPLEMENTED/NO-GO]`) NUK janë tokenë të
+    // zinxhirit të renditur — hiqen njësoj, që të mos krijojnë shkelje rendi
+    // false nga një token që s'i përket sekuencës me shigjeta.
+    const line = blankHistoricalSegments(rawLine).replace(/\([^)]*\)|\[[^\]]*\]/g, " ");
     if (negatedChainClaim(line)) { flush(); continue; } // i mohuar ≠ claim aktiv
     const isNumbered = /^\s*(?:\d+[a-z]?\.|[-*])\s/.test(line);
     const markers: number[] = [];

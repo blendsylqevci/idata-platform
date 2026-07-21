@@ -128,6 +128,27 @@ describe("P-VII Fix C — etiketa historike EKZAKTE (marker i mbyllur / prefix /
   });
 })
 
+describe("P-VII Fix H — aside-t inline `[...]` s'jane tokene te zinxhirit te renditur", () => {
+  it("status i ngulitur `[SUPERSEDED … Tier 2 …]` PARA zinxhirit korrekt → ZERO shkelje rendi (false-positive i mbyllur)", () => {
+    const line = "ATK-002 **[SUPERSEDED v2.25: REOPENED — Tier 2 NOT IMPLEMENTED/NO-GO]**. Rendi aktual: " +
+      "PR #18 merge → ATK closure → private PREFLIGHT → Tier 2";
+    const e = evaluateChainPresence(line + "\n");
+    expect(e.violations).toEqual([]); // "Tier 2" i bracket-it nuk numerohet ne rend
+  });
+
+  it("inverse: bracket-strip NUK fsheh nje shkelje REALE ne vete sekuencen me shigjeta", () => {
+    const wrong = "shenim [aside] " + WRONG; // Step C → Step B ne zinxhirin real
+    const e = evaluateChainPresence(wrong + "\n");
+    expect(e.violations.length).toBeGreaterThan(0);
+  });
+
+  it("boundary: bracket i pambyllur nuk konsumon tere rreshtin (ende evaluon zinxhirin)", () => {
+    const line = "[shenim pa mbyllje Tier 2 status → " + FULL;
+    const e = evaluateChainPresence(line + "\n");
+    expect(e.noActiveChain).toBe(false);
+  });
+})
+
 describe("P-VII Fix D — path classifier: kufi absolut + skema + UNC/file/vscode + case", () => {
   const R = (a: string, b: string) => a + b;
 
