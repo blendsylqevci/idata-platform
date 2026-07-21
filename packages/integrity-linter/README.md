@@ -51,11 +51,28 @@ gjithë** consumers.
   separator vetëm në role-bearing values; markup i papritur → `DC-ROLE-MARKUP`
   REVIEW; kandidati i identitetit njihet në çdo casing. Ambiguiteti → REVIEW,
   kurrë auto-approval; zero matched content në output.
-- **Etiketa historike (P-V C3):** vetëm etiketa strukturore row-scoped
-  eksplicite (HISTORICAL/SUPERSEDED/HISTORIK/Historia:); krahasimet e lira
-  `vs <n>` NUK fitojnë exemption. **Mohimi (P-V F5):** vetëm një mohim i vetëm
-  i lidhur direkt me claim-in (ose forma eksplicite `JO-...`) suppress-on;
-  mohim i dyfishtë/ambig → finding-u primar mbetet.
+- **Etiketa historike (P-V C3 → P-VII Fix C, EKZAKTE):** prefiks me dy-pika
+  (`HISTORICAL:`/`SUPERSEDED:`/`HISTORIK:`/`Historia:`), marker inline VETËM
+  i MBYLLUR `(HISTORICAL)`/`(SUPERSEDED)`, ose qelizë statusi EKZAKTE VETËM
+  në KOLONËN Status të një tabele reale GFM (parser + indeks kolone). Fjala
+  e lirë në prozë/qelizë tjetër NUK exempt-on; `Step B (HISTORICAL)` blankon
+  vetëm segmentin e vet. **Mohimi (P-V F5 → P-VII Fix B):** vetëm një mohim
+  i vetëm i lidhur direkt (ose `JO-...` eksplicit) suppress-on; counter-i i
+  ambiguitetit numëron edhe `jo`; mohim i dyfishtë → finding-u primar mbetet.
+- **Mohimi i zinxhirit (P-VII Fix A, CLAIM-scoped):** vetëm gramatika e
+  ngushtë e claim-mohimit (kopulë + emër rendi; "mos e konsidero ... rend";
+  "jo <dëftor> <emër>") e shuan zinxhirin — "Nuk ndryshon rendi:", "Nuk ka
+  PII, rendi aktual:" vlerësohen NORMALISHT; analizohet fjalia e TËRË e
+  claim-it; `ç'është ...` është pyetje, jo mohim. **Chain-tokens (P-VII Fix
+  F):** kufij Unicode-aware në të dyja anët — "Step Bë"/"Tier 2ë" NUK janë
+  tokenë validë.
+- **Path classifier (P-VI §4 → P-VII Fix D):** rrënjët POSIX vetëm si segment
+  ABSOLUT ("word/tmp" ≠ path lokal), case-insensitive (`/users`); `C:/`
+  brenda URL-je http(s) s'është FP; `file:///...` dhe `vscode://file/...`
+  janë LOKALE dhe kapen; UNC edhe i rrethuar me pikësim; URL + path i dytë
+  lokal në të njëjtin rresht → path-i kapet. **Fence (P-VII Fix E,
+  CommonMark):** opener/closer me MAX 3 hapësira indentim total; info-string
+  i backtick-fence nuk lejon backtick (tilde po).
 - **CLI/engine determinist (P-V H1–H4):** direct-exec guard me URL/realpath
   real; duplicate profiles → `DUPLICATE_PROFILE` exit 2; sanitizer i paekuivok
   (backslash i pari — zero kolizione në corpus); event read loop me `bytesRead`
@@ -119,7 +136,23 @@ provë privacy/compliance. **Semantika ligjore mbetet gjithmonë human review +
 Human Gate** — linter-i nuk jep opinion ligjor dhe nuk vendos semantikën e
 asnjë neni.
 
-**Kufij residualë të njohur (dokumentim i ndershëm, P-VI):**
+**Kufij residualë të njohur (advisory — P-VII, sjellja AKTUALE e dëshmuar me
+teste KNOWN_LIMITATION në `test/known-limitations.test.ts`):**
+
+- Konfuzabla Unicode PËRTEJ setit të kuruar (jo tabela e plotë UTS #39) nuk
+  detektohen si obfuscation.
+- Bidi/format-char NGJITUR një protected token-i (jashtë vetë tokenit) kalon
+  — detektimi është count-based (skeleton vs raw).
+- Combining marks (jo-NFC) brenda token-it nuk detektohen (nuk bëhet NFC).
+- Format-char (p.sh. ZWSP) i injektuar BRENDA një token-i path e shpëton nga
+  classifier-i i path-eve lokale.
+- Path lokal i NGULITUR brenda një URL-je http(s) (query/redirect) nuk kapet.
+
+KY SEKSION DOKUMENTON kufij të njohur — NUK autorizon shpërfilljen e gjetjeve
+të ardhshme dhe NUK i deklaron ato "jo-defekte". Pranimi formal i cilitdo
+residual si "jashtë scope" kërkon **Human Gate të VEÇANTË** (follow-up OPEN).
+
+**Kufij të tjerë të dokumentuar (P-VI):**
 
 - Markdown-i mbulohet vetëm në kontratën që kërkon linter-i (tabela GFM me
   container/fence semantics të CommonMark) — **JO parser i përgjithshëm
@@ -132,9 +165,11 @@ asnjë neni.
   zakonshme) — jo tabela e plotë UTS #39.
 - Klasifikuesi i path-eve absolute mbulon rrënjët e listuara + Windows/UNC —
   jo çdo layout ekzotik OS-i.
-- `\b` i ASCII-t mbetet në pattern-e me skaje token-ësh VETËM-ASCII (Step B,
-  Tier 2, IMPLEMENTED, GOV-\d, pastaj, dhe) — auditi P-VI i klasifikoi të
-  sigurta; kufijtë Unicode-adjacent përdorin lookaround \p{L}\p{N}.
+- `\b` i ASCII-t mbetet VETËM në pattern-e ku fqinji Unicode s'formon fjalë
+  reale (IMPLEMENTED/TESTED, GOV-\d, pastaj, dhe) — auditi u RIFRESKUA në
+  P-VII: chain-tokens (Step B/C, Tier 2, re-review, HUMAN GATE, PREFLIGHT)
+  u konvertuan në lookaround \p{L}\p{N} sepse pretendimi i P-VI "të sigurta"
+  ishte i PASAKTË për ta ("Step Bë" pranohej).
 
 ## Workflow
 
