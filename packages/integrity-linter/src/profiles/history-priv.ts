@@ -21,9 +21,9 @@ import { ALLOWED_FILE_MODES, NULL_MODE, evaluatePath } from "../path-policy.js";
 import { buildContentRules, type RuleContext } from "./history-rules.js";
 import {
   AuthorityError, DEFAULT_CHAIN_REQUIRED, defaultAuthorityClasses, extractAuthorityValue,
-  isHistoryLabeledRowInDoc, type AuthorityClass,
+  isHistoryLabeledMatchInDoc, type AuthorityClass,
 } from "../authority-classes.js";
-import { chainOrderViolations, evaluateChainPresence, extractChainClaims } from "./doc-core.js";
+import { chainOrderViolations, evaluateChainPresence, extractChainClaims, projectActiveMarkdown } from "./doc-core.js";
 import { hasObfuscatedMatch } from "../machine-token.js";
 
 const P = "HISTORY-PRIV" as const;
@@ -97,7 +97,7 @@ function evaluateClassOnSnapshot(
   snap: SnapshotReaderAt,
 ): Map<string, string> {
   const defects = new Map<string, string>(); // firma → locator i sigurt
-  const authorityText = snap.read(cls.authorityFile);
+  const authorityText = projectActiveMarkdown(snap.read(cls.authorityFile));
   const current = extractAuthorityValue(authorityText, cls); // zero/ambige → AuthorityError
   const norm = cls.normalize ?? ((v: string) => v);
   for (const consumer of cls.consumers) {
@@ -107,7 +107,7 @@ function evaluateClassOnSnapshot(
       }
       continue; // SCAN_IF_PRESENT: mungesa e file-it lejohet nga metadata
     }
-    const text = snap.read(consumer.file);
+    const text = projectActiveMarkdown(snap.read(consumer.file));
     const lines = text.split("\n");
     let currentSeenActive = false;
     for (let i = 0; i < lines.length; i++) {
@@ -126,7 +126,7 @@ function evaluateClassOnSnapshot(
           continue;
         }
         const seen = norm(cm[1]);
-        const labeled = isHistoryLabeledRowInDoc(text, i + 1); // P-VII: doc-aware (qeliza vetem ne kolonen Status)
+        const labeled = isHistoryLabeledMatchInDoc(text, i + 1, cm.index, cm.index + cm[0].length);
         if (seen === current) {
           if (!labeled) currentSeenActive = true; // historical row s'plotëson REQUIRED aktiv
         } else if (!labeled) {
@@ -210,6 +210,33 @@ export function runHistoryPriv(
   const driftClasses = options.driftClasses ?? defaultAuthorityClasses();
   const chainSurfaces = options.chainRequiredSurfaces ?? DEFAULT_CHAIN_REQUIRED;
 
+  // Metadata e TËRË range-it materializohet para çdo content access. Kjo
+  // mbyll relocation-in copy-before-delete dhe ruan policy-before-blob.
+  const commitEntries = commits.map((sha) => {
+    if (reader.parents(sha).length > 1) {
+      throw new ScanError("INCOMPLETE_SCAN:MERGE_COMMIT_IN_RANGE");
+    }
+    return { sha, entries: reader.rawEntries(sha) };
+  });
+  // OID-t private merren vetëm nga metadata (kurrë blob content): snapshot-i
+  // bazë + të gjitha entry-t private në range. Kështu kapet edhe copy pa
+  // delete dhe copy-before-delete, pa cenuar policy-before-blob.
+  const knownPrivateOids = new Set<string>();
+  for (const entry of reader.treeEntries(mergeBase)) {
+    if (evaluatePath(entry.path) === "BLOCKED") knownPrivateOids.add(entry.oid);
+  }
+  for (const { entries } of commitEntries) {
+    for (const entry of entries) {
+      if (evaluatePath(entry.path) !== "BLOCKED") continue;
+      if (entry.status === "D" && !/^0+$/.test(entry.oldOid)) {
+        knownPrivateOids.add(entry.oldOid);
+      } else if (!/^0+$/.test(entry.newOid)) {
+        knownPrivateOids.add(entry.newOid);
+      }
+    }
+  }
+  const hasKnownPrivateSource = knownPrivateOids.size > 0;
+
   const snapAt = (sha: string): SnapshotReaderAt => {
     const cache = new Map<string, string>();
     const hasCache = new Map<string, boolean>();
@@ -228,8 +255,6 @@ export function runHistoryPriv(
     };
   };
 
-  // §3: OID-et e blob-eve të fshira nga path privat — gjatë TËRË range-it (in-memory).
-  const deletedPrivateOids = new Set<string>();
   // §1: activation ONCE_PRESENT per klasë + gjendja parent e defekteve për dedup.
   // Activation ONCE_PRESENT (Hardening IV §2): klasa aktivizohet sapo authority
   // FILE EKZISTON në snapshot — JO kur vlera lexohet për herë të parë (ONCE_VALID
@@ -245,7 +270,7 @@ export function runHistoryPriv(
       ? cls.activationAnchor.flags : cls.activationAnchor.flags + "g";
     const re = new RegExp(cls.activationAnchor.source, flags);
     let n = 0;
-    while (re.exec(snap.read(cls.authorityFile)) !== null) n += 1;
+    while (re.exec(projectActiveMarkdown(snap.read(cls.authorityFile))) !== null) n += 1;
     return n;
   };
   const baseSnap = snapAt(mergeBase);
@@ -266,21 +291,8 @@ export function runHistoryPriv(
   }
   let parentChainDefects = evaluateChainOnSnapshot(chainSurfaces, baseSnap);
 
-  for (const sha of commits) {
+  for (const { sha, entries } of commitEntries) {
     const short = sha.slice(0, 8);
-
-    if (reader.parents(sha).length > 1) {
-      throw new ScanError("INCOMPLETE_SCAN:MERGE_COMMIT_IN_RANGE");
-    }
-
-    const entries = reader.rawEntries(sha);
-
-    // §3 PASS 1: mblidh OID-et e fshirjeve private PARA çdo vlerësimi tjetër
-    for (const entry of entries) {
-      if (entry.status === "D" && evaluatePath(entry.path) === "BLOCKED" && !/^0+$/.test(entry.oldOid)) {
-        deletedPrivateOids.add(entry.oldOid);
-      }
-    }
 
     // PASS 2: policy path/mode/scope mbi TË GJITHA entries PARA content access
     const approved: RawEntry[] = [];
@@ -301,11 +313,23 @@ export function runHistoryPriv(
       }
       if (entry.status === "D") continue;
 
-      // §3: relocation me OID — brenda të njëjtit commit OSE nga commit i mëparshëm
-      if (deletedPrivateOids.has(entry.newOid)) {
+      // §3: relocation exact në TËRË range-in, edhe copy-before-delete.
+      if (knownPrivateOids.has(entry.newOid)) {
         findings.push({
           profile: P, profileStatus: status, severity: "REVIEW",
           ruleId: "HP-PRIVATE-RELOCATION", category: "privacy",
+          locator: REDACTED, commit: short,
+        });
+      } else if (
+        hasKnownPrivateSource &&
+        (entry.status === "A" || (entry.status === "M" && entry.oldOid !== entry.newOid))
+      ) {
+        // Pa lexuar private blob-in, similarity nuk provohet dot. Prandaj çdo
+        // public content-change ndërsa ekziston një private source dërgohet për
+        // review — edhe kur private source mbahet dhe s'ka delete në range.
+        findings.push({
+          profile: P, profileStatus: status, severity: "REVIEW",
+          ruleId: "HP-PRIVATE-RELOCATION-UNVERIFIED", category: "privacy",
           locator: REDACTED, commit: short,
         });
       }
@@ -324,10 +348,12 @@ export function runHistoryPriv(
     // ── CONTENT — §2: e pa-skanueshme = SKANIM I PAPLOTË = exit 2 ──
     for (const entry of approved) {
       const hasOld = entry.status === "M" && !/^0+$/.test(entry.oldOid);
-      if (hasOld && reader.blobSizeByOid(entry.oldOid) > OVERSIZE_BYTES) {
+      const oldSize = hasOld ? reader.blobSizeByOid(entry.oldOid) : 0;
+      const newSize = reader.blobSizeByOid(entry.newOid);
+      if (oldSize > OVERSIZE_BYTES) {
         throw new ScanError("INCOMPLETE_SCAN:OVERSIZE_BLOB");
       }
-      if (reader.blobSizeByOid(entry.newOid) > OVERSIZE_BYTES) {
+      if (newSize > OVERSIZE_BYTES) {
         throw new ScanError("INCOMPLETE_SCAN:OVERSIZE_BLOB");
       }
       // P-IV §3: klasifikimi bëhet mbi blob-in RAW sipas OID (brenda cap),
@@ -339,6 +365,12 @@ export function runHistoryPriv(
       if (content.binary) {
         // me --text s'duhet të ndodhë kurrë; nëse ndodh = strukturë e papritur
         throw new ScanError("INCOMPLETE_SCAN:BINARY_BLOB");
+      }
+      const contentChanged =
+        (entry.status === "A" && newSize > 0) ||
+        (entry.status === "M" && entry.oldOid !== entry.newOid);
+      if (contentChanged && !content.hadHunk) {
+        throw new ScanError("INCOMPLETE_SCAN:DIFF_HUNK_MISSING");
       }
 
       for (const { line, text } of content.lines) {

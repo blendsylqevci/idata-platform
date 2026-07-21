@@ -81,12 +81,21 @@ export const MATURITY_STAGES = ["GAP", "EVIDENCE", "SPECIFIED", "MODELED", "IMPL
 
 export function buildContentRules(): ContentRule[] {
   const dash5 = frag("--", "---");
-  const beginKey = new RegExp(frag(dash5, "BEGIN ", "(?:RSA |EC |OPENSSH )?", "PRIVATE", " KEY"));
-  const ghToken = frag("g", "ho", "_[A-Za-z0-9_]{8,}");
+  const beginKey = new RegExp(frag(
+    dash5,
+    "BEGIN ",
+    "(?:RSA |DSA |EC |OPENSSH |ENCRYPTED )?",
+    "PRIVATE",
+    " KEY",
+  ));
+  // Prefix-et klasike të dokumentuara nga provider-i: personal/oauth/user/
+  // server/refresh. Ndërtohen nga fragmente që fixture source të mos duket si
+  // credential real për guard/gitleaks.
+  const ghClassic = frag("g", "h", "(?:p|o|u|s|r)", "_[A-Za-z0-9_]{8,}");
   const ghPat = frag("github", "_", "pat", "_[A-Za-z0-9_]{8,}");
   const skToken = frag("\\bsk", "-[A-Za-z0-9_-]{20,}");
   const awsKey = frag("AK", "IA", "[0-9A-Z]{16}");
-  const tokenClass = new RegExp(`${ghToken}|${ghPat}|${skToken}|${awsKey}`);
+  const tokenClass = new RegExp(`${ghClassic}|${ghPat}|${skToken}|${awsKey}`);
   const credWords = [
     frag("api", "[_-]?", "key"), frag("pass", "word"), frag("tok", "en"), frag("sec", "ret"),
     frag("d", "b", "[_-]?", "url"), frag("data", "base", "[_-]?", "url"),

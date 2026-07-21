@@ -14,7 +14,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { ScanError, type AddedContent, type GitReader, type RawEntry } from "./types.js";
+import { ScanError, type AddedContent, type GitReader, type RawEntry, type TreeEntry } from "./types.js";
 
 const MAX_GIT_OUTPUT = 64 * 1024 * 1024;
 
@@ -30,10 +30,20 @@ export class GitCliReader implements GitReader {
    */
   private git(opLabel: string, args: string[]): Buffer {
     try {
-      return execFileSync("git", ["--literal-pathspecs", ...args], {
+      return execFileSync("git", [
+        "--no-pager", "--literal-pathspecs",
+        "-c", "color.ui=false", "-c", "color.diff=false",
+        "-c", "core.pager=cat", "-c", "pager.show=false",
+        ...args,
+      ], {
         cwd: this.cwd,
         maxBuffer: MAX_GIT_OUTPUT,
         stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          LC_ALL: "C", LANG: "C", GIT_PAGER: "cat", PAGER: "cat",
+          TERM: "dumb", NO_COLOR: "1",
+        },
       });
     } catch {
       throw new ScanError(`GIT_OP_FAILED:${opLabel}`);
@@ -70,6 +80,34 @@ export class GitCliReader implements GitReader {
     return out.slice(1);
   }
 
+  treeEntries(ref: string): TreeEntry[] {
+    const raw = this.git("ls-tree-all", ["ls-tree", "-r", "-z", "--full-tree", ref]);
+    const entries: TreeEntry[] = [];
+    let at = 0;
+    while (at < raw.length) {
+      const end = raw.indexOf(0x00, at);
+      if (end === -1) throw new ScanError("LS_TREE_PARSE_FAILED");
+      const record = raw.subarray(at, end);
+      const tab = record.indexOf(0x09);
+      if (tab <= 0) throw new ScanError("LS_TREE_PARSE_FAILED");
+      const meta = record.subarray(0, tab);
+      for (const b of meta) {
+        if (b < 0x20 || b > 0x7e) throw new ScanError("LS_TREE_META_ENCODING");
+      }
+      const [mode, type, oid] = meta.toString("ascii").split(" ");
+      if (
+        mode === undefined || type !== "blob" || oid === undefined ||
+        !/^\d{6}$/.test(mode) || !/^[0-9a-f]{40}$/.test(oid)
+      ) {
+        throw new ScanError("LS_TREE_PARSE_FAILED");
+      }
+      const path = decodeRepoPath(record.subarray(tab + 1));
+      entries.push({ mode, oid, path });
+      at = end + 1;
+    }
+    return entries;
+  }
+
   rawEntries(sha: string): RawEntry[] {
     // ":oldmode newmode oldoid newoid status\0path\0" — PA rename detection.
     const raw = this.git("diff-tree-raw", [
@@ -98,21 +136,7 @@ export class GitCliReader implements GitReader {
       if (pathEnd === -1) throw new ScanError("DIFF_TREE_PARSE_FAILED");
       const pathBuf = raw.subarray(metaEnd + 1, pathEnd);
       // path: UTF-8 STRIKT dhe pa kontroll-karaktere (tab/newline/etj.)
-      const path = decodeStrictUtf8(pathBuf, "PATH_ENCODING_INVALID");
-      for (const ch of path) {
-        const c = ch.codePointAt(0) ?? 0;
-        if (c < 0x20 || c === 0x7f) throw new ScanError("PATH_CONTROL_CHARS");
-        // bidi override / zero-width / format chars — vektorë spoofing-u të path-it
-        if (
-          (c >= 0x200b && c <= 0x200f) || (c >= 0x202a && c <= 0x202e) ||
-          (c >= 0x2066 && c <= 0x2069) || c === 0xfeff
-        ) {
-          throw new ScanError("PATH_FORMAT_CHARS");
-        }
-      }
-      if (path.startsWith("-") || path.startsWith(":")) {
-        throw new ScanError("PATH_SUSPICIOUS_PREFIX");
-      }
+      const path = decodeRepoPath(pathBuf);
       entries.push({ oldMode, newMode, oldOid, newOid, status: statusFull, path });
       i = pathEnd + 1;
     }
@@ -158,6 +182,27 @@ export class GitCliReader implements GitReader {
   }
 }
 
+function decodeRepoPath(pathBuf: Buffer): string {
+  const path = decodeStrictUtf8(pathBuf, "PATH_ENCODING_INVALID");
+  if (/\p{Default_Ignorable_Code_Point}/u.test(path)) {
+    throw new ScanError("PATH_FORMAT_CHARS");
+  }
+  for (const ch of path) {
+    const c = ch.codePointAt(0) ?? 0;
+    if (c < 0x20 || c === 0x7f) throw new ScanError("PATH_CONTROL_CHARS");
+    if (
+      (c >= 0x200b && c <= 0x200f) || (c >= 0x202a && c <= 0x202e) ||
+      (c >= 0x2066 && c <= 0x2069) || c === 0xfeff
+    ) {
+      throw new ScanError("PATH_FORMAT_CHARS");
+    }
+  }
+  if (path.startsWith("-") || path.startsWith(":")) {
+    throw new ScanError("PATH_SUSPICIOUS_PREFIX");
+  }
+  return path;
+}
+
 /** Dekodim strikt UTF-8; input invalid → ScanError me kod fiks (pa content). */
 export function decodeStrictUtf8(buf: Buffer, errorCode: string): string {
   try {
@@ -177,47 +222,85 @@ export function decodeStrictUtf8(buf: Buffer, errorCode: string): string {
  *  - strukturë e papritur → ScanError (INCOMPLETE_SCAN).
  */
 export function parseUnifiedAddedLines(diffText: string): AddedContent {
+  if (diffText.includes("\u001b")) throw new ScanError("DIFF_STRUCTURE_UNEXPECTED");
   const lines = diffText.split("\n");
   const added: Array<{ line: number; text: string }> = [];
   let inHunk = false;
+  let hadHunk = false;
   let targetLine = 0;
-  let expectedInHunk = 0;
+  let sourceRemaining = 0;
+  let targetRemaining = 0;
+  let headerOpen = true;
+  const openHunk = (raw: string): void => {
+    if (inHunk || sourceRemaining !== 0 || targetRemaining !== 0) {
+      throw new ScanError("DIFF_HUNK_TRUNCATED");
+    }
+    const m = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(?: .*)?$/.exec(raw);
+    if (!m || m[1] === undefined || m[3] === undefined) {
+      throw new ScanError("HUNK_HEADER_PARSE_FAILED");
+    }
+    sourceRemaining = m[2] === undefined ? 1 : Number.parseInt(m[2], 10);
+    targetLine = Number.parseInt(m[3], 10);
+    targetRemaining = m[4] === undefined ? 1 : Number.parseInt(m[4], 10);
+    if (![sourceRemaining, targetLine, targetRemaining].every(Number.isSafeInteger)) {
+      throw new ScanError("HUNK_HEADER_PARSE_FAILED");
+    }
+    hadHunk = true;
+    headerOpen = false;
+    inHunk = sourceRemaining > 0 || targetRemaining > 0;
+  };
   for (const raw of lines) {
     if (!inHunk) {
-      if (raw.startsWith("Binary files ") || raw === "GIT binary patch") {
-        return { binary: true, lines: [] };
+      if ((raw.startsWith("Binary files ") || raw === "GIT binary patch") && headerOpen) {
+        return { binary: true, hadHunk, lines: [] };
       }
       if (raw.startsWith("@@")) {
-        const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(raw);
-        if (!m || m[1] === undefined) throw new ScanError("HUNK_HEADER_PARSE_FAILED");
-        targetLine = Number.parseInt(m[1], 10);
-        expectedInHunk = m[2] !== undefined ? Number.parseInt(m[2], 10) : 1;
-        inHunk = expectedInHunk > 0;
+        openHunk(raw);
+        continue;
       }
-      // header lines (diff --git / index / --- / +++ / mode) injorohen këtu
-      continue;
+      if (raw === "" || raw === "\\ No newline at end of file") continue;
+      if (raw.startsWith("diff --git ")) {
+        headerOpen = true;
+        continue;
+      }
+      if (
+        headerOpen && (
+          raw.startsWith("index ") || raw.startsWith("--- ") || raw.startsWith("+++ ") ||
+          /^(?:new file|deleted file|old|new) mode \d{6}$/.test(raw)
+        )
+      ) continue;
+      throw new ScanError("DIFF_STRUCTURE_UNEXPECTED");
     }
-    // brenda hunk-ut (unified=0: vetëm +/- rreshta)
     if (raw.startsWith("+")) {
+      if (targetRemaining <= 0) throw new ScanError("DIFF_HUNK_COUNT_MISMATCH");
       added.push({ line: targetLine, text: raw.slice(1) });
       targetLine += 1;
-      expectedInHunk -= 1;
-      if (expectedInHunk <= 0) inHunk = false;
-    } else if (raw.startsWith("-") || raw.startsWith("\\")) {
-      // removed line ose "\ No newline at end of file" — nuk ndikon target counter
-    } else if (raw.startsWith("@@")) {
-      const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(raw);
-      if (!m || m[1] === undefined) throw new ScanError("HUNK_HEADER_PARSE_FAILED");
-      targetLine = Number.parseInt(m[1], 10);
-      expectedInHunk = m[2] !== undefined ? Number.parseInt(m[2], 10) : 1;
-      inHunk = expectedInHunk > 0;
+      targetRemaining -= 1;
+    } else if (raw.startsWith("-")) {
+      if (sourceRemaining <= 0) throw new ScanError("DIFF_HUNK_COUNT_MISMATCH");
+      sourceRemaining -= 1;
+    } else if (raw.startsWith(" ")) {
+      if (sourceRemaining <= 0 || targetRemaining <= 0) {
+        throw new ScanError("DIFF_HUNK_COUNT_MISMATCH");
+      }
+      sourceRemaining -= 1;
+      targetRemaining -= 1;
+      targetLine += 1;
+    } else if (raw === "\\ No newline at end of file") {
+      // marker metadata — nuk konsumon as source, as target
     } else if (raw === "") {
-      inHunk = false;
-    } else if (raw.startsWith("diff ")) {
-      inHunk = false;
+      // split-i prodhon një element bosh pas newline-it final; counter-at e
+      // pambyllur kontrollohen pas loop-it si DIFF_HUNK_TRUNCATED.
+      continue;
     } else {
       throw new ScanError("DIFF_STRUCTURE_UNEXPECTED");
     }
+    if (sourceRemaining === 0 && targetRemaining === 0) {
+      inHunk = false;
+    }
   }
-  return { binary: false, lines: added };
+  if (inHunk || sourceRemaining !== 0 || targetRemaining !== 0) {
+    throw new ScanError("DIFF_HUNK_TRUNCATED");
+  }
+  return { binary: false, hadHunk, lines: added };
 }

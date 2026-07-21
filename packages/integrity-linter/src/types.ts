@@ -92,9 +92,18 @@ export interface RawEntry {
   path: string;
 }
 
+/** Metadata e një hyrjeje tracked në një snapshot Git; pa lexim blob-i. */
+export interface TreeEntry {
+  mode: string;
+  oid: string;
+  path: string;
+}
+
 export interface AddedContent {
   /** true = blob binar; asnjë rresht nuk lexohet/publikohet. */
   binary: boolean;
+  /** true vetëm kur u parsua të paktën një hunk header i vlefshëm. */
+  hadHunk: boolean;
   /** Rreshtat e SHTUAR me numër REAL rreshti të target file-it. */
   lines: Array<{ line: number; text: string }>;
 }
@@ -109,6 +118,8 @@ export interface GitReader {
   mergeBase(a: string, b: string): string;
   revList(baseExclusive: string, head: string): string[];
   parents(sha: string): string[];
+  /** Metadata e plotë e snapshot-it; përdoret vetëm për policy/OID gates. */
+  treeEntries(ref: string): TreeEntry[];
   /** Metadata të plota PA rename detection dhe PA lexim blob-i. */
   rawEntries(sha: string): RawEntry[];
   /** Madhësia e blob-it me OBJECT-ID (pa path). */

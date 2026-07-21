@@ -9,6 +9,8 @@
  * RUNTIME nga fragmente sintetike (zero literale që trip-ojnë guard/gitleaks).
  */
 
+import { detectionSkeleton } from "./machine-token.js";
+
 function frag(...parts: string[]): string {
   return parts.join("");
 }
@@ -84,8 +86,9 @@ export type PathVerdict = "ALLOWED" | "BLOCKED";
  * directory ancestor. Absolute / `..` / segment bosh / NUL → BLOCKED
  * (fail-closed drejt privatësisë; kufijtë e encoding-ut mbeten te reader-i).
  */
-export function evaluatePath(path: string): PathVerdict {
-  if (path.includes("\u0000")) return "BLOCKED";
+function evaluatePolicyPath(path: string): PathVerdict {
+  // Një segment privat i obfuskuar me tag/variation/zero-width duhet të jetë
+  // fail-closed edhe kur evaluatePath thirret jashtë GitCliReader-it.
   if (path.startsWith("/") || path.startsWith("\\") || /^[A-Za-z]:[\\/]/.test(path)) return "BLOCKED";
   const norm = path.replace(/\\/g, "/").replace(/^\/+/, "");
   const lower = norm.toLowerCase();
@@ -133,6 +136,19 @@ export function evaluatePath(path: string): PathVerdict {
   }
 
   return "ALLOWED";
+}
+
+export function evaluatePath(path: string): PathVerdict {
+  if (path.includes("\u0000")) return "BLOCKED";
+  if (/\p{Default_Ignorable_Code_Point}/u.test(path)) return "BLOCKED";
+  // Path-et e tracked ruhen byte-for-byte; combining marks ose homoglyph-e të
+  // kuruara mund të maskojnë një klasë owner-only. Combining mark = fail-closed.
+  // Skeleton-i përdoret vetëm për të ZBULUAR bypass-in; path-i nuk normalizohet
+  // dhe nuk pranohet automatikisht mbi bazën e tij.
+  if (/\p{M}/u.test(path)) return "BLOCKED";
+  const skeleton = detectionSkeleton(path);
+  if (skeleton !== path && evaluatePolicyPath(skeleton) === "BLOCKED") return "BLOCKED";
+  return evaluatePolicyPath(path);
 }
 
 /**
