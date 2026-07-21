@@ -88,6 +88,47 @@ function assertScannableBlob(buf: Buffer): void {
 }
 
 /**
+ * Correction pass (Codex+Fable) — VALIDATOR EKSPLICIT i tranzicionit
+ * status/mode, i thirrur PARA çdo blob/content access (pas path-policy):
+ *  - statuset e njohura: VETËM A / D / M / T; status tjetër →
+ *    `GIT_STATUS_UNSUPPORTED` (kod fiks, pa path);
+ *  - A: oldMode = NULL_MODE dhe newMode ∈ ALLOWED_FILE_MODES;
+ *  - D: oldMode ∈ ALLOWED_FILE_MODES dhe newMode = NULL_MODE;
+ *  - M: oldMode ∈ ALLOWED_FILE_MODES dhe newMode ∈ ALLOWED_FILE_MODES
+ *    (100644 ↔ 100755 i mbështetur — Git e raporton si M);
+ *  - T (type-change, p.sh. symlink 120000 → 100644 ose regular → gitlink):
+ *    GJITHMONË fail-closed `UNSUPPORTED_FILE_MODE` — defekti i mëparshëm
+ *    kontrollonte vetëm newMode dhe e linte `120000→100644` të kalonte me
+ *    exit 0; zero blobSizeByOid/blobByOid/addedContent për T;
+ *  - tuple strukturorisht i pamundur (A me oldMode≠NULL, D me newMode≠NULL,
+ *    M me NULL në njërën anë) → `INVALID_MODE_TRANSITION`.
+ */
+export function validateEntryTransition(entry: RawEntry): void {
+  const oldOk = ALLOWED_FILE_MODES.has(entry.oldMode);
+  const newOk = ALLOWED_FILE_MODES.has(entry.newMode);
+  switch (entry.status) {
+    case "T":
+      throw new ScanError("INCOMPLETE_SCAN:UNSUPPORTED_FILE_MODE");
+    case "A":
+      if (!newOk) throw new ScanError("INCOMPLETE_SCAN:UNSUPPORTED_FILE_MODE");
+      if (entry.oldMode !== NULL_MODE) throw new ScanError("INCOMPLETE_SCAN:INVALID_MODE_TRANSITION");
+      return;
+    case "D":
+      if (!oldOk) throw new ScanError("INCOMPLETE_SCAN:UNSUPPORTED_FILE_MODE");
+      if (entry.newMode !== NULL_MODE) throw new ScanError("INCOMPLETE_SCAN:INVALID_MODE_TRANSITION");
+      return;
+    case "M":
+      if (entry.oldMode === NULL_MODE || entry.newMode === NULL_MODE) {
+        throw new ScanError("INCOMPLETE_SCAN:INVALID_MODE_TRANSITION");
+      }
+      if (!oldOk || !newOk) throw new ScanError("INCOMPLETE_SCAN:UNSUPPORTED_FILE_MODE");
+      return;
+    default:
+      throw new ScanError("INCOMPLETE_SCAN:GIT_STATUS_UNSUPPORTED");
+  }
+}
+
+/**
  * Vlerëson defektet e drift-it të një klase mbi NJË snapshot (semantikë IDENTIKE
  * me DOC-CORE — validator/kontratë e përbashkët §1). Kthen firma të brendshme
  * defektesh (vlerat KURRË s'dalin në output) + locator-ë të sigurt.
@@ -307,10 +348,9 @@ export function runHistoryPriv(
         });
         continue;
       }
-      const modeToCheck = entry.status === "D" ? entry.oldMode : entry.newMode;
-      if (!ALLOWED_FILE_MODES.has(modeToCheck) && modeToCheck !== NULL_MODE) {
-        throw new ScanError("INCOMPLETE_SCAN:UNSUPPORTED_FILE_MODE");
-      }
+      // Validator i plotë status/mode — T dhe çdo tuple i pamundur dështojnë
+      // KËTU, para çdo blob/content access (correction pass Codex+Fable).
+      validateEntryTransition(entry);
       if (entry.status === "D") continue;
 
       // §3: relocation exact në TËRË range-in, edhe copy-before-delete.
