@@ -63,8 +63,10 @@ export function locallyNegated(line: string, matchIndex: number): boolean {
     if (p !== -1 && p < end) end = p;
   }
   const sentence = nline.slice(start, end);
+  // P-VII Fix B: counter-i numëron edhe "jo" (i njëjti set si chain-counter) —
+  // "jo s'raportohet … 789" është mohim AMBIG → NUK suppress-ohet.
   const negRe = new RegExp(
-    "(?:" + NOT_LETTER_BEFORE + "(?:nuk|mos|ndalohet)" + NOT_LETTER_AFTER + "|" + NOT_LETTER_BEFORE + "s')", "giu",
+    "(?:" + NOT_LETTER_BEFORE + "(?:nuk|mos|ndalohet|jo)" + NOT_LETTER_AFTER + "|" + NOT_LETTER_BEFORE + "s')", "giu",
   );
   const negators = sentence.match(negRe) ?? [];
   return negators.length === 1;

@@ -24,8 +24,6 @@ describe("P-VI §1 — mohim UNICODE-aware i zinxhirit", () => {
     `s${CURLY}është ky rendi: `,
     "s'janë këto hapat e rendit: ",
     `s${CURLY}janë këto hapat e rendit: `,
-    "ç'është ky rend: ",
-    `ç${CURLY}është ky rend: `,
     "nuk është ky rendi: ",
     "jo ky rend: ",
     "mos e konsidero këtë rend: ",
@@ -33,6 +31,7 @@ describe("P-VI §1 — mohim UNICODE-aware i zinxhirit", () => {
     `s${MODAP}është ky rendi: `, // formë Unicode ekuivalente (modifier apostrophe)
   ];
 
+  // P-VII Fix A supersedes P-VI: "ç'është …" është PYETJE, jo mohim — kaloi te aktivet.
   it("çdo formë mohimi → negatedChainClaim=true dhe JO chain aktiv", () => {
     for (const neg of negForms) {
       expect(negatedChainClaim(neg + FULL), JSON.stringify(neg)).toBe(true);
@@ -46,6 +45,8 @@ describe("P-VI §1 — mohim UNICODE-aware i zinxhirit", () => {
       "Rendi mbetet i pandryshuar: ",
       "Nuk ka përjashtime të reja. Rendi aktual: ",
       "Skanimi nuk lexon evidence private. Rendi i detyrueshëm: ",
+      "ç'është ky rend: ",              // P-VII: pyetje ≠ mohim
+      `ç${CURLY}është ky rend: `,
     ]) {
       expect(negatedChainClaim(act + FULL), JSON.stringify(act)).toBe(false);
       const e = evaluateChainPresence(act + FULL + "\n");

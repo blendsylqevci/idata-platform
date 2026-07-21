@@ -73,18 +73,27 @@ export function defaultSurfaces(): DocCoreSurfaces {
 
 export { isHistoryLabeledRow as isHistoryLabeled };
 
-/** Hallkat e zinxhirit invariant; review normalizohet nga TË GJITHA variantet reale (§4). */
+/**
+ * Hallkat e zinxhirit invariant; review normalizohet nga TË GJITHA variantet
+ * reale (§4). P-VII Fix F: kufij UNICODE-aware në të DYJA anët — `\b` i
+ * ASCII-t pranonte "Step Bë"/"Tier 2ë" si token valid (ë = jo-fjalë për \b).
+ */
+function chainToken(src: string, flags = "u"): RegExp {
+  return new RegExp(NOT_LETTER_BEFORE + src + NOT_LETTER_AFTER, flags);
+}
 export const CHAIN_TOKENS: Array<{ key: string; res: RegExp[] }> = [
-  { key: "step-b", res: [/Step B\b/] },
-  { key: "step-c", res: [/Step C\b/] },
+  { key: "step-b", res: [chainToken("Step B")] },
+  { key: "step-c", res: [chainToken("Step C")] },
   {
     key: "independent-review",
-    res: [/independent re-?review/i, /\bre-review\b/i, /independent review/i,
-      /review(?:-t|t)? (?:i|të) pavarur/i, /rishikim(?:i|in)? (?:i|të) pavarur/i],
+    res: [chainToken("independent re-?review", "iu"), chainToken("re-review", "iu"),
+      chainToken("independent review", "iu"),
+      chainToken("review(?:-t|t)? (?:i|të) pavarur", "iu"),
+      chainToken("rishikim(?:i|in)? (?:i|të) pavarur", "iu")],
   },
-  { key: "human-gate", res: [/HUMAN GATE/i] },
-  { key: "preflight", res: [/PREFLIGHT/i] },
-  { key: "tier-2", res: [/Tier 2\b/] },
+  { key: "human-gate", res: [chainToken("HUMAN GATE", "iu")] },
+  { key: "preflight", res: [chainToken("PREFLIGHT", "iu")] },
+  { key: "tier-2", res: [chainToken("Tier 2")] },
 ];
 
 function firstIndex(paragraph: string, res: RegExp[]): number {
@@ -108,18 +117,36 @@ const ALL_CHAIN_RES = CHAIN_TOKENS.flatMap((t) => t.res);
  * nga folja/emri i rendit); mohimi në fjali tjetër nuk e mohon zinxhirin
  * (delimituesit përfshijnë U+2028/U+2029 — kontratë §1).
  */
-const CHAIN_NEG_RE = new RegExp(
-  NOT_LETTER_BEFORE + "(?:(?:nuk|mos|jo|not)" + NOT_LETTER_AFTER + "|[sç]')" +
-  "[^\\n]{0,40}?" +
-  NOT_LETTER_BEFORE + "(?:është|janë|rend[\\p{L}]*|sekuenc[\\p{L}]*|zinxhir[\\p{L}]*|order|konsidero[\\p{L}]*)" + NOT_LETTER_AFTER,
+/**
+ * P-VII Fix A — mohim i lidhur me CLAIM-in e VETË zinxhirit, jo me çdo fjalë
+ * chain-ish brenda 40 karakteresh (over-suppression e P-VI fshihte zinxhirë
+ * REALË aktivë si "Nuk ndryshon rendi: …" / "Nuk ka PII, rendi aktual: …").
+ * Grama e ngushtë e claim-mohimit (pas normalizimit të apostrofëve):
+ *  - (nuk|mos|s') + KOPULA (është/janë) + … + emër rendi (rend/zinxhir/sekuenc/hap);
+ *  - "mos (e) konsidero … <emër rendi>";
+ *  - "jo <dëftor> <emër rendi>" ("jo ky rend" PO; "Jo vetëm ky rend" JO).
+ * "ç'është …" është PYETJE, jo mohim (supersedes P-VI — dokumentuar në test).
+ * Analizohet FJALIA që përmban token-ët e zinxhirit — jo vetëm teksti para
+ * token-it të parë ("Step B nuk është ky rendi: Step B → …" njihet i mohuar).
+ */
+const CHAIN_NOUN = "(?:rend|zinxhir|sekuenc|hap)\\p{L}*";
+const CHAIN_CLAIM_NEG_RE = new RegExp(
+  "(?:" +
+    NOT_LETTER_BEFORE + "(?:nuk\\s+|mos\\s+|s')(?:është|janë)" +
+      "[^\\n]{0,24}?" + NOT_LETTER_BEFORE + CHAIN_NOUN + NOT_LETTER_AFTER +
+  "|" + NOT_LETTER_BEFORE + "mos(?:\\s+e)?\\s+konsidero\\p{L}*" +
+      "[^\\n]{0,24}?" + NOT_LETTER_BEFORE + CHAIN_NOUN + NOT_LETTER_AFTER +
+  "|" + NOT_LETTER_BEFORE + "jo\\s+(?:ky|kjo|këto)\\s+" + CHAIN_NOUN + NOT_LETTER_AFTER +
+  ")",
   "iu",
 );
 export function negatedChainClaim(line: string): boolean {
-  const idx = firstIndex(line, ALL_CHAIN_RES);
-  if (idx < 0) return false;
-  const prefix = normalizeApostrophesForDetection(line.slice(0, idx));
-  const tail = prefix.split(SENTENCE_DELIM_RE).pop() ?? "";
-  return CHAIN_NEG_RE.test(tail);
+  const norm = normalizeApostrophesForDetection(line);
+  for (const sentence of norm.split(SENTENCE_DELIM_RE)) {
+    if (firstIndex(sentence, ALL_CHAIN_RES) < 0) continue;
+    return CHAIN_CLAIM_NEG_RE.test(sentence); // fjalia e claim-it — e TËRA
+  }
+  return false;
 }
 
 /** §7 P-IV — blanko VETËM segmentet (midis →/pastaj) me etiketë historike. */
