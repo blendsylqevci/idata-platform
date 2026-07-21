@@ -363,3 +363,36 @@ export function isHistoryLabeledRowInDoc(docText: string, lineNo: number): boole
   const cell = parseTableRow(line).cells[col]?.replace(/[`*]/g, "").trim() ?? "";
   return HISTORY_CELL_RE.test(cell);
 }
+
+/**
+ * Etiketim historik PER-MATCH. Prefix-i strukturor dhe status-cell-i i saktë
+ * janë qëllimisht row-wide; marker-i inline vlen vetëm për segmentin lokal të
+ * match-it, jo për vlera të tjera aktive në të njëjtin rresht.
+ */
+export function isHistoryLabeledMatchInDoc(
+  docText: string,
+  lineNo: number,
+  matchStart: number,
+  matchEnd: number,
+): boolean {
+  const line = docText.split("\n")[lineNo - 1] ?? "";
+  if (matchStart < 0 || matchEnd < matchStart || matchEnd > line.length) return false;
+  if (isHistoryPrefixLabeled(line)) return true;
+
+  if (isTableRowCandidate(line)) {
+    const tctx = tableContextAt(docText, lineNo);
+    const col = tctx?.columnIndex(STATUS_HEADER_RE);
+    if (tctx !== undefined && col !== undefined) {
+      const cell = parseTableRow(line).cells[col]?.replace(/[`*]/g, "").trim() ?? "";
+      if (HISTORY_CELL_RE.test(cell)) return true;
+    }
+  }
+
+  // Marker-i inline etiketon VETËM match-in menjëherë para tij. Lejohen
+  // whitespace dhe closing-markup Markdown; prozë/match tjetër mes tyre jo.
+  // Kjo mbyll edhe rastin me dy vlera brenda të njëjtit segment proze.
+  const tail = line.slice(matchEnd);
+  const marker = HISTORY_MARKER_RE.exec(tail);
+  if (marker === null) return false;
+  return /^[\s`*_~\])]*$/.test(tail.slice(0, marker.index));
+}

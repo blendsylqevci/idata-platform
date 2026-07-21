@@ -55,9 +55,19 @@ export function parseTableRow(line: string): ParsedRow {
   let i = hadLeadingPipe ? 1 : 0;
   while (i < s.length) {
     const ch = s[i] as string;
-    if (ch === "\\" && i + 1 < s.length && s[i + 1] === "|") {
-      cur += "|"; // escaped pipe = tekst
-      i += 2;
+    if (ch === "\\") {
+      let run = 1;
+      while (i + run < s.length && s[i + run] === "\\") run += 1;
+      const next = s[i + run];
+      cur += "\\".repeat(Math.floor(run / 2));
+      if (next === "|" && run % 2 === 1) {
+        cur += "|"; // odd run: backslash-i i fundit escape-on pipe-in
+        i += run + 1;
+      } else {
+        // even run: backslash-et çiftohen; pipe-i pasues mbetet kufi strukturor
+        if (run % 2 === 1) cur += "\\";
+        i += run;
+      }
       continue;
     }
     if (ch === "`") {
@@ -66,7 +76,7 @@ export function parseTableRow(line: string): ParsedRow {
       if (!inCode) {
         inCode = true;
         codeFence = run;
-      } else if (run >= codeFence) {
+      } else if (run === codeFence) {
         inCode = false;
       }
       cur += "`".repeat(run);
@@ -83,7 +93,9 @@ export function parseTableRow(line: string): ParsedRow {
     i += 1;
   }
   if (inCode) malformed = true; // code span i pambyllur → ambiguitet
-  const hadTrailingPipe = !inCode && s.endsWith("|") && !s.endsWith("\\|");
+  let trailingBackslashes = 0;
+  for (let j = s.length - 2; j >= 0 && s[j] === "\\"; j--) trailingBackslashes += 1;
+  const hadTrailingPipe = !inCode && s.endsWith("|") && trailingBackslashes % 2 === 0;
   if (hadTrailingPipe) {
     // qeliza pas pipe-it të fundit është "" — hiqet si kufi, JO si qelizë
     if (cur !== "") {
@@ -124,7 +136,7 @@ export function isSeparatorRow(line: string): boolean {
  * thellësinë e tyre; dalja nga kontejneri i mbyll fence-t e hapura më thellë;
  * fence i hapur në depth d mbulon rreshtat pasues me depth >= d.
  */
-function inFencedBlockAt(lines: string[], idx: number): boolean {
+export function fencedCodeLineMask(lines: string[]): boolean[] {
   // P-VI §3 — STATE MACHINE CommonMark për fenced blocks (kontrata e linter-it,
   // JO parser i përgjithshëm Markdown):
   //  - opener: run >=3 backticks/tildes (info string i lejuar);
@@ -135,11 +147,13 @@ function inFencedBlockAt(lines: string[], idx: number): boolean {
   //  - dalja nga kontejneri (depth < depth-i i fence-s) e mbyll fence-n;
   //  - fence e pambyllur përjashton përmbajtjen deri në fund;
   //  - pas closer-it valid parsing-u normal rifillon.
+  const mask = lines.map(() => false);
   let open: { depth: number; ch: string; len: number } | undefined;
-  for (let i = 0; i < idx; i++) {
+  for (let i = 0; i < lines.length; i++) {
     const { depth, content, indent } = containerOf(lines[i] ?? "");
     if (open !== undefined && depth < open.depth) open = undefined; // dalje kontejneri
     const m = /^( *)(`{3,}|~{3,})/.exec(content);
+    if (open !== undefined) mask[i] = true; // content/closer brenda fence-s aktive
     if (!m || m[1] === undefined || m[2] === undefined) continue;
     // P-VII Fix E (CommonMark): fence lejon MAX 3 hapesira indentim total —
     // 4+ hapesira = indented code block, JO fence.
@@ -152,14 +166,17 @@ function inFencedBlockAt(lines: string[], idx: number): boolean {
       const info = content.slice(m[1].length + len);
       if (ch === "`" && info.includes("`")) continue;
       open = { depth, ch, len }; // opener (me info string te lejuar)
+      mask[i] = true;
     } else if (depth === open.depth && ch === open.ch && len >= open.len && content.trim() === m[2]) {
       open = undefined; // closer valid — parsing-u normal rifillon
     }
     // përndryshe: CONTENT brenda fence-s — kurrë nested opener
   }
-  if (open === undefined) return false;
-  const tDepth = containerOf(lines[idx] ?? "").depth;
-  return tDepth >= open.depth; // target-i brenda kontejnerit të fence-s së hapur
+  return mask;
+}
+
+export function inFencedBlockAt(lines: string[], idx: number): boolean {
+  return fencedCodeLineMask(lines)[idx] === true;
 }
 
 /**

@@ -18,8 +18,7 @@
  * kandidat\u00EB obfuskimi p\u00EBr protected tokens; n\u00EB analiz\u00EBn e fjalive trajtohen
  * si delimitues \u2014 kurr\u00EB silent bypass).
  */
-export const FORMAT_CHAR_RE =
-  /[\u00AD\u034F\u061C\u180E\u200B-\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF]/u;
+export const FORMAT_CHAR_RE = /[\p{Default_Ignorable_Code_Point}\u2028\u2029]/u;
 
 /**
  * P-VI \u00A71 \u2014 KUFIJ TOKEN\u00CBSH UNICODE-AWARE t\u00EB centralizuar: `\b` i ASCII-t

@@ -17,15 +17,15 @@ import type { Finding, GitReader, ProfileEvaluation, PullRequestEvent } from "..
 import { ScanError } from "../types.js";
 import { profileStatus } from "../profile-registry.js";
 import {
-  AuthorityError, defaultAuthorityClasses, extractAuthorityValue, isHistoryLabeledRow, isHistoryLabeledRowInDoc, isHistoryPrefixLabeled,
+  AuthorityError, defaultAuthorityClasses, extractAuthorityValue, isHistoryLabeledMatchInDoc, isHistoryLabeledRow, isHistoryPrefixLabeled,
   GATE, INDEX, LEDGER, PM, POC5README, ROADMAP, SSOT, TRACKER,
   ROLE_OPTIONAL_SURFACES, ROLE_REQUIRED_SURFACES,
   type AuthorityClass,
 } from "../authority-classes.js";
-import { isSeparatorRow, isTableRowCandidate, parseTableRow, tableContextAt } from "../markdown-table.js";
+import { fencedCodeLineMask, isSeparatorRow, isTableRowCandidate, parseTableRow, tableContextAt } from "../markdown-table.js";
 import {
   hasObfuscatedMatch, normalizeApostrophesForDetection,
-  NOT_LETTER_AFTER, NOT_LETTER_BEFORE, SENTENCE_DELIM_RE,
+  NOT_LETTER_AFTER, NOT_LETTER_BEFORE,
 } from "../machine-token.js";
 
 const P = "DOC-CORE" as const;
@@ -107,6 +107,159 @@ function firstIndex(paragraph: string, res: RegExp[]): number {
 
 const ALL_CHAIN_RES = CHAIN_TOKENS.flatMap((t) => t.res);
 
+// Pika ndahet vetëm kur është terminator i vërtetë; `T2-01..10` dhe `v1.5`
+// nuk duhet ta presin claim-in. `·` mbetet vazhdim canonical i zinxhirit.
+const CHAIN_SENTENCE_DELIM_RE = /(?<!\.)\.(?=\s|$)|[!?;\u2028\u2029]/u;
+/**
+ * Dy pretendime të pavarura mund të jetojnë në të njëjtën fjali. Ndarja te
+ * lidhëzat kundërshtuese e mban mohimin claim-scoped: një "NUK ..." para
+ * `por/ndërsa/kurse` nuk e shuan pretendimin aktiv pas lidhëzës.
+ */
+const CHAIN_CLAUSE_DELIM_RE = /\s*,?\s+(?:por|ndërsa|kurse)\s+/iu;
+
+/**
+ * Projeksioni i vetëm për semantikën AKTIVE të governance Markdown-it.
+ * Comments/fenced code blankohen; label-i i dukshëm i linkut ruhet, ndërsa
+ * destination-i dhe aside-t bracket/parenthetical nuk bëhen claim aktiv.
+ * Newline count ruhet që locator-ët të mbeten të saktë.
+ */
+function projectInlineCodeSpans(line: string): string {
+  // Offset-et më poshtë janë UTF-16 code units (si indeksimi i String/RegExp
+  // në JS). `split("")` e ruan këtë kontratë edhe kur para span-it ka emoji;
+  // `[...line]` do t'i kthente astral code points në një element të vetëm.
+  const chars = line.split("");
+  let at = 0;
+  while (at < line.length) {
+    if (line[at] !== "`") { at += 1; continue; }
+    let run = 1;
+    while (line[at + run] === "`") run += 1;
+    let close = at + run;
+    let found = -1;
+    while (close < line.length) {
+      if (line[close] !== "`") { close += 1; continue; }
+      let closeRun = 1;
+      while (line[close + closeRun] === "`") closeRun += 1;
+      if (closeRun === run) { found = close; break; }
+      close += closeRun;
+    }
+    if (found < 0) { at += run; continue; } // delimiter i pambyllur = tekst literal
+    // Inline-code është tekst I DUKSHËM dhe kanoni/pattern-et përdorin edhe
+    // backticks si strukturë source. Ruaji delimiter-at; neutralizo vetëm
+    // `<`/`>` brenda span-it që pass-i pasues të mos i lexojë si HTML/comment.
+    for (let i = at + run; i < found; i++) {
+      if (chars[i] === "<" || chars[i] === ">") chars[i] = " ";
+    }
+    at = found + run;
+  }
+  return chars.join("");
+}
+
+function blankPreservingNewlines(value: string): string {
+  return value.replace(/[^\n]/g, " ");
+}
+
+function stripHtmlCommentsPreservingNewlines(value: string): string {
+  let out = "";
+  let at = 0;
+  while (at < value.length) {
+    const open = value.indexOf("<!--", at);
+    if (open < 0) return out + value.slice(at);
+    out += value.slice(at, open);
+    const close = value.indexOf("-->", open + 4);
+    if (close < 0) {
+      // Comment i pambyllur do ta fshihte deri në EOF nga semantika aktive,
+      // ndërsa privacy-pass-i s'do të kishte body të plotë për review.
+      throw new ScanError("INCOMPLETE_SCAN:MARKDOWN_COMMENT_MALFORMED");
+    }
+    out += blankPreservingNewlines(value.slice(open, close + 3));
+    at = close + 3;
+  }
+  return out;
+}
+
+/**
+ * Blankon raw HTML tags duke respektuar quotes në attributes. Regex-i i vjetër
+ * e mbyllte tag-un te `>` brenda `title="..."` dhe ekspozonte bishtin e fshehur
+ * si governance aktiv. Tag i pambyllur = input ambig → fail-closed.
+ */
+function stripHtmlTagsPreservingLength(line: string): string {
+  const chars = line.split("");
+  let at = 0;
+  while (at < line.length) {
+    if (line[at] !== "<" || !/^<\/?[A-Za-z]/.test(line.slice(at))) {
+      at += 1;
+      continue;
+    }
+    let quote: "\"" | "'" | undefined;
+    let end = -1;
+    for (let i = at + 1; i < line.length; i++) {
+      const ch = line[i];
+      if (quote !== undefined) {
+        if (ch === quote) quote = undefined;
+        continue;
+      }
+      if (ch === "\"" || ch === "'") {
+        quote = ch;
+      } else if (ch === ">") {
+        end = i;
+        break;
+      }
+    }
+    if (end < 0 || quote !== undefined) {
+      throw new ScanError("INCOMPLETE_SCAN:MARKDOWN_HTML_MALFORMED");
+    }
+    for (let i = at; i <= end; i++) chars[i] = " ";
+    at = end + 1;
+  }
+  return chars.join("");
+}
+
+export function projectActiveMarkdown(text: string): string {
+  // Inline-code është i renderuar dhe mbetet semantik; delimiter-at projektohen
+  // larg, ndërsa marker-at HTML brenda tij neutralizohen.
+  const withoutInlineCode = text.split("\n").map(projectInlineCodeSpans).join("\n");
+  // Comment-et hiqen PARA state-machine të fence-ve; një ``` brenda comment-it
+  // nuk mund të fshehë përmbajtjen aktive që vjen më pas.
+  const withoutComments = stripHtmlCommentsPreservingNewlines(withoutInlineCode);
+  const lines = withoutComments.split("\n");
+  const fenced = fencedCodeLineMask(lines);
+  let referenceTitlePending = false;
+  const projected = lines.map((raw, idx) => {
+    if (fenced[idx] === true || /^(?: {4}|\t)/.test(raw)) return " ".repeat(raw.length);
+    const withoutHtmlTags = stripHtmlTagsPreservingLength(raw);
+    const rendered = withoutHtmlTags
+      .replace(/!?\[([^\]\n]+)\]\((?:\\.|[^)\n])*\)/g, "$1")
+      .replace(/!?\[([^\]\n]+)\]\[[^\]\n]*\]/g, "$1");
+    // Reference-link definitions janë metadata e destination-it, jo tekst i
+    // renderuar. Ato nuk mund të furnizojnë authority/consumer/chain tokens.
+    if (/^\s{0,3}\[[^\]\n]+\]:\s+\S/.test(rendered)) {
+      referenceTitlePending = true;
+      return " ".repeat(rendered.length);
+    }
+    if (referenceTitlePending) {
+      referenceTitlePending = false;
+      // CommonMark lejon title-in opsional të reference-definition në
+      // rreshtin vijues me 1–3 hapësira. Edhe ky është metadata jo e dukshme.
+      if (/^ {1,3}(?:"(?:\\.|[^"\n])*"|'(?:\\.|[^'\n])*'|\((?:\\.|[^)\n])*\))\s*$/.test(rendered)) {
+        return " ".repeat(rendered.length);
+      }
+    }
+    return rendered;
+  });
+  return projected.join("\n");
+}
+
+function chainBearingSentences(line: string): string[] {
+  return line.split(CHAIN_SENTENCE_DELIM_RE)
+    .flatMap((sentence) => sentence.split(CHAIN_CLAUSE_DELIM_RE))
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => firstIndex(sentence, ALL_CHAIN_RES) >= 0);
+}
+
+function sentenceNegatesChain(sentence: string): boolean {
+  return CHAIN_CLAIM_NEG_RE.test(normalizeApostrophesForDetection(sentence));
+}
+
 /**
  * §7 P-IV + P-VI §1 — mohim CLAIM-scoped i zinxhirit, UNICODE-AWARE:
  * "NUK është ky rendi:", "s'është ky rendi:", "s’janë …", "ç'është ky rend",
@@ -141,12 +294,8 @@ const CHAIN_CLAIM_NEG_RE = new RegExp(
   "iu",
 );
 export function negatedChainClaim(line: string): boolean {
-  const norm = normalizeApostrophesForDetection(line);
-  for (const sentence of norm.split(SENTENCE_DELIM_RE)) {
-    if (firstIndex(sentence, ALL_CHAIN_RES) < 0) continue;
-    return CHAIN_CLAIM_NEG_RE.test(sentence); // fjalia e claim-it — e TËRA
-  }
-  return false;
+  const claims = chainBearingSentences(normalizeApostrophesForDetection(line));
+  return claims.length > 0 && claims.every(sentenceNegatesChain);
 }
 
 /** §7 P-IV — blanko VETËM segmentet (midis →/pastaj) me etiketë historike. */
@@ -178,6 +327,7 @@ function blankHistoricalSegments(line: string): string {
  * [markeri i parë − 160, i fundit + 160] që të mos pritet "Step B".
  */
 export function extractChainClaims(lines: string[]): string[] {
+  const activeLines = projectActiveMarkdown(lines.join("\n")).split("\n");
   const claims: string[] = [];
   let subjectRun: string[] = [];
   const flush = (): void => {
@@ -186,7 +336,7 @@ export function extractChainClaims(lines: string[]): string[] {
       subjectRun = [];
     }
   };
-  for (const rawLine of lines) {
+  for (const rawLine of activeLines) {
     if (isTableRowCandidate(rawLine)) { flush(); continue; } // tabelat s'janë zinxhirë
     if (isHistoryPrefixLabeled(rawLine)) { flush(); continue; } // historik ROW-scoped (P-VI: prefiks strukturor qendror)
     // P-VII: blanko segmentet historike PARA heqjes së parentezave — ndryshe
@@ -196,20 +346,24 @@ export function extractChainClaims(lines: string[]): string[] {
     // zinxhirit të renditur — hiqen njësoj, që të mos krijojnë shkelje rendi
     // false nga një token që s'i përket sekuencës me shigjeta.
     const line = blankHistoricalSegments(rawLine).replace(/\([^)]*\)|\[[^\]]*\]/g, " ");
-    if (negatedChainClaim(line)) { flush(); continue; } // i mohuar ≠ claim aktiv
     const isNumbered = /^\s*(?:\d+[a-z]?\.|[-*])\s/.test(line);
+    const activeSentences = chainBearingSentences(line).filter((sentence) => !sentenceNegatesChain(sentence));
     const markers: number[] = [];
     for (const mk of line.matchAll(/→|\bpastaj\b/g)) markers.push(mk.index ?? 0);
     if (isNumbered && markers.length === 0) {
       const subject = line.slice(0, 48);
-      if (!/(\bnuk\b|\bs'|\bjo\b|vetëm pas)/i.test(subject)) subjectRun.push(subject);
+      if (activeSentences.length > 0 && !/(\bnuk\b|\bs'|\bjo\b|vetëm pas)/i.test(subject)) subjectRun.push(subject);
     } else if (markers.length > 0) {
       flush();
-      const first = markers[0] ?? 0;
-      const last = markers[markers.length - 1] ?? 0;
-      const from = Math.max(0, first - 160);
-      const to = Math.min(line.length, last + 160);
-      claims.push(" ".repeat(from) + line.slice(from, to));
+      for (const sentence of activeSentences) {
+        const sentenceMarkers = [...sentence.matchAll(/→|\bpastaj\b/g)].map((m) => m.index ?? 0);
+        if (sentenceMarkers.length === 0) continue;
+        const first = sentenceMarkers[0] ?? 0;
+        const last = sentenceMarkers[sentenceMarkers.length - 1] ?? 0;
+        const from = Math.max(0, first - 160);
+        const to = Math.min(sentence.length, last + 160);
+        claims.push(" ".repeat(from) + sentence.slice(from, to));
+      }
     } else {
       flush(); // prozë pa marker e ndan run-in e listës
     }
@@ -277,8 +431,9 @@ export interface ChainEvaluation {
  * Përdoret nga DOC-CORE (HEAD) dhe HISTORY-PRIV (snapshot per-commit).
  */
 export function evaluateChainPresence(text: string): ChainEvaluation {
-  const paragraphs = text.split(/\n\s*\n/);
+  const paragraphs = projectActiveMarkdown(text).split(/\n\s*\n/);
   let best: { count: number; missing: string[]; violations: Array<{ later: string; earlier: string }> } | undefined;
+  const allViolations = new Map<string, { later: string; earlier: string }>();
   for (const para of paragraphs) {
     const claims = extractChainClaims(para.split("\n"));
     const chainText = claims.join("\n");
@@ -287,19 +442,43 @@ export function evaluateChainPresence(text: string): ChainEvaluation {
     const missing = CHAIN_TOKENS.filter((t) => firstActiveIndex(chainText, t.res) < 0).map((t) => t.key);
     // §7 P-IV: rendi vlerësohet PER-CLAIM — jo ndër-claims të pavarura
     const violations = claims.flatMap((c) => chainOrderViolations(c));
+    for (const violation of violations) allViolations.set(`${violation.later}<${violation.earlier}`, violation);
     const score = present.length - violations.length * 0.5;
     if (best === undefined || score > best.count) {
       best = { count: score, missing, violations };
     }
   }
   if (best === undefined) return { missing: CHAIN_TOKENS.map((t) => t.key), violations: [], noActiveChain: true };
-  return { missing: best.missing, violations: best.violations, noActiveChain: false };
+  return { missing: best.missing, violations: [...allViolations.values()], noActiveChain: false };
 }
 
 /** Header-at e kolonave role-bearing (§7) — barazi e plotë e emrit të kolonës. */
 const ROLE_HEADER_RE = /^(Owner( \/ burimi)?|Pronari?|Kush|Përgjegjës\w*|Approver|Human Gate)$/i;
 /** Etiketat metadata role-bearing — "Human Gate" njihet si label (§9 P-IV). */
-const ROLE_LABEL_RE = /^\*{0,2}(Pronar(?:i)?(?: i dokumentit)?|Owner|Përgjegjës\w*|Approver|Human Gate)\s*:\*{0,2}\s*(.+)$/i;
+const ROLE_LABEL_RE = /^(Pronar(?:i)?(?: i dokumentit)?|Owner|Përgjegjës\w*|Approver|Human Gate)\s*:\s*(.+)$/i;
+
+function projectRoleKey(value: string): string {
+  let unwrapped = value;
+  // Role-label mund të jetë brenda blockquote/list/task-list/heading. Hiq vetëm
+  // marker-at strukturorë në fillim, deri sa parser-i s'bën më progres. Kjo
+  // shmang një depth-cap arbitrar dhe mbulon `> - [x] **Owner:** ...`.
+  for (;;) {
+    const next = unwrapped.replace(
+      /^\s{0,3}(?:>\s*|(?:[-+*]|\d+[.)])\s+|\[[ xX]\]\s+|#{1,6}\s+)/,
+      "",
+    );
+    if (next === unwrapped) break;
+    unwrapped = next;
+  }
+  return unwrapped
+    .replace(/<\/?[A-Za-z][^>\n]*>/g, " ")
+    .replace(/!?\[([^\]\n]+)\]\((?:\\.|[^)\n])*\)/g, "$1")
+    .replace(/!?\[([^\]\n]+)\]\[[^\]\n]*\]/g, "$1")
+    .replace(/<!--|-->/g, " ")
+    .replace(/[`*_]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 /**
  * P-V F4 — projeksion identiteti VETËM për role-bearing values (pa HTML
@@ -314,6 +493,26 @@ export function projectRoleMarkup(value: string): { text: string; unexpectedMark
     .replace(/&(?:nbsp|ensp|emsp|thinsp|zwsp|#0*160|#0*8194|#0*8195|#0*8201|#0*8203|#x0*A0);/gi, " ");
   const unexpectedMarkup = /<[A-Za-z!/]|&[A-Za-z#][A-Za-z0-9]{1,10};/.test(text);
   return { text, unexpectedMarkup };
+}
+
+function htmlCommentBodies(value: string): string[] {
+  return [...value.matchAll(/<!--([\s\S]*?)-->/g)].map((m) => m[1] ?? "");
+}
+
+function htmlCommentsWithLocation(text: string): Array<{ body: string; line: number; prefix: string }> {
+  const out: Array<{ body: string; line: number; prefix: string }> = [];
+  for (const match of text.matchAll(/<!--([\s\S]*?)-->/g)) {
+    const at = match.index ?? 0;
+    const before = text.slice(0, at);
+    const line = before.split("\n").length;
+    const lastBreak = before.lastIndexOf("\n");
+    out.push({
+      body: match[1] ?? "",
+      line,
+      prefix: before.slice(lastBreak + 1),
+    });
+  }
+  return out;
 }
 
 /** Fjalë funksionale të annotation-eve sintaktike — JO pjesë identiteti. */
@@ -428,7 +627,7 @@ export function runDocCore(
 
   // ── 1) kontrata bidirectional authority → consumers (validator i përbashkët) ─
   for (const cls of surfaces.authorities) {
-    const authorityText = readDoc(cls.authorityFile); // missing → exit 2
+    const authorityText = projectActiveMarkdown(readDoc(cls.authorityFile)); // hidden Markdown ≠ authority aktiv
     if (anchorState(cls, authorityText) === "absent") continue; // §4A.7 NOT_APPLICABLE
     let current: string;
     try {
@@ -440,10 +639,11 @@ export function runDocCore(
     const norm = cls.normalize ?? ((v: string) => v);
 
     for (const consumer of cls.consumers) {
-      const text = consumer.requirement === "REQUIRED_CURRENT"
+      const rawText = consumer.requirement === "REQUIRED_CURRENT"
         ? readDoc(consumer.file)
         : readDocIfPresent(consumer.file);
-      if (text === undefined) continue; // SCAN_IF_PRESENT: file-i mungon → lejohet
+      if (rawText === undefined) continue; // SCAN_IF_PRESENT: file-i mungon → lejohet
+      const text = projectActiveMarkdown(rawText);
       const lines = text.split("\n");
       let currentSeenActive = false;
       let anyMatch = false;
@@ -468,7 +668,7 @@ export function runDocCore(
           }
           anyMatch = true;
           const seen = norm(cm[1]);
-          const labeled = isHistoryLabeledRowInDoc(text, i + 1); // P-VII doc-aware
+          const labeled = isHistoryLabeledMatchInDoc(text, i + 1, cm.index, cm.index + cm[0].length);
           if (seen === current) {
             if (!labeled) currentSeenActive = true; // vetëm current AKTIV plotëson kërkesën
           } else if (!labeled) {
@@ -492,7 +692,7 @@ export function runDocCore(
 
   // ── 2) rendi invariant (të gjitha orderSurfaces) + PRANIA (chainRequired, §4) ─
   for (const file of surfaces.orderSurfaces) {
-    const text = readDoc(file);
+    const text = projectActiveMarkdown(readDoc(file));
     const paragraphs = text.split(/\n\s*\n/);
     let lineNo = 1;
     for (const para of paragraphs) {
@@ -526,19 +726,28 @@ export function runDocCore(
           locator: `${file} (mungon: ${missing})`,
         });
       }
+      if (!surfaces.orderSurfaces.includes(file)) {
+        for (const violation of evaln.violations) {
+          findings.push({
+            profile: P, profileStatus: status, severity: "WARNING",
+            ruleId: "DC-GATE-ORDER", category: "sequence",
+            locator: `${file} (${violation.later} para ${violation.earlier})`,
+          });
+        }
+      }
     }
   }
 
   // ── 3) milestone/gate në tracker që mungon nga sipërfaqet e rendit ─────
   if (surfaces.trackerFile !== undefined) {
-    const tracker = readDoc(surfaces.trackerFile);
+    const tracker = projectActiveMarkdown(readDoc(surfaces.trackerFile));
     const ids = new Set<string>();
     for (const mm of tracker.matchAll(/\b(GOV-\d{3}|HG-[A-Z][A-Z0-9-]{2,})\b/g)) {
       const id = mm[1];
       if (id !== undefined) ids.add(id);
     }
     for (const id of [...ids].sort()) {
-      const presentSomewhere = surfaces.milestoneSurfaces.some((f) => readDoc(f).includes(id));
+      const presentSomewhere = surfaces.milestoneSurfaces.some((f) => projectActiveMarkdown(readDoc(f)).includes(id));
       if (!presentSomewhere) {
         findings.push({
           profile: P, profileStatus: status, severity: "WARNING",
@@ -558,39 +767,57 @@ export function runDocCore(
     if (t !== undefined) roleTexts.push([file, t]);
   }
   const roleValueFindings = (file: string, lineNo: number, value: string): void => {
-    // P-V F4: projeksioni i markup-it zbatohet VETËM këtu (role-bearing value)
-    const proj = projectRoleMarkup(value);
-    if (proj.unexpectedMarkup) {
-      findings.push({
-        profile: P, profileStatus: status, severity: "REVIEW",
-        ruleId: "DC-ROLE-MARKUP", category: "privacy-review",
-        locator: `${file}:${lineNo}`,
-      });
-    }
-    if (roleTokensUnknown(proj.text, surfaces.approvedRolePhrases) > 0) {
-      findings.push({
-        profile: P, profileStatus: status, severity: "REVIEW",
-        ruleId: "DC-ROLE-VOCAB", category: "privacy-review",
-        locator: `${file}:${lineNo}`,
-      });
-    }
-    if (parentheticalIdentityCandidate(proj.text, surfaces.approvedRolePhrases)) {
-      findings.push({
-        profile: P, profileStatus: status, severity: "REVIEW",
-        ruleId: "DC-ROLE-IDENTITY", category: "privacy-review",
-        locator: `${file}:${lineNo}`,
-      });
+    // Semantika aktive përdor value-n pa comments; privacy kontrollon edhe
+    // bodies raw të comments, pa publikuar përmbajtjen e tyre në finding.
+    const candidates = [value, ...htmlCommentBodies(value)];
+    for (const candidate of candidates) {
+      const proj = projectRoleMarkup(candidate);
+      if (proj.unexpectedMarkup) {
+        findings.push({
+          profile: P, profileStatus: status, severity: "REVIEW",
+          ruleId: "DC-ROLE-MARKUP", category: "privacy-review",
+          locator: `${file}:${lineNo}`,
+        });
+      }
+      if (roleTokensUnknown(proj.text, surfaces.approvedRolePhrases) > 0) {
+        findings.push({
+          profile: P, profileStatus: status, severity: "REVIEW",
+          ruleId: "DC-ROLE-VOCAB", category: "privacy-review",
+          locator: `${file}:${lineNo}`,
+        });
+      }
+      if (parentheticalIdentityCandidate(proj.text, surfaces.approvedRolePhrases)) {
+        findings.push({
+          profile: P, profileStatus: status, severity: "REVIEW",
+          ruleId: "DC-ROLE-IDENTITY", category: "privacy-review",
+          locator: `${file}:${lineNo}`,
+        });
+      }
     }
   };
+  const seenRoleHeaderMarkup = new Set<string>();
   for (const [file, text] of roleTexts) {
     const lines = text.split("\n");
+    const activeRoleText = projectActiveMarkdown(text);
+    const activeRoleLines = activeRoleText.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] ?? "";
+      const activeLine = activeRoleLines[i] ?? "";
       // (a) rreshta tabele nën kolonë role-bearing (outer pipes opsionale, §4 P-IV)
-      if (isTableRowCandidate(line) && !isSeparatorRow(line)) {
-        const tctx = tableContextAt(text, i + 1);
-        const col = tctx?.columnIndex(ROLE_HEADER_RE);
-        if (tctx !== undefined && col !== undefined) {
+      if (isTableRowCandidate(activeLine) && !isSeparatorRow(activeLine)) {
+        const tctx = tableContextAt(activeRoleText, i + 1);
+        const col = tctx?.headerCells.findIndex((header) => ROLE_HEADER_RE.test(projectRoleKey(header)));
+        if (tctx !== undefined && col !== undefined && col >= 0) {
+          const rawHeader = tableContextAt(text, i + 1)?.headerCells[col] ?? tctx.headerCells[col] ?? "";
+          const headerKey = `${file}\u0000${rawHeader}`;
+          if (projectRoleMarkup(rawHeader).unexpectedMarkup && !seenRoleHeaderMarkup.has(headerKey)) {
+            seenRoleHeaderMarkup.add(headerKey);
+            findings.push({
+              profile: P, profileStatus: status, severity: "REVIEW",
+              ruleId: "DC-ROLE-MARKUP", category: "privacy-review",
+              locator: `${file}:${i + 1}`,
+            });
+          }
           const row = parseTableRow(line);
           const cell = row.cells[col];
           if (!row.malformed && cell !== undefined) roleValueFindings(file, i + 1, cell);
@@ -598,15 +825,40 @@ export function runDocCore(
         }
       }
       // (b) etiketa metadata role-bearing (përfshirë "Human Gate:")
-      const lm = ROLE_LABEL_RE.exec(line.trim());
-      if (lm?.[2] !== undefined) roleValueFindings(file, i + 1, lm[2]);
+      const lm = ROLE_LABEL_RE.exec(projectRoleKey(activeLine));
+      if (lm?.[2] !== undefined) {
+        if (projectRoleMarkup(line).unexpectedMarkup) {
+          findings.push({
+            profile: P, profileStatus: status, severity: "REVIEW",
+            ruleId: "DC-ROLE-MARKUP", category: "privacy-review",
+            locator: `${file}:${i + 1}`,
+          });
+        }
+        roleValueFindings(file, i + 1, lm[2]);
+      }
+    }
+
+    // Comments mund të shtrihen në disa rreshta. Ato s'janë governance aktiv,
+    // por deklaratat role-bearing ose comments të bashkëngjitura një role-label
+    // mbeten privacy-review surface. Analiza bëhet mbi comment-in e plotë dhe
+    // output-i ruan vetëm locator-in.
+    for (const comment of htmlCommentsWithLocation(text)) {
+      const attached = ROLE_LABEL_RE.exec(projectRoleKey(projectActiveMarkdown(comment.prefix)));
+      if (attached?.[2] !== undefined) {
+        roleValueFindings(file, comment.line, comment.body);
+        continue;
+      }
+      const hiddenLabel = ROLE_LABEL_RE.exec(projectRoleKey(comment.body));
+      if (hiddenLabel?.[2] !== undefined) {
+        roleValueFindings(file, comment.line, hiddenLabel[2]);
+      }
     }
   }
 
   // ── 5) pretendime absolute — kontekstuale per-rresht ────────────────────
   const claimSurfaces = [...surfaces.orderSurfaces, ...(surfaces.trackerFile ? [surfaces.trackerFile] : [])];
   for (const file of claimSurfaces) {
-    const text = readDoc(file);
+    const text = projectActiveMarkdown(readDoc(file));
     const lines = text.split("\n");
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] ?? "";
@@ -633,10 +885,12 @@ export function runDocCore(
       check: "pr-body", reason: "missing PR event/body",
     });
   } else {
-    const bodyLines = event.body.split("\n");
+    const activeBody = projectActiveMarkdown(event.body);
+    const bodyLines = activeBody.split("\n");
     for (const cls of surfaces.authorities) {
-      const authorityText = readDocIfPresent(cls.authorityFile);
-      if (authorityText === undefined) continue;
+      const rawAuthorityText = readDocIfPresent(cls.authorityFile);
+      if (rawAuthorityText === undefined) continue;
+      const authorityText = projectActiveMarkdown(rawAuthorityText);
       if (anchorState(cls, authorityText) === "absent") continue; // §4A.7
       let current: string;
       try {
@@ -655,7 +909,6 @@ export function runDocCore(
         seenPatterns.add(pkey);
         for (let i = 0; i < bodyLines.length; i++) {
           const line = bodyLines[i] ?? "";
-          if (isHistoryLabeledRowInDoc(event.body, i + 1)) continue; // P-VII doc-aware
           if (hasObfuscatedMatch(line, consumer.pattern)) {
             findings.push({
               profile: P, profileStatus: status, severity: "WARNING",
@@ -671,6 +924,12 @@ export function runDocCore(
                 consumer.excludeBefore.test(line.slice(Math.max(0, cm.index - 24), cm.index))) {
               continue;
             }
+            if (isHistoryLabeledMatchInDoc(
+              activeBody,
+              i + 1,
+              cm.index,
+              cm.index + cm[0].length,
+            )) continue;
             if (norm(cm[1]) !== current) {
               findings.push({
                 profile: P, profileStatus: status, severity: "WARNING",
