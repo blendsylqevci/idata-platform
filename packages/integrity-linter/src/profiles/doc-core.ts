@@ -225,6 +225,10 @@ export function projectActiveMarkdown(text: string): string {
   const fenced = fencedCodeLineMask(lines);
   let referenceTitlePending = false;
   const projected = lines.map((raw, idx) => {
+    const titleMayContinuePreviousDefinition = referenceTitlePending;
+    // Pending vlen VETËM për rreshtin menjëherë pas definition-it, edhe kur
+    // ai rresht del të jetë code/fence ose tekst tjetër jo-title.
+    referenceTitlePending = false;
     if (fenced[idx] === true || /^(?: {4}|\t)/.test(raw)) return " ".repeat(raw.length);
     const withoutHtmlTags = stripHtmlTagsPreservingLength(raw);
     const rendered = withoutHtmlTags
@@ -236,8 +240,7 @@ export function projectActiveMarkdown(text: string): string {
       referenceTitlePending = true;
       return " ".repeat(rendered.length);
     }
-    if (referenceTitlePending) {
-      referenceTitlePending = false;
+    if (titleMayContinuePreviousDefinition) {
       // CommonMark lejon title-in opsional të reference-definition në
       // rreshtin vijues me 1–3 hapësira. Edhe ky është metadata jo e dukshme.
       if (/^ {1,3}(?:"(?:\\.|[^"\n])*"|'(?:\\.|[^'\n])*'|\((?:\\.|[^)\n])*\))\s*$/.test(rendered)) {
