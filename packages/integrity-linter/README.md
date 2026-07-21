@@ -28,11 +28,13 @@ gjithë** consumers.
 
 **Hardening VIII (21.07.2026):** kontrolli i governance përdor vetëm Markdown-in
 aktiv: HTML comments/tags (me parser quote-aware), fenced ose indented code, link
-destinations dhe reference definitions nuk plotësojnë authority/chain; label-et e
+destinations dhe reference definitions (edhe title next-line) nuk plotësojnë
+authority/chain; comment/tag HTML i pambyllur dështon fail-closed; label-et e
 dukshme të linkeve dhe inline code mbeten burim semantik aktiv. Çdo chain-claim aktiv kontrollohet; një claim korrekt
 nuk fsheh një claim tjetër të gabuar. Etiketa historike inline është **per-match** në
 DOC-CORE, HISTORY-PRIV dhe PR body; vetëm prefiksi/qeliza `Status` ekzakte janë
-row-wide. Statusi mbetet `IMPLEMENTED_ADVISORY` për 2/16 profile — jo required-CI.
+row-wide. Offset-et e inline-code ruhen si UTF-16 edhe pranë karaktereve astrale.
+Statusi mbetet `IMPLEMENTED_ADVISORY` për 2/16 profile — jo required-CI.
 
 ## Kufij të fortë
 
