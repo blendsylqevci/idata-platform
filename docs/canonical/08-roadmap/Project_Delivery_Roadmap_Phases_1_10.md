@@ -1,7 +1,7 @@
 # iData+ — Project Delivery Roadmap, Fazat 1–10
 
 **Status:** canonical / approved (kopja kanonike e roadmap-it — miratuar nga Pronari; merged PR #9, përditësime me PR review)  
-**Data:** 2026-07-07 · **Përditësuar:** 2026-07-10  
+**Data:** 2026-07-07 · **Përditësuar:** 2026-07-21  
 **Burime kryesore:** SSOT §3/§8/§12, Feature Status Register, Outstanding Confirmations Tracker, ADR Register, 5 PoC Specs, PRO DATA Evidence Closure, KABI Operational Evidence Update, Accountant Confirmation Pack, Increment 1 PR #4/#6, security PR #8  
 **Rregull i hekurt:** ky roadmap **nuk krijon numërim të ri fazash**. Ndjek 1:1 SSOT §3. Nëse ndryshon numërimi, duhet vendim formal në SSOT + Decisions Log.
 
@@ -676,7 +676,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 ---
 
-## 6. Rendi aktual i punës (përditësuar 12.07.2026 — pa cikël)
+## 6. Rendi aktual i punës (përditësuar 21.07.2026 — pa cikël)
 
 *(**Full-corpus re-audit + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim — `ATK_Source_Register.md` v2.4 + `ATK_SEF_Requirements_Ledger.md` v1.6 + Gate v2.0; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate).)*
 

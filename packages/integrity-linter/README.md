@@ -182,10 +182,14 @@ residual si "jashtë scope" kërkon **Human Gate të VEÇANTË** (follow-up OPEN
 
 **Kufij të tjerë të dokumentuar (P-VI):**
 
-- Markdown-i mbulohet vetëm në kontratën që kërkon linter-i (tabela GFM me
-  container/fence semantics të CommonMark) — **JO parser i përgjithshëm
-  Markdown** (p.sh. setext headings, HTML blocks, reference links nuk
-  interpretohen).
+- Markdown-i mbulohet vetëm në kontratën që kërkon linter-i — **JO parser i
+  përgjithshëm Markdown**. Brenda kontratës (Hardening VIII): HTML
+  comments/tags trajtohen për të dalluar metadata/tekst joaktiv dhe dështojnë
+  fail-closed kur struktura mbetet e pambyllur; link destinations dhe
+  reference definitions (përfshirë title next-line) NUK plotësojnë
+  authority/chain; label-et e dukshme të link-eve dhe inline code mbeten
+  semantikisht AKTIVE. Jashtë kontratës së dokumentuar (p.sh. setext
+  headings e konstruksione të tjera) interpretimi mund të mungojë.
 - Mohimi/etiketat trajtohen sintaksorisht (forma të deklaruara + kufij
   Unicode) — jo kuptim semantik i fjalive; formulime krejt të reja mohimi
   jashtë formave të mbuluara mund të kërkojnë zgjerim kontrate.
