@@ -69,11 +69,15 @@ describe("near-miss: zinxhiri (§7)", () => {
 
 describe("near-miss: identiteti në parentetika (§9)", () => {
   const APPROVED = ["human gate", "group owner", "pronari"];
-  it("fraza të aprovuara, lowercase dhe akronime NUK janë kandidatë", () => {
+  it("fraza të aprovuara dhe annotation-et funksionale NUK janë kandidatë", () => {
     expect(parentheticalIdentityCandidate("Group Owner (Human Gate)", APPROVED)).toBe(false);
     expect(parentheticalIdentityCandidate("Pronari (aprovon çdo ndryshim)", APPROVED)).toBe(false);
-    expect(parentheticalIdentityCandidate("Owner (AIP)", APPROVED)).toBe(false);
     expect(parentheticalIdentityCandidate("Owner (—)", APPROVED)).toBe(false);
+    // Akronimi i APROVUAR mbetet clean; i PAAPROVUARI nuk merr më silent
+    // approval — disposition eksplicit AMBIGUOUS_REVIEW (typed role analyzer:
+    // e paqarta → REVIEW). Sjellja e vjetër (<4 shkronja → kalonte) u mbyll.
+    expect(parentheticalIdentityCandidate("Owner (AIP)", [...APPROVED, "aip"])).toBe(false);
+    expect(parentheticalIdentityCandidate("Owner (AIP)", APPROVED)).toBe(true);
   });
   it("sekuencë TitleCase sintetike e paaprovuar → kandidat", () => {
     expect(parentheticalIdentityCandidate("Owner (Filani Sintetiku)", APPROVED)).toBe(true);

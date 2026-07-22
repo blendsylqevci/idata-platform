@@ -27,6 +27,15 @@ import {
   hasObfuscatedMatch, normalizeApostrophesForDetection,
   NOT_LETTER_AFTER, NOT_LETTER_BEFORE,
 } from "../machine-token.js";
+import {
+  analyzeRoleDocument, parentheticalIdentityCandidate,
+  projectInlineCodeSpans, stripHtmlCommentsPreservingNewlines, stripHtmlTagsPreservingLength,
+  visibleRoleFragment,
+} from "../role-analysis.js";
+
+// Kontrata ekzistuese e eksporteve ruhet — implementimi jeton në reprezentimin
+// e vetëm të tipizuar (role-analysis).
+export { classifyParenthetical, classifyParentheticals, parentheticalIdentityCandidate } from "../role-analysis.js";
 
 const P = "DOC-CORE" as const;
 
@@ -121,99 +130,10 @@ const CHAIN_CLAUSE_DELIM_RE = /\s*,?\s+(?:por|ndërsa|kurse)\s+/iu;
  * Projeksioni i vetëm për semantikën AKTIVE të governance Markdown-it.
  * Comments/fenced code blankohen; label-i i dukshëm i linkut ruhet, ndërsa
  * destination-i dhe aside-t bracket/parenthetical nuk bëhen claim aktiv.
- * Newline count ruhet që locator-ët të mbeten të saktë.
+ * Newline count ruhet që locator-ët të mbeten të saktë. Primitivat e
+ * markup-it jetojnë në role-analysis (reprezentimi i vetëm) — kjo funksion
+ * mbetet projeksioni AKTIV line-preserving për authority/chain/claims.
  */
-function projectInlineCodeSpans(line: string): string {
-  // Offset-et më poshtë janë UTF-16 code units (si indeksimi i String/RegExp
-  // në JS). `split("")` e ruan këtë kontratë edhe kur para span-it ka emoji;
-  // `[...line]` do t'i kthente astral code points në një element të vetëm.
-  const chars = line.split("");
-  let at = 0;
-  while (at < line.length) {
-    if (line[at] !== "`") { at += 1; continue; }
-    let run = 1;
-    while (line[at + run] === "`") run += 1;
-    let close = at + run;
-    let found = -1;
-    while (close < line.length) {
-      if (line[close] !== "`") { close += 1; continue; }
-      let closeRun = 1;
-      while (line[close + closeRun] === "`") closeRun += 1;
-      if (closeRun === run) { found = close; break; }
-      close += closeRun;
-    }
-    if (found < 0) { at += run; continue; } // delimiter i pambyllur = tekst literal
-    // Inline-code është tekst I DUKSHËM dhe kanoni/pattern-et përdorin edhe
-    // backticks si strukturë source. Ruaji delimiter-at; neutralizo vetëm
-    // `<`/`>` brenda span-it që pass-i pasues të mos i lexojë si HTML/comment.
-    for (let i = at + run; i < found; i++) {
-      if (chars[i] === "<" || chars[i] === ">") chars[i] = " ";
-    }
-    at = found + run;
-  }
-  return chars.join("");
-}
-
-function blankPreservingNewlines(value: string): string {
-  return value.replace(/[^\n]/g, " ");
-}
-
-function stripHtmlCommentsPreservingNewlines(value: string): string {
-  let out = "";
-  let at = 0;
-  while (at < value.length) {
-    const open = value.indexOf("<!--", at);
-    if (open < 0) return out + value.slice(at);
-    out += value.slice(at, open);
-    const close = value.indexOf("-->", open + 4);
-    if (close < 0) {
-      // Comment i pambyllur do ta fshihte deri në EOF nga semantika aktive,
-      // ndërsa privacy-pass-i s'do të kishte body të plotë për review.
-      throw new ScanError("INCOMPLETE_SCAN:MARKDOWN_COMMENT_MALFORMED");
-    }
-    out += blankPreservingNewlines(value.slice(open, close + 3));
-    at = close + 3;
-  }
-  return out;
-}
-
-/**
- * Blankon raw HTML tags duke respektuar quotes në attributes. Regex-i i vjetër
- * e mbyllte tag-un te `>` brenda `title="..."` dhe ekspozonte bishtin e fshehur
- * si governance aktiv. Tag i pambyllur = input ambig → fail-closed.
- */
-function stripHtmlTagsPreservingLength(line: string): string {
-  const chars = line.split("");
-  let at = 0;
-  while (at < line.length) {
-    if (line[at] !== "<" || !/^<\/?[A-Za-z]/.test(line.slice(at))) {
-      at += 1;
-      continue;
-    }
-    let quote: "\"" | "'" | undefined;
-    let end = -1;
-    for (let i = at + 1; i < line.length; i++) {
-      const ch = line[i];
-      if (quote !== undefined) {
-        if (ch === quote) quote = undefined;
-        continue;
-      }
-      if (ch === "\"" || ch === "'") {
-        quote = ch;
-      } else if (ch === ">") {
-        end = i;
-        break;
-      }
-    }
-    if (end < 0 || quote !== undefined) {
-      throw new ScanError("INCOMPLETE_SCAN:MARKDOWN_HTML_MALFORMED");
-    }
-    for (let i = at; i <= end; i++) chars[i] = " ";
-    at = end + 1;
-  }
-  return chars.join("");
-}
-
 export function projectActiveMarkdown(text: string): string {
   // Inline-code është i renderuar dhe mbetet semantik; delimiter-at projektohen
   // larg, ndërsa marker-at HTML brenda tij neutralizohen.
@@ -502,66 +422,6 @@ function htmlCommentBodies(value: string): string[] {
   return [...value.matchAll(/<!--([\s\S]*?)-->/g)].map((m) => m[1] ?? "");
 }
 
-function htmlCommentsWithLocation(text: string): Array<{ body: string; line: number; prefix: string }> {
-  const out: Array<{ body: string; line: number; prefix: string }> = [];
-  for (const match of text.matchAll(/<!--([\s\S]*?)-->/g)) {
-    const at = match.index ?? 0;
-    const before = text.slice(0, at);
-    const line = before.split("\n").length;
-    const lastBreak = before.lastIndexOf("\n");
-    out.push({
-      body: match[1] ?? "",
-      line,
-      prefix: before.slice(lastBreak + 1),
-    });
-  }
-  return out;
-}
-
-/** Fjalë funksionale të annotation-eve sintaktike — JO pjesë identiteti. */
-const FUNCTIONAL_ANNOTATION_WORDS = new Set([
-  "aprovon", "miraton", "çdo", "ndryshim", "ndryshimet", "ndryshimin", "dokument",
-  "dokumentit", "dokumenti", "rresht", "rreshtit", "nëse", "kur", "duhet", "sipas",
-  "vetëm", "pas", "para", "për", "nga", "dhe", "ose", "me", "pa", "të", "e", "i",
-  "u", "në", "që", "këtij", "kësaj", "atij", "asaj", "review", "approval",
-]);
-
-/**
- * §9 P-IV + P-V C4 — parentetikat NUK hidhen blanket: kandidat identiteti
- * brenda `(…)` të një vlere role → privacy REVIEW (pa publikuar content-in).
- * C4: kandidati njihet në ÇDO casing (TitleCase/UPPERCASE/lowercase/Unicode):
- * run ≥2 fjalësh jo-funksionale e jo-të-aprovuara = kandidat; fjalë e vetme
- * me shkronjë të madhe nistore ≥4 shkronja jo e aprovuar = kandidat.
- * Ambiguiteti identitet-vs-annotation zgjidhet me REVIEW — kurrë auto-approval.
- */
-export function parentheticalIdentityCandidate(cellRaw: string, approvedPhrases: string[]): boolean {
-  const approved = new Set(approvedPhrases.map((p) => p.toLowerCase()));
-  for (const m of cellRaw.matchAll(/\(([^)]*)\)/g)) {
-    const inner = (m[1] ?? "").replace(/[`*]/g, "").trim();
-    if (inner === "" || approved.has(inner.toLowerCase())) continue;
-    const words = [...inner.matchAll(/\p{L}[\p{L}'’-]*/gu)].map((w) => w[0]);
-    let run: string[] = [];
-    let hit = false;
-    const runHits = (): boolean => run.length >= 2 && !approved.has(run.join(" ").toLowerCase());
-    for (const w of words) {
-      const lw = w.toLowerCase();
-      if (FUNCTIONAL_ANNOTATION_WORDS.has(lw) || approved.has(lw)) {
-        if (runHits()) hit = true;
-        run = [];
-        continue;
-      }
-      run.push(w);
-    }
-    if (runHits()) hit = true;
-    if (hit) return true;
-    if (words.length === 1) {
-      const w = words[0] as string;
-      if (w.length >= 4 && /^\p{Lu}/u.test(w) && !approved.has(w.toLowerCase())) return true;
-    }
-  }
-  return false;
-}
-
 /** Tokenizon një vlerë role-bearing dhe kthen numrin e tokenëve JO të aprovuar. */
 export function roleTokensUnknown(cellRaw: string, approvedPhrases: string[]): number {
   const cell = cellRaw
@@ -803,15 +663,35 @@ export function runDocCore(
     const lines = text.split("\n");
     const activeRoleText = projectActiveMarkdown(text);
     const activeRoleLines = activeRoleText.split("\n");
+    // Reprezentimi i VETËM i tipizuar (WA-001): njohja e label/header bëhet mbi
+    // tekstin e DUKSHËM të renderuar — markup zero-content hiqet PA boundary
+    // artificial ("Own<span></span>er" → "Owner"), markup ndarës nuk bashkon
+    // fjalë. Po aq strict sa projeksioni aktiv (të njëjtat fail-closed).
+    const roleView = analyzeRoleDocument(text);
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i] ?? "";
       const activeLine = activeRoleLines[i] ?? "";
+      const view = roleView.lines[i] ?? { visible: "", flattened: "", markupBearing: false };
       // (a) rreshta tabele nën kolonë role-bearing (outer pipes opsionale, §4 P-IV)
       if (isTableRowCandidate(activeLine) && !isSeparatorRow(activeLine)) {
         const tctx = tableContextAt(activeRoleText, i + 1);
-        const col = tctx?.headerCells.findIndex((header) => ROLE_HEADER_RE.test(projectRoleKey(header)));
-        if (tctx !== undefined && col !== undefined && col >= 0) {
-          const rawHeader = tableContextAt(text, i + 1)?.headerCells[col] ?? tctx.headerCells[col] ?? "";
+        const rawCtx = tableContextAt(text, i + 1);
+        // Kolona njihet mbi header-in RAW të kolapsuar në tekst të dukshëm
+        // (WA-001 sibling: "Own<span></span>er" si header); rruga aktive
+        // ekzistuese ruhet si kontroll i dytë i barasvlershëm.
+        let col = -1;
+        if (tctx !== undefined) {
+          for (let c = 0; c < tctx.headerCells.length; c++) {
+            const rawCell = rawCtx?.headerCells[c] ?? tctx.headerCells[c] ?? "";
+            if (ROLE_HEADER_RE.test(projectRoleKey(visibleRoleFragment(rawCell).visible))
+              || ROLE_HEADER_RE.test(projectRoleKey(tctx.headerCells[c] ?? ""))) {
+              col = c;
+              break;
+            }
+          }
+        }
+        if (tctx !== undefined && col >= 0) {
+          const rawHeader = rawCtx?.headerCells[col] ?? tctx.headerCells[col] ?? "";
           const headerKey = `${file}\u0000${rawHeader}`;
           if (projectRoleMarkup(rawHeader).unexpectedMarkup && !seenRoleHeaderMarkup.has(headerKey)) {
             seenRoleHeaderMarkup.add(headerKey);
@@ -827,8 +707,10 @@ export function runDocCore(
           continue;
         }
       }
-      // (b) etiketa metadata role-bearing (përfshirë "Human Gate:")
-      const lm = ROLE_LABEL_RE.exec(projectRoleKey(activeLine));
+      // (b) etiketa metadata role-bearing (përfshirë "Human Gate:") — mbi
+      // tekstin e DUKSHËM (WA-001: empty-tag/comment split në bold-label,
+      // heading, list, table — të gjitha nga i njëjti reprezentim i tipizuar).
+      const lm = ROLE_LABEL_RE.exec(projectRoleKey(view.visible));
       if (lm?.[2] !== undefined) {
         if (projectRoleMarkup(line).unexpectedMarkup) {
           findings.push({
@@ -838,20 +720,33 @@ export function runDocCore(
           });
         }
         roleValueFindings(file, i + 1, lm[2]);
+      } else if (view.markupBearing
+        && ROLE_LABEL_RE.test(projectRoleKey(view.flattened))) {
+        // Markup review NUK varet nga suksesi i label-regex-it: rresht që
+        // formon label VETËM nën kolapsim total (p.sh. "Own<br>er:") nuk
+        // bëhet label aktiv (renderer-i e ndan), por mbetet markup-bearing
+        // → REVIEW për shqyrtim njerëzor, kurrë silent.
+        findings.push({
+          profile: P, profileStatus: status, severity: "REVIEW",
+          ruleId: "DC-ROLE-MARKUP", category: "privacy-review",
+          locator: `${file}:${i + 1}`,
+        });
       }
     }
 
-    // Comments mund të shtrihen në disa rreshta. Ato s'janë governance aktiv,
-    // por deklaratat role-bearing ose comments të bashkëngjitura një role-label
-    // mbeten privacy-review surface. Analiza bëhet mbi comment-in e plotë dhe
-    // output-i ruan vetëm locator-in.
-    for (const comment of htmlCommentsWithLocation(text)) {
-      const attached = ROLE_LABEL_RE.exec(projectRoleKey(projectActiveMarkdown(comment.prefix)));
+    // Comments mund të shtrihen në disa rreshta. Ato mbeten JO-AKTIVE për
+    // governance semantics (përmbajtja s'plotëson role-label/authority/chain
+    // aktive), por janë privacy-review evidence RAW më vete: deklaratat
+    // role-bearing ose comments të bashkëngjitura një role-label analizohen
+    // të plota dhe output-i ruan vetëm locator-in. Label-i i prefix-it/body-t
+    // njihet mbi tekst të dukshëm (WA-001 sibling: "Own<b></b>er:" i ndarë).
+    for (const comment of roleView.comments) {
+      const attached = ROLE_LABEL_RE.exec(projectRoleKey(visibleRoleFragment(comment.prefix).visible));
       if (attached?.[2] !== undefined) {
         roleValueFindings(file, comment.line, comment.body);
         continue;
       }
-      const hiddenLabel = ROLE_LABEL_RE.exec(projectRoleKey(comment.body));
+      const hiddenLabel = ROLE_LABEL_RE.exec(projectRoleKey(visibleRoleFragment(comment.body).visible));
       if (hiddenLabel?.[2] !== undefined) {
         roleValueFindings(file, comment.line, hiddenLabel[2]);
       }
