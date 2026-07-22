@@ -6,6 +6,18 @@
 
 -
 
+<!--
+Blloku më poshtë është machine-readable dhe lexohet nga integrity-linter-i
+(profili HISTORY-PRIV) përmes PR event body — advisory only.
+Rregullo listën për ÇDO PR: file ekzakt OSE prefiks direktorie që mbaron me "/".
+Bllok që mungon/është malformed → advisory finding (jo bllokim).
+-->
+<!-- integrity-linter:scope
+allowed-paths:
+- docs/
+-->
+
+
 ## Privacy / confidentiality checklist
 
 - [ ] I read `PROJECT_RULES.md`.

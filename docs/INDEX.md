@@ -1,6 +1,6 @@
 # iData+ Project Documentation Index
 
-Date: 2026-07-10 (canonical split origjinal: 2026-07-02)
+Date: 2026-07-21 (canonical split origjinal: 2026-07-02)
 Status: Canonical split v0.1, prepared from `00_raw/claude` and `00_raw/codex`; mirëmbahet me docs-PR.
 
 ## Mandatory project rules
@@ -57,11 +57,11 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
 - `docs/canonical/08-roadmap/Cutover_Rollback_Runbook.md`
 
-## Next gate (rendi aktual — 12.07.2026, post full-corpus re-audit)
+## Next gate (rendi aktual — 21.07.2026, post full-corpus re-audit)
 
 *(**Re-audit-i + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate). **Verdikti: regression lokale 66 PASS/1 LIVE SKIP · Tier 1 PARTIAL/REOPENED · compliance FAIL · Tier 2 NOT IMPLEMENTED/NO-GO** — Gate v2.0.)*
 
-0. **GOVERNANCE PREREQUISITE — GOV-001:** PR tooling për linter engine + `DOC-CORE` + `HISTORY-PRIV`, advisory. **Duhet të përfundojë para hapjes së PR-së së parë Step B.** `HG-LINTER-BUILD` = APPROVED; required-CI mbetet gated nga `HG-LINTER-REQUIRED`. *(Prerequisite governance JASHTË zinxhirit SEF — nuk është hallkë e tij.)*
+0. **GOVERNANCE PREREQUISITE — GOV-001:** PR tooling për linter engine + `DOC-CORE` + `HISTORY-PRIV`, advisory. **Duhet të përfundojë para hapjes së PR-së së parë Step B.** `HG-LINTER-BUILD` = APPROVED; required-CI mbetet gated nga `HG-LINTER-REQUIRED`. *(Prerequisite governance JASHTË zinxhirit SEF — nuk është hallkë e tij.)* **Statusi: PLOTËSOHET me merge-in e PR-së tooling GOV-001** (`packages/integrity-linter` + workflow advisory jo-required; engine + 2/16 profile advisory; 14 NOT_IMPLEMENTED) — pas atij merge-i **Step B është hapi pasues**; `SEF-ATK` implementohet **gjatë Step B, para mbylljes së tij**.
 1. **Step B — code hardening (`ATK-012`, P0/PRE-TIER2):** T2-01..T2-10 (Gate v2 §4).
 2. **Step C — golden vectors zyrtarë + fake-HTTP/negative tests.**
 3. **Independent re-review** i deltës + gates.

@@ -1,0 +1,85 @@
+name: governance-advisory
+
+# GOV-001 Documentation & Compliance Integrity Linter — ADVISORY, JO-required.
+# - Nuk është pjesë e required checks (build-test + gitleaks mbeten të vetmit).
+# - Findings advisory → workflow jeshil (exit 0).
+# - Engine/config/incomplete-scan failure → workflow i kuq (exit 2), por mbetet jo-required.
+# - Promovimi në required kërkon evidence false-positive + review të pavarur + HG-LINTER-REQUIRED.
+
+on:
+  pull_request: # kurrë pull_request_target (pa token write, pa secrets mbi kod të huaj)
+    # P-VI §5: `edited` — PR body mund të editohet pas check-ut; body-edit
+    # duhet të ri-skanojë (PR-body drift/scope vlerësohen kundrejt body-t LIVE).
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+
+permissions:
+  contents: read # token read-only (konsistent me hardening-un e Actions)
+
+concurrency:
+  group: governance-advisory-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integrity-linter:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (real head SHA, full history)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # head real, jo merge SHA sintetik
+          fetch-depth: 0 # historia e plotë — HISTORY-PRIV refuzon shallow
+          persist-credentials: false
+
+      - name: Setup Node 24
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Enable Corepack (pnpm)
+        run: corepack enable
+
+      - name: Install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Build integrity-linter (vetëm paketa)
+        run: pnpm --filter @idata/integrity-linter build
+
+      - name: Unit tests (integrity-linter)
+        run: pnpm --filter @idata/integrity-linter test
+
+      # FAIL-CLOSED: pa pipeline exit-sensitive — exit 2 i CLI-së e kthen step-in
+      # (dhe job-in) të kuq. Raporti mbetet runner-local; ZERO artifact upload.
+      - name: Advisory scan (DOC-CORE + HISTORY-PRIV)
+        shell: bash
+        run: |
+          set -euo pipefail
+          node packages/integrity-linter/dist/cli.js \
+            --profiles DOC-CORE,HISTORY-PRIV \
+            --base "${{ github.event.pull_request.base.sha }}" \
+            --head "${{ github.event.pull_request.head.sha }}" \
+            --docs-ref "${{ github.event.pull_request.head.sha }}" \
+            --format text > linter-report.txt
+          cat linter-report.txt
+
+      # Summary lexohet edhe kur scan-i dështon (if: always()), por NUK e kthen
+      # job-in jeshil dhe NUK maskon exit code-in e step-it të scan-it.
+      - name: Summary (vetëm counts + safe locators — zero matched content, zero raw body)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## GOV-001 integrity-linter (advisory, jo-required)"
+            echo '```'
+            # Raporti është i sanitizuar në burim (reporter.ts): pa matched text, pa path privat.
+            if [ -s linter-report.txt ]; then
+              tail -n 200 linter-report.txt
+            else
+              echo "scan nuk prodhoi raport ose raporti është bosh (engine/config error — shih step-in e scan-it; job-i mbetet i kuq)"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

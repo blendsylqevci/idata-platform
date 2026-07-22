@@ -1,0 +1,21 @@
+{
+  "name": "@idata/integrity-linter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GOV-001 Documentation & Compliance Integrity Linter — advisory baseline (engine + DOC-CORE + HISTORY-PRIV). Git-objects-only; zero runtime deps; zero product runtime impact.",
+  "type": "module",
+  "bin": {
+    "idata-integrity-linter": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.6"
+  }
+}

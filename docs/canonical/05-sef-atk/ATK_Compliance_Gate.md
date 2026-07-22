@@ -95,7 +95,7 @@ Auditimi 09.07.2026 (PR #17): **278 kërkesa të nxjerra** me granularitet extra
 
 ## 11. Sekuenca e radhës (pa cikël)
 
-**Step A (ky PR docs)** → **Step B** PRE-Tier2 code hardening (T2-01..T2-10, `ATK-012`) → **Step C** official golden vectors + fake-HTTP/negative tests → **independent re-review** → **HUMAN GATE (autorizimi për thirrjen e PARË reale)** → **private `/ca/verify` PREFLIGHT** (wrapper evidence-safe i ndërtuar në Step B/C) → **vetëm pas suksesit të preflight-it vazhdon pjesa tjetër e Tier 2**. **Asnjë `/ca/verify`, `/ca/signcsr`, `/pos/*` ose `/citizen/*` para Human Gate.** Certifikimi/go-live = NO-GO më vete (§5). PoC-4b paralel.
+**Step A (docs — HISTORICAL, COMPLETED me PR #20)** → **Step B** PRE-Tier2 code hardening (T2-01..T2-10, `ATK-012`) → **Step C** official golden vectors + fake-HTTP/negative tests → **independent re-review** → **HUMAN GATE (autorizimi për thirrjen e PARË reale)** → **private `/ca/verify` PREFLIGHT** (wrapper evidence-safe i ndërtuar në Step B/C) → **vetëm pas suksesit të preflight-it vazhdon pjesa tjetër e Tier 2**. **Asnjë `/ca/verify`, `/ca/signcsr`, `/pos/*` ose `/citizen/*` para Human Gate.** Certifikimi/go-live = NO-GO më vete (§5). PoC-4b paralel.
 
 **Governance prerequisite jashtë zinxhirit SEF:** pas merge-it të PR #20 dhe **para hapjes së PR-së së parë Step B** përfundon **GOV-001** — linter engine + `DOC-CORE` + `HISTORY-PRIV` në **advisory mode** (`HG-LINTER-BUILD` approved; required-CI gated nga `HG-LINTER-REQUIRED`). Ky prerequisite **nuk është hallkë e zinxhirit invariant SEF** dhe nuk ecën njëkohësisht me PR-në e parë Step B.
 
