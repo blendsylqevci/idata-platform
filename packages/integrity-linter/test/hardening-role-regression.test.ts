@@ -12,11 +12,19 @@ import {
 } from "../src/profiles/doc-core.js";
 import {
   analyzeRoleDocument, classifyParenthetical, visibleRoleFragment,
-  FUNCTIONAL_ANNOTATION_WORDS,
+  FUNCTIONAL_ANNOTATION_WORDS, type RoleRegion,
 } from "../src/role-analysis.js";
 import { makeTempRepo } from "./helpers.js";
 
 const APPROVED = ["pronari", "pm", "group owner", "human gate", "aip"];
+
+/**
+ * Opener comment-i i PAMBYLLUR i ndërtuar në runtime — burimi i testeve nuk
+ * mban literal raw të pambyllur (rregulli i defuzimit të fixture-ve: skanimet
+ * per-commit të historisë mbi rreshtat e shtuar nuk duhet të thyhen nga vetë
+ * burimi i testit). Testi furnizon runtime inputin EKZAKT me opener real.
+ */
+const unclosedCommentOpen = (rest: string): string => ["<!", "--"].join("") + rest;
 
 function roleSurfaces(overrides: Partial<DocCoreSurfaces> = {}): DocCoreSurfaces {
   return {
@@ -37,6 +45,13 @@ function scanRoles(content: string) {
   repo.write("roles.md", content.endsWith("\n") ? content : content + "\n");
   repo.commitAll("role fixture");
   return runDocCore(new GitCliReader(repo.dir), "HEAD", roleSurfaces(), undefined);
+}
+
+function scanRolesWith(content: string, approved: string[]) {
+  const repo = makeTempRepo();
+  repo.write("roles.md", content.endsWith("\n") ? content : content + "\n");
+  repo.commitAll("role fixture");
+  return runDocCore(new GitCliReader(repo.dir), "HEAD", roleSurfaces({ approvedRolePhrases: approved }), undefined);
 }
 
 const byRule = (r: { findings: Array<{ ruleId: string }> }, ruleId: string) =>
@@ -132,7 +147,7 @@ describe("WA-001 — label recognition mbi tekstin e DUKSHËM (split markup)", (
   it("malformed tag/comment → fail-closed, kurrë silent", () => {
     expect(() => scanRoles("Own<span er: Sinteti"))
       .toThrow("INCOMPLETE_SCAN:MARKDOWN_HTML_MALFORMED");
-    expect(() => scanRoles("Own<!-- er: Sinteti"))
+    expect(() => scanRoles("Own" + unclosedCommentOpen(" er: Sinteti")))
       .toThrow("INCOMPLETE_SCAN:MARKDOWN_COMMENT_MALFORMED");
   });
 
@@ -290,5 +305,157 @@ describe("reprezentimi i tipizuar — vetitë strukturore", () => {
   it("fragmentet janë leniente (strict-i zbatohet nga analiza e dokumentit të plotë)", () => {
     expect(visibleRoleFragment("Own<b></b>er").visible).toBe("Owner");
     expect(visibleRoleFragment("tekst me < i lirë").visible).toBe("tekst me < i lirë");
+  });
+});
+
+/* ───────── KONTRATA ME KATËR GJENDJE + DISCOVERY FAIL-SAFE (correction pass) ───────── */
+
+function regionsOf(content: string): RoleRegion[] {
+  return analyzeRoleDocument(content.endsWith("\n") ? content : content + "\n", APPROVED).regions;
+}
+
+describe("fail-safe: bypass-et e konfirmuara → REVIEW/exit 2 me STATE + reason + locator", () => {
+  it("comment BRENDA label-it → REVIEW dhe body evidencë e TË NJËJTIT rajon", () => {
+    const rs = regionsOf("Own<!-- Sinteti Alfa -->er: Pronari");
+    expect(rs).toHaveLength(1);
+    expect(rs[0]).toMatchObject({
+      kind: "label", line: 1, state: "REVIEW", commentEvidence: true, regionId: "label:1:0",
+    });
+    expect(rs[0]?.reasons).toContain("ROLE_VOCAB"); // nga body — jo rajon i dytë
+    const r = scanRoles("Own<!-- Sinteti Alfa -->er: Pronari");
+    const vocab = byRule(r, "DC-ROLE-VOCAB");
+    expect(vocab).toHaveLength(1);
+    expect(vocab[0]?.locator).toBe("roles.md:1");
+    expect(JSON.stringify(r)).not.toContain("Sinteti");
+  });
+
+  it("entity decimal në label (discovery emeton rajon me STATE, jo thjesht finding)", () => {
+    const rs = regionsOf("Own&#101;r: Sinteti Alfa");
+    expect(rs).toHaveLength(1);
+    expect(rs[0]).toMatchObject({
+      kind: "label-candidate", line: 1, state: "REVIEW", regionId: "label-candidate:1:0",
+    });
+    expect(rs[0]?.reasons).toEqual(["ROLE_MARKUP"]);
+    const r = scanRoles("Own&#101;r: Sinteti Alfa");
+    const markup = byRule(r, "DC-ROLE-MARKUP");
+    expect(markup).toHaveLength(1);
+    expect(markup[0]?.locator).toBe("roles.md:1");
+    expect(JSON.stringify(r)).not.toContain("Sinteti");
+  });
+
+  it("entity hex + named colon + backslash-escape në label → REVIEW", () => {
+    for (const line of [
+      "Own&#x65;r: Sinteti Alfa",
+      "Owner&colon; Sinteti Alfa",
+      "Owner\\: Sinteti Alfa",
+    ]) {
+      const rs = regionsOf(line);
+      expect(rs.some((rg) => rg.state === "REVIEW" && rg.reasons.includes("ROLE_MARKUP"))).toBe(true);
+      const r = scanRoles(line);
+      expect(byRule(r, "DC-ROLE-MARKUP").length).toBeGreaterThanOrEqual(1);
+      expect(JSON.stringify(r)).not.toContain("Sinteti");
+    }
+  });
+
+  it("zero-width/format-char në label → REVIEW", () => {
+    const ZWSP = String.fromCharCode(0x200b);
+    const line = "Own" + ZWSP + "er: Sinteti Alfa";
+    const rs = regionsOf(line);
+    expect(rs.some((rg) => rg.state === "REVIEW" && rg.reasons.includes("ROLE_MARKUP"))).toBe(true);
+    const r = scanRoles(line);
+    expect(byRule(r, "DC-ROLE-MARKUP").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("parenthetical vetëm numra / format telefoni → REVIEW (identifikues i mundshëm)", () => {
+    const digits = ["123", "456", "789"].join("");
+    const phone = "+" + ["383", "44", "123", "456"].join("");
+    expect(classifyParenthetical(digits, APPROVED))
+      .toEqual({ disposition: "AMBIGUOUS_REVIEW", residualTerms: 1 });
+    expect(classifyParenthetical(phone, APPROVED))
+      .toEqual({ disposition: "AMBIGUOUS_REVIEW", residualTerms: 1 });
+    const r = scanRoles(`Owner: Pronari (${digits})`);
+    const ident = byRule(r, "DC-ROLE-IDENTITY");
+    expect(ident).toHaveLength(1);
+    expect(ident[0]?.locator).toBe("roles.md:1");
+    const rp = scanRoles(`Owner: Pronari (${phone})`);
+    expect(byRule(rp, "DC-ROLE-IDENTITY")).toHaveLength(1);
+    // placeholder-i bosh mbetet i barasvlershëm me bosh (inverse)
+    expect(classifyParenthetical("—", APPROVED))
+      .toEqual({ disposition: "APPROVED_ANNOTATION", residualTerms: 0 });
+  });
+
+  it("TË GJITHA kolonat role-bearing skanohen — region-id i veçantë secila", () => {
+    const content = [
+      "| Owner | Approver | Human Gate |",
+      "|---|---|---|",
+      "| Sinteti Alfa | Sinteti Beta | Sinteti Gama |",
+    ].join("\n");
+    const rs = regionsOf(content);
+    const cells = rs.filter((rg) => rg.kind === "table-cell");
+    expect(cells.map((rg) => rg.regionId).sort())
+      .toEqual(["table-cell:3:0", "table-cell:3:1", "table-cell:3:2"]);
+    expect(cells.every((rg) => rg.state === "REVIEW")).toBe(true);
+    const r = scanRoles(content);
+    expect(byRule(r, "DC-ROLE-VOCAB")).toHaveLength(3);
+    expect(new Set(rs.map((rg) => rg.regionId)).size).toBe(rs.length); // dedup deterministik
+  });
+});
+
+describe("fail-safe: katër gjendjet", () => {
+  it("INACTIVE: label dhe comment brenda fenced code → zero finding, gjendje eksplicite", () => {
+    const content = ["```", "Owner: Sinteti Alfa", "<!-- Owner: Sinteti Beta -->", "```"].join("\n");
+    const rs = regionsOf(content);
+    expect(rs.length).toBeGreaterThanOrEqual(1);
+    expect(rs.every((rg) => rg.state === "INACTIVE")).toBe(true);
+    const r = scanRoles(content);
+    expect(r.findings).toHaveLength(0);
+  });
+
+  it("CLEAN: vetëm sintaksa kanonike + vlera e allowlisted; gjendja eksplicite", () => {
+    const rs = regionsOf("Owner: Pronari");
+    expect(rs).toHaveLength(1);
+    expect(rs[0]).toMatchObject({ kind: "label", state: "CLEAN", reasons: [] });
+    expect(scanRoles("Owner: Pronari").findings).toHaveLength(0);
+  });
+
+  it("INCOMPLETE_SCAN: markup/comment i dëmtuar → exit 2, kurrë silent", () => {
+    expect(() => scanRoles("Own<span er: Sinteti"))
+      .toThrow("INCOMPLETE_SCAN:MARKDOWN_HTML_MALFORMED");
+    expect(() => scanRoles("Own" + unclosedCommentOpen(" er: Sinteti")))
+      .toThrow("INCOMPLETE_SCAN:MARKDOWN_COMMENT_MALFORMED");
+  });
+
+  it("inverse: prozë jo-role-bearing me entity/escape → PA rajon REVIEW (jo REVIEW masiv)", () => {
+    const content = "Teksti ka &amp; dhe \\: por asnjë etiketë roli këtu.";
+    expect(regionsOf(content).filter((rg) => rg.state === "REVIEW")).toHaveLength(0);
+    expect(scanRoles(content).findings).toHaveLength(0);
+  });
+
+  it("invarianti: çdo rajon ka saktësisht një gjendje nga kontrata dhe id unik", () => {
+    const content = [
+      "Owner: Pronari",
+      "Own&#101;r: Sinteti Alfa",
+      "```",
+      "Owner: Sinteti Beta",
+      "```",
+      "| Kush | Afati |",
+      "|---|---|",
+      "| Sinteti Gama | — |",
+    ].join("\n");
+    const rs = regionsOf(content);
+    const states = new Set(rs.map((rg) => rg.state));
+    for (const st of states) expect(["INACTIVE", "CLEAN", "REVIEW"]).toContain(st);
+    expect(new Set(rs.map((rg) => rg.regionId)).size).toBe(rs.length);
+    expect(rs.some((rg) => rg.state === "CLEAN")).toBe(true);
+    expect(rs.some((rg) => rg.state === "REVIEW")).toBe(true);
+    expect(rs.some((rg) => rg.state === "INACTIVE")).toBe(true);
+  });
+
+  it("precision: fraza e aprovuar e mbyllur me pikë trajtohet konsistent (jo split)", () => {
+    const withLlc = [...APPROVED, "icode l.l.c"];
+    const r1 = scanRolesWith("Owner: iCode L.L.C.", withLlc);
+    const r2 = scanRolesWith("Owner: iCode L.L.C", withLlc);
+    expect(byRule(r1, "DC-ROLE-VOCAB")).toHaveLength(0);
+    expect(byRule(r2, "DC-ROLE-VOCAB")).toHaveLength(0);
   });
 });
