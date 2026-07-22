@@ -69,7 +69,18 @@ security contract-it dhe nuk mbështetet vetëm te label-regex pas parsing-ut:
 një skeleton konservator detection-only (entity dec/hex, set i vogël named,
 CommonMark backslash-escape, format-chars/konfuzabla e kuruara) zbulon
 label/header të maskuar → minimumi REVIEW, pa dekodim semantik; "jo rajon
-roli" në heshtje vlen vetëm kur analiza e kufizuar e provon. TË GJITHA
+roli" në heshtje vlen vetëm kur analiza e kufizuar e provon.
+**Aktiviteti fence/comment (correction pass cross-boundary, 22.07.2026):**
+NJË state machine i vetëm SIMETRIK mbi raw source me gjendjet
+**NEUTRAL · IN_FENCE · IN_COMMENT** — në IN_FENCE marker-ët e komentit janë
+LITERALE, në IN_COMMENT marker-ët e fence-s janë LITERALE; tranzicionet
+ndodhin vetëm nga gjendja aktive përkatëse (rregullat e fence-s pasqyrojnë
+kontratën ekzistuese CommonMark të linter-it). INACTIVE arrihet VETËM brenda
+një gjendjeje joaktive të qartë; **fence e pambyllur në EOF është ambige →
+përmbajtja role-bearing brenda saj merr minimumi REVIEW, kurrë heshtje**;
+comment aktiv i pambyllur → exit 2; comment brenda fence dhe fence brenda
+comment-i janë literale. Projeksioni aktiv i authority/chain dhe semantika e
+HISTORY-PRIV të paprekura nga ky pass. TË GJITHA
 kolonat role-bearing skanohen me region-id deterministik pa tekst sensitiv;
 comment-et pjesëmarrëse në formimin e label-it janë evidencë e të njëjtit
 rajon; comment brenda code = INACTIVE; fraza e aprovuar e mbyllur me pikë
