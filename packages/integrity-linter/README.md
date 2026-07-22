@@ -36,6 +36,25 @@ DOC-CORE, HISTORY-PRIV dhe PR body; vetëm prefiksi/qeliza `Status` ekzakte jan�
 row-wide. Offset-et e inline-code ruhen si UTF-16 edhe pranë karaktereve astrale.
 Statusi mbetet `IMPLEMENTED_ADVISORY` për 2/16 profile — jo required-CI.
 
+**Correction pass (22.07.2026, typed role analyzer — WA-001/WA-002 + siblings):**
+rregullat e rolit (bold-label, heading, list-item, task-list, table-header/cell,
+comment-prefix/body) përdorin një reprezentim të VETËM të tipizuar
+(`src/role-analysis.ts`), refactor mbi state machines ekzistuese: (1) njohja e
+label/header bëhet mbi tekstin e DUKSHËM të renderuar — markup zero-content
+(p.sh. `Own<span></span>er`, comment brenda fjalës) hiqet PA krijuar word
+boundary artificial, ndërsa markup ndarës (`br`/`td`/`li`/…) nuk bashkon fjalë
+që renderer-i s'i bashkon; (2) markup review NUK varet nga suksesi i
+label-regex-it — rreshti markup-bearing që formon label vetëm nën kolapsim
+total merr `DC-ROLE-MARKUP` REVIEW; (3) HTML comments mbeten JO-AKTIVE për
+governance semantics dhe skanohen veçmas si privacy evidence raw; (4) çdo
+parenthetical i një vlere role-bearing merr disposition EKSPLICIT
+(`APPROVED_ANNOTATION` / `IDENTITY_REVIEW` / `AMBIGUOUS_REVIEW`): lidhëzat
+funksionale ("dhe"/"ose") nuk i ndajnë termat residualë (≥2 terma → REVIEW edhe
+me lidhëz), term i vetëm i paaprovuar → REVIEW — e paqarta kurrë silent
+approval; presja/`&` të pandryshuara; allowlist-et e pandryshuara; malformed
+markup mbetet fail-closed. Statusi mbetet `IMPLEMENTED_ADVISORY` për 2/16
+profile — jo required-CI.
+
 ## Kufij të fortë
 
 - Vetëm **Git objects të tracked** (`show/diff-tree/rev-list/merge-base/cat-file/ls-tree`);
