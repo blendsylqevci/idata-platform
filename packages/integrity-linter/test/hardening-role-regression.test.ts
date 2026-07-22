@@ -459,3 +459,117 @@ describe("fail-safe: katër gjendjet", () => {
     expect(byRule(r2, "DC-ROLE-VOCAB")).toHaveLength(0);
   });
 });
+
+/* ───────── CROSS-BOUNDARY FENCE/COMMENT — state machine i vetëm simetrik ───────── */
+
+describe("cross-boundary fail-safe: INACTIVE s'arrihet me hile", () => {
+  it("EXPLOIT fence→comment: opener komenti brenda fence s'e gëlltit label-in pas fence-s (bold + plain)", () => {
+    for (const label of ["**Owner:** Sinteti Alfa", "Owner: Sinteti Alfa"]) {
+      const content = ["```", "kod " + unclosedCommentOpen(" brenda fence"), "```", label, "tekst -->"].join("\n");
+      const rs = regionsOf(content);
+      const labelRegion = rs.find((rg) => rg.line === 4);
+      expect(labelRegion).toMatchObject({ kind: "label", state: "REVIEW" });
+      expect(labelRegion?.reasons).toContain("ROLE_VOCAB");
+      const r = scanRoles(content);
+      const vocab = byRule(r, "DC-ROLE-VOCAB");
+      expect(vocab).toHaveLength(1);
+      expect(vocab[0]?.locator).toBe("roles.md:4");
+      expect(JSON.stringify(r)).not.toContain("Sinteti");
+    }
+  });
+
+  it("EXPLOIT fence→comment mbi TABELË: header + cell skanohen pas fence-s", () => {
+    const content = ["```", "x " + unclosedCommentOpen(""), "```",
+      "| Owner | Status |", "|---|---|", "| Sinteti Alfa | active |", "shënim -->"].join("\n");
+    const rs = regionsOf(content);
+    expect(rs.find((rg) => rg.regionId === "table-cell:6:0"))
+      .toMatchObject({ kind: "table-cell", state: "REVIEW", line: 6 });
+    const r = scanRoles(content);
+    const vocab = byRule(r, "DC-ROLE-VOCAB");
+    expect(vocab).toHaveLength(1);
+    expect(vocab[0]?.locator).toBe("roles.md:6");
+  });
+
+  it("drejtimi i kundërt comment→fence: ``` brenda komenti është literal — label-i pas tij NDEZ", () => {
+    const content = [unclosedCommentOpen(" koment"), "```", "-->", "**Owner:** Sinteti Alfa"].join("\n");
+    const rs = regionsOf(content);
+    const labelRegion = rs.find((rg) => rg.line === 4);
+    expect(labelRegion).toMatchObject({ kind: "label", state: "REVIEW" });
+    expect(labelRegion?.reasons).toContain("ROLE_VOCAB");
+    expect(rs.filter((rg) => rg.state === "INACTIVE")).toHaveLength(0);
+    const r = scanRoles(content);
+    expect(byRule(r, "DC-ROLE-VOCAB")[0]?.locator).toBe("roles.md:4");
+  });
+
+  it("comment TËRËSISHT brenda fence → marker literal, komenti joaktiv; teksti pas fence-s aktiv", () => {
+    const content = ["```", "<!-- Owner: Sinteti Beta -->", "```", "**Owner:** Sinteti Alfa"].join("\n");
+    const rs = regionsOf(content);
+    expect(rs.find((rg) => rg.line === 2)?.state).toBe("INACTIVE");
+    expect(rs.find((rg) => rg.line === 4)).toMatchObject({ kind: "label", state: "REVIEW" });
+    expect(rs.filter((rg) => rg.kind === "comment")).toHaveLength(0);
+    const r = scanRoles(content);
+    expect(byRule(r, "DC-ROLE-VOCAB")).toHaveLength(1);
+    expect(byRule(r, "DC-ROLE-VOCAB")[0]?.locator).toBe("roles.md:4");
+    expect(JSON.stringify(r)).not.toContain("Sinteti");
+  });
+
+  it("fence TËRËSISHT brenda comment-i → fence-marker literal; label-i pas komentit NDEZ", () => {
+    const content = [unclosedCommentOpen(" a"), "```", "b", "```", "-->", "**Owner:** Sinteti Alfa"].join("\n");
+    const rs = regionsOf(content);
+    expect(rs.find((rg) => rg.line === 6)).toMatchObject({ kind: "label", state: "REVIEW" });
+    const r = scanRoles(content);
+    const vocab = byRule(r, "DC-ROLE-VOCAB");
+    expect(vocab).toHaveLength(1);
+    expect(vocab[0]?.locator).toBe("roles.md:6");
+  });
+
+  it("tildes dhe gjatësi të ndryshme fence — i njëjti exploit mbyllet", () => {
+    for (const [open, close] of [["~~~~", "~~~~~"], ["````", "````"]] as const) {
+      const content = [open, "kod " + unclosedCommentOpen(""), close, "Owner: Sinteti Alfa", "-->"].join("\n");
+      const rs = regionsOf(content);
+      expect(rs.find((rg) => rg.line === 4)).toMatchObject({ kind: "label", state: "REVIEW" });
+      expect(byRule(scanRoles(content), "DC-ROLE-VOCAB")[0]?.locator).toBe("roles.md:4");
+    }
+  });
+
+  it("fence e PAMBYLLUR në EOF me përmbajtje role-bearing → REVIEW, JO INACTIVE i heshtur", () => {
+    const rs1 = regionsOf(["```", "**Owner:** Sinteti Alfa"].join("\n"));
+    expect(rs1.find((rg) => rg.line === 2))
+      .toMatchObject({ kind: "label-candidate", state: "REVIEW", reasons: ["ROLE_MARKUP"] });
+    const r1 = scanRoles(["```", "**Owner:** Sinteti Alfa"].join("\n"));
+    expect(byRule(r1, "DC-ROLE-MARKUP")[0]?.locator).toBe("roles.md:2");
+    const rs2 = regionsOf(["```", "| Owner | Status |"].join("\n"));
+    expect(rs2.find((rg) => rg.line === 2)?.state).toBe("REVIEW");
+    // pa përmbajtje role-bearing → asgjë (jo REVIEW masiv)
+    const r3 = scanRoles(["```", "vetëm kod i thjeshtë"].join("\n"));
+    expect(r3.findings).toHaveLength(0);
+  });
+
+  it("comment aktiv i pambyllur në NEUTRAL → exit 2; i njëjti marker BRENDA fence → literal, pa exit 2", () => {
+    expect(() => scanRoles([unclosedCommentOpen(" i hapur"), "Owner: Sinteti Alfa"].join("\n")))
+      .toThrow("INCOMPLETE_SCAN:MARKDOWN_COMMENT_MALFORMED");
+    const content = ["```", "kod " + unclosedCommentOpen(""), "```", "Owner: Pronari"].join("\n");
+    const rs = regionsOf(content);
+    expect(rs.find((rg) => rg.line === 4)).toMatchObject({ kind: "label", state: "CLEAN" });
+    expect(scanRoles(content).findings).toHaveLength(0);
+  });
+
+  it("orphan '-->' në NEUTRAL është literal — s'krijon as koment, as heshtje", () => {
+    const content = ["-->", "Owner: Pronari"].join("\n");
+    const rs = regionsOf(content);
+    expect(rs.find((rg) => rg.line === 2)).toMatchObject({ kind: "label", state: "CLEAN" });
+    expect(scanRoles(content).findings).toHaveLength(0);
+  });
+
+  it("POSITIVE control: i njëjti label pa fence/comment ndez njësoj", () => {
+    const r = scanRoles("**Owner:** Sinteti Alfa");
+    expect(byRule(r, "DC-ROLE-VOCAB")).toHaveLength(1);
+    expect(byRule(r, "DC-ROLE-VOCAB")[0]?.locator).toBe("roles.md:1");
+  });
+
+  it("INVERSE: comment/fence legjitim me përmbajtje jo-role-bearing → zero REVIEW", () => {
+    const content = ["<!-- koment legjitim pa role -->", "```", "kod normal", "```", "prozë e lirë"].join("\n");
+    expect(regionsOf(content).filter((rg) => rg.state === "REVIEW")).toHaveLength(0);
+    expect(scanRoles(content).findings).toHaveLength(0);
+  });
+});
