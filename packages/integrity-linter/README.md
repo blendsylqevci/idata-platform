@@ -55,6 +55,29 @@ approval; presja/`&` të pandryshuara; allowlist-et e pandryshuara; malformed
 markup mbetet fail-closed. Statusi mbetet `IMPLEMENTED_ADVISORY` për 2/16
 profile — jo required-CI.
 
+**Correction pass fail-safe (22.07.2026 — kontrata me katër gjendje +
+discovery):** analiza e roleve është **restricted canonical syntax + fail-safe
+discovery** — JO renderer i plotë HTML/Markdown dhe JO dekoder universal
+sintaksash. Çdo rajon role-bearing merr saktësisht NJË gjendje:
+`INACTIVE` (fenced/indented code — s'skanohet si role evidence) ·
+`CLEAN` (vetëm sintaksë kanonike e kuptuar plotësisht DHE rol/vlerë e
+allowlisted — e vetmja pa finding) · `REVIEW` (entity/escape/markup/
+format-char/comment evidence/parenthetical jo-i-allowlisted përfshirë
+vetëm-numra e formate telefoni/sintaksë e pasigurt — finding i redaktuar) ·
+`INCOMPLETE_SCAN` (markup i dëmtuar → exit 2). Discovery është vetë pjesë e
+security contract-it dhe nuk mbështetet vetëm te label-regex pas parsing-ut:
+një skeleton konservator detection-only (entity dec/hex, set i vogël named,
+CommonMark backslash-escape, format-chars/konfuzabla e kuruara) zbulon
+label/header të maskuar → minimumi REVIEW, pa dekodim semantik; "jo rajon
+roli" në heshtje vlen vetëm kur analiza e kufizuar e provon. TË GJITHA
+kolonat role-bearing skanohen me region-id deterministik pa tekst sensitiv;
+comment-et pjesëmarrëse në formimin e label-it janë evidencë e të njëjtit
+rajon; comment brenda code = INACTIVE; fraza e aprovuar e mbyllur me pikë
+trajtohet konsistent. `role-analysis` = autoriteti i vetëm; `doc-core`
+konsumon vetëm rajonet e tipizuara. Gjithçka jashtë sintaksës kanonike të
+kuptuar → REVIEW ose INCOMPLETE_SCAN; **human review mbetet backstop**.
+Statusi mbetet `IMPLEMENTED_ADVISORY` për 2/16 profile — jo required-CI.
+
 ## Kufij të fortë
 
 - Vetëm **Git objects të tracked** (`show/diff-tree/rev-list/merge-base/cat-file/ls-tree`);
