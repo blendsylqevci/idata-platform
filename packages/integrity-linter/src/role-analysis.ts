@@ -33,7 +33,7 @@
 
 import { ScanError } from "./types.js";
 import {
-  fencedCodeLineMask, isSeparatorRow, isTableRowCandidate, parseTableRow, tableContextAt,
+  containerOf, fencedCodeLineMask, isSeparatorRow, isTableRowCandidate, parseTableRow, tableContextAt,
 } from "./markdown-table.js";
 import { detectionSkeleton } from "./machine-token.js";
 
@@ -232,38 +232,147 @@ function collapseHtmlTags(
 }
 
 /**
- * Kolapsim i comments për kanalin e DUKSHËM: comment një-rreshtor → zero
- * tekst; shumë-rreshtor → blank line-preserving (kufi i dokumentuar).
- * Unclosed → fail-closed.
+ * STATE MACHINE I VETËM (SIMETRIK) i aktivitetit fence/comment mbi RAW source
+ * — correction pass cross-boundary. Gjendjet: NEUTRAL · IN_FENCE · IN_COMMENT.
+ *  - Në IN_FENCE: `<!` + `--` / `--` + `>` janë LITERALE (s'hapin/mbyllin koment);
+ *    rregullat e opener/closer-it pasqyrojnë kontratën ekzistuese të
+ *    `fencedCodeLineMask` (backtick/tilde ≥3, indent total ≤3, info-string i
+ *    backtick-fence pa backtick, closer i njëjti karakter/len ≥/bare/depth i
+ *    njëjtë, dalja e kontejnerit e mbyll).
+ *  - Në IN_COMMENT: fence markers janë LITERALE; mbyllja vetëm me `-->`;
+ *    comment aktiv i pambyllur deri në EOF → fail-closed (exit 2).
+ *  - Tranzicionet ndodhin VETËM nga gjendja aktive përkatëse — një comment/
+ *    fence i mirëformuar s'mund të çaktivizojë tekst JASHTË tij.
+ *  - Fence e PAMBYLLUR në EOF shënohet si AMBIGE — thirrësi e kthen përmbajtjen
+ *    role-bearing brenda saj në REVIEW, kurrë në INACTIVE të heshtur.
+ * Comment-et një-rreshtore hiqen zero-width nga kanali i dukshëm; pjesët
+ * shumë-rreshtore blankohen line-preserving (kontrata ekzistuese e locator-ëve).
+ * Kanali `spaced` (koment → NJË hapësirë) shërben vetëm për heuristikën e
+ * formimit të label-it.
  */
-function collapseCommentsForVisible(
-  text: string,
-  opts: { strict: boolean },
-): { visible: string; markupLines: Set<number> } {
-  let out = "";
-  let at = 0;
-  const markupLines = new Set<number>();
-  while (at < text.length) {
-    const open = text.indexOf("<!--", at);
-    if (open < 0) {
-      out += text.slice(at);
-      break;
+interface RoleActivityLine {
+  /** Brenda një fence (opener/content/closer) — INACTIVE kur fence mbyllet. */
+  fence: boolean;
+  /** Pjesë e një fence të PAMBYLLUR në EOF — ambige, kurrë INACTIVE i heshtur. */
+  unclosedFence: boolean;
+  /** Komentet reale të hequra (zero-width / blank për pjesët shumë-rreshtore). */
+  visible: string;
+  /** Si `visible`, por komenti një-rreshtor → një hapësirë (formation heuristic). */
+  spaced: string;
+  hadComment: boolean;
+}
+
+interface RoleActivityScan {
+  lines: RoleActivityLine[];
+  /** VETËM komentet e hapura në NEUTRAL — markers brenda fence janë literale. */
+  comments: Array<{ body: string; line: number; prefix: string }>;
+}
+
+function scanRoleActivity(neutralLines: string[]): RoleActivityScan {
+  const out: RoleActivityLine[] = [];
+  const comments: Array<{ body: string; line: number; prefix: string }> = [];
+  let fence: { depth: number; ch: string; len: number; openerIdx: number } | undefined;
+  let comment: { startLine: number; prefix: string; body: string } | undefined;
+
+  // Skanon një rresht (ose bishtin e tij pas mbylljes së një komenti) në
+  // NEUTRAL: komentet një-rreshtore mblidhen; opener i pambyllur kalon në
+  // IN_COMMENT dhe blankon pjesën e mbetur të rreshtit.
+  const scanNeutralText = (line: string, lineNo: number, from: number): { vis: string; spaced: string; had: boolean } => {
+    let vis = "";
+    let spaced = "";
+    let had = false;
+    let at = from;
+    for (;;) {
+      const open = line.indexOf("<!--", at);
+      if (open < 0) {
+        vis += line.slice(at);
+        spaced += line.slice(at);
+        break;
+      }
+      had = true;
+      vis += line.slice(at, open);
+      spaced += line.slice(at, open);
+      const close = line.indexOf("-->", open + 4);
+      if (close < 0) {
+        comment = { startLine: lineNo, prefix: line.slice(0, open), body: line.slice(open + 4) + "\n" };
+        vis += " ".repeat(line.length - open);
+        spaced += " ".repeat(line.length - open);
+        break;
+      }
+      comments.push({ body: line.slice(open + 4, close), line: lineNo, prefix: line.slice(0, open) });
+      spaced += " ";
+      at = close + 3;
     }
-    out += text.slice(at, open);
-    const close = text.indexOf("-->", open + 4);
-    if (close < 0) {
-      if (opts.strict) throw new ScanError("INCOMPLETE_SCAN:MARKDOWN_COMMENT_MALFORMED");
-      out += text.slice(open);
-      break;
+    return { vis, spaced, had };
+  };
+
+  for (let i = 0; i < neutralLines.length; i++) {
+    const line = neutralLines[i] ?? "";
+
+    if (comment !== undefined) {
+      // IN_COMMENT: fence markers literale; vetëm `-->` mbyll.
+      const close = line.indexOf("-->");
+      if (close < 0) {
+        comment.body += line + "\n";
+        out.push({ fence: false, unclosedFence: false, visible: blankPreservingNewlines(line), spaced: blankPreservingNewlines(line), hadComment: true });
+        continue;
+      }
+      comment.body += line.slice(0, close);
+      comments.push({ body: comment.body, line: comment.startLine, prefix: comment.prefix });
+      comment = undefined;
+      const tail = scanNeutralText(line, i + 1, close + 3);
+      out.push({
+        fence: false, unclosedFence: false,
+        visible: " ".repeat(close + 3) + tail.vis,
+        spaced: " ".repeat(close + 3) + tail.spaced,
+        hadComment: true,
+      });
+      continue;
     }
-    const segment = text.slice(open, close + 3);
-    const startLine = text.slice(0, open).split("\n").length;
-    const segmentLines = segment.split("\n").length;
-    for (let l = startLine; l < startLine + segmentLines; l++) markupLines.add(l);
-    out += segment.includes("\n") ? blankPreservingNewlines(segment) : "";
-    at = close + 3;
+
+    if (fence !== undefined) {
+      const { depth, content } = containerOf(line);
+      if (depth < fence.depth) {
+        fence = undefined; // dalje kontejneri — rreshti riprocesohet si NEUTRAL
+      } else {
+        const m = /^( *)(`{3,}|~{3,})/.exec(content);
+        const isCloser = m?.[1] !== undefined && m[2] !== undefined
+          && (m[1].length + containerOf(line).indent) <= 3
+          && (m[2][0] as string) === fence.ch && m[2].length >= fence.len
+          && content.trim() === m[2] && depth === fence.depth;
+        out.push({ fence: true, unclosedFence: false, visible: "", spaced: "", hadComment: false });
+        if (isCloser) fence = undefined;
+        continue;
+      }
+    }
+
+    // NEUTRAL: fillimisht opener i fence-s (konstrukt i fillimrreshtit).
+    const { depth, content, indent } = containerOf(line);
+    const m = /^( *)(`{3,}|~{3,})/.exec(content);
+    if (m?.[1] !== undefined && m[2] !== undefined && indent + m[1].length <= 3) {
+      const ch = m[2][0] as string;
+      const info = content.slice(m[1].length + m[2].length);
+      if (!(ch === "`" && info.includes("`"))) {
+        fence = { depth, ch, len: m[2].length, openerIdx: i };
+        out.push({ fence: true, unclosedFence: false, visible: "", spaced: "", hadComment: false });
+        continue;
+      }
+    }
+    const p = scanNeutralText(line, i + 1, 0);
+    out.push({ fence: false, unclosedFence: false, visible: p.vis, spaced: p.spaced, hadComment: p.had });
   }
-  return { visible: out, markupLines };
+
+  if (comment !== undefined) {
+    // comment aktiv i pambyllur deri në EOF → fail-closed, kurrë silent.
+    throw new ScanError("INCOMPLETE_SCAN:MARKDOWN_COMMENT_MALFORMED");
+  }
+  if (fence !== undefined) {
+    for (let j = fence.openerIdx; j < out.length; j++) {
+      const l = out[j];
+      if (l !== undefined) l.unclosedFence = true;
+    }
+  }
+  return { lines: out, comments };
 }
 
 /** Nxjerrja e comments me lokacion mbi tekstin RAW. */
@@ -546,31 +655,31 @@ function valueReasons(value: string, approvedPhrases: string[]): RoleReasonCode[
  */
 export function analyzeRoleDocument(text: string, approvedPhrases: string[] = []): RoleDocumentAnalysis {
   const rawLines = text.split("\n");
-  const comments = htmlCommentsWithLocation(text);
-  const inlineNeutral = rawLines.map(projectInlineCodeSpans).join("\n");
-  const commentsCollapsed = collapseCommentsForVisible(inlineNeutral, { strict: true });
-  const collapsedLines = commentsCollapsed.visible.split("\n");
-  const fenced = fencedCodeLineMask(collapsedLines);
-  const views: RoleLineView[] = collapsedLines.map((raw, idx) => {
-    const markupFromComment = commentsCollapsed.markupLines.has(idx + 1);
+  const neutralLines = rawLines.map(projectInlineCodeSpans);
+  // STATE MACHINE I VETËM fence/comment mbi RAW (simetrik, fail-safe):
+  // markers në gjendjen tjetër janë LITERALE; comment i pambyllur → exit 2;
+  // fence e pambyllur në EOF → ambige (REVIEW mbi role-bearing, jo INACTIVE).
+  const activity = scanRoleActivity(neutralLines);
+  const comments = activity.comments;
+  const views: RoleLineView[] = rawLines.map((_raw, idx) => {
+    const act = activity.lines[idx] ?? { fence: false, unclosedFence: false, visible: "", spaced: "", hadComment: false };
     // Indent-i i indented-code gjykohet mbi rreshtin RAW (semantika CommonMark)
-    // — blankimi line-preserving i një comment-i shumë-rreshtor nuk duhet të
-    // fabrikojë "code" nga hapësirat e veta.
-    if (fenced[idx] === true || /^(?: {4}|\t)/.test(rawLines[idx] ?? "")) {
+    // — blankimi i comment-eve nuk duhet të fabrikojë "code" nga hapësirat.
+    if (act.fence || /^(?: {4}|\t)/.test(rawLines[idx] ?? "")) {
       return { visible: "", flattened: "", markupBearing: false, inactive: true };
     }
-    const rendered = collapseHtmlTags(raw, { strict: true, separators: "space" });
-    const flattened = collapseHtmlTags(raw, { strict: false, separators: "none" });
+    const rendered = collapseHtmlTags(act.visible, { strict: true, separators: "space" });
+    const flattened = collapseHtmlTags(act.visible, { strict: false, separators: "none" });
     return {
       visible: rendered.visible,
       flattened: flattened.visible,
-      markupBearing: rendered.markupBearing || markupFromComment,
+      markupBearing: rendered.markupBearing || act.hadComment,
       inactive: false,
     };
   });
-
-  const activeText = projectActiveMarkdown(text);
-  const activeLines = activeText.split("\n");
+  // Snapshot për strukturën e tabelave — i qeverisur nga i NJËJTI state
+  // machine (rreshtat joaktivë bosh); zero vendim paralel fence/comment.
+  const tableSnapshot = views.map((v) => (v.inactive ? "" : v.visible)).join("\n");
   const regions: RoleRegion[] = [];
   const seenRegionIds = new Set<string>();
   const pushRegion = (region: RoleRegion): void => {
@@ -584,12 +693,26 @@ export function analyzeRoleDocument(text: string, approvedPhrases: string[] = []
   for (let i = 0; i < rawLines.length; i++) {
     const raw = rawLines[i] ?? "";
     const view = views[i] ?? { visible: "", flattened: "", markupBearing: false, inactive: true };
-    const activeLine = activeLines[i] ?? "";
+    const act = activity.lines[i] ?? { fence: false, unclosedFence: false, visible: "", spaced: "", hadComment: false };
 
     if (view.inactive) {
-      // INACTIVE: code nuk skanohet si role evidence; rajoni emetohet me
-      // gjendje eksplicite kur ka formë label-i — kurrë finding.
-      if (ROLE_LABEL_RE.test(projectRoleKey(raw))) {
+      const labelLike = ROLE_LABEL_RE.test(projectRoleKey(raw));
+      const roleHeaderRowLike = isTableRowCandidate(raw)
+        && parseTableRow(raw).cells.some((c) => ROLE_HEADER_RE.test(projectRoleKey(c)));
+      if (act.unclosedFence && (labelLike || roleHeaderRowLike)) {
+        // RREGULLI FAIL-SAFE: fence e PAMBYLLUR në EOF është ambige —
+        // përmbajtja role-bearing brenda saj NUK bëhet INACTIVE e heshtur;
+        // minimumi REVIEW për shqyrtim njerëzor.
+        pushRegion({
+          regionId: `label-candidate:${i + 1}:0`, kind: "label-candidate", line: i + 1,
+          state: "REVIEW", reasons: ["ROLE_MARKUP"], commentEvidence: false,
+        });
+        continue;
+      }
+      // INACTIVE: vetëm brenda gjendjeje joaktive të QARTË (fence e mbyllur /
+      // indented code); rajoni emetohet me gjendje eksplicite kur ka formë
+      // label-i — kurrë finding.
+      if (labelLike) {
         pushRegion({
           regionId: `label:${i + 1}:0`, kind: "label", line: i + 1,
           state: "INACTIVE", reasons: [], commentEvidence: false,
@@ -598,9 +721,10 @@ export function analyzeRoleDocument(text: string, approvedPhrases: string[] = []
       continue;
     }
 
-    // (a) tabelat: TË GJITHA kolonat role-bearing (jo vetëm e para).
-    if (isTableRowCandidate(activeLine) && !isSeparatorRow(activeLine)) {
-      const tctx = tableContextAt(activeText, i + 1);
+    // (a) tabelat: TË GJITHA kolonat role-bearing (jo vetëm e para) — struktura
+    // nga snapshot-i i qeverisur prej state machine-it.
+    if (isTableRowCandidate(view.visible) && !isSeparatorRow(view.visible)) {
+      const tctx = tableContextAt(tableSnapshot, i + 1);
       const rawCtx = tableContextAt(text, i + 1);
       if (tctx !== undefined) {
         const roleCols: Array<{ col: number; uncertain: boolean }> = [];
@@ -619,7 +743,7 @@ export function analyzeRoleDocument(text: string, approvedPhrases: string[] = []
           }
         }
         if (roleCols.length > 0) {
-          const firstDataRow = isSeparatorRow(activeLines[i - 1] ?? "");
+          const firstDataRow = isSeparatorRow(views[i - 1]?.visible ?? "");
           const row = parseTableRow(raw);
           for (const { col, uncertain } of roleCols) {
             if (firstDataRow) {
@@ -653,10 +777,11 @@ export function analyzeRoleDocument(text: string, approvedPhrases: string[] = []
       if (projectRoleMarkup(raw).unexpectedMarkup) reasons.push("ROLE_MARKUP");
       reasons.push(...valueReasons(lm[2], approvedPhrases));
       // comment-et që MORËN PJESË në formimin e label-it (label i dukshëm
-      // ekziston, por projeksioni aktiv comment-blanked s'e njeh) → bodies
-      // janë evidencë raw e TË NJËJTIT rajon, kurrë governance aktive.
+      // ekziston, por me komentet → hapësirë + tags → hapësirë s'njihet) →
+      // bodies janë evidencë raw e TË NJËJTIT rajon, kurrë governance aktive.
       let commentEvidence = false;
-      if (!ROLE_LABEL_RE.test(projectRoleKey(activeLine))) {
+      const spacedKey = projectRoleKey(stripHtmlTagsPreservingLength(act.spaced));
+      if (!ROLE_LABEL_RE.test(spacedKey)) {
         for (const cm of comments) {
           if (cm.line !== i + 1) continue;
           commentEvidence = true;
