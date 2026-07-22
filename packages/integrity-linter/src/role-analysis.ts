@@ -346,7 +346,19 @@ function scanRoleActivity(neutralLines: string[]): RoleActivityScan {
       }
     }
 
-    // NEUTRAL: fillimisht opener i fence-s (konstrukt i fillimrreshtit).
+    // NEUTRAL: INDENTED CODE (4-space/tab, njohja EKZISTUESE e implementimit)
+    // klasifikohet PARA kërkimit të HTML comments — marker-ët `<!` + `--` /
+    // `--` + `>` brenda rreshtit janë tekst LITERAL dhe s'ndryshojnë
+    // comment-state. VETËM ky rresht bëhet INACTIVE (indented code s'ka
+    // opener/closer — jo state persistent): rreshti pasues jo-i-indentuar
+    // përpunohet përsëri si NEUTRAL dhe një label aktiv aty skanohet
+    // normalisht. Në IN_COMMENT ky kontroll NUK zbatohet (dega më lart) —
+    // rreshti i indentuar brenda një comment-i real mbetet përmbajtje komenti.
+    if (/^(?: {4}|\t)/.test(line)) {
+      out.push({ fence: false, unclosedFence: false, visible: "", spaced: "", hadComment: false });
+      continue;
+    }
+    // Pastaj opener i fence-s (konstrukt i fillimrreshtit).
     const { depth, content, indent } = containerOf(line);
     const m = /^( *)(`{3,}|~{3,})/.exec(content);
     if (m?.[1] !== undefined && m[2] !== undefined && indent + m[1].length <= 3) {

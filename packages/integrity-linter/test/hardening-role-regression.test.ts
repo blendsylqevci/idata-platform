@@ -573,3 +573,61 @@ describe("cross-boundary fail-safe: INACTIVE s'arrihet me hile", () => {
     expect(scanRoles(content).findings).toHaveLength(0);
   });
 });
+
+/* ───────── INDENTED CODE (4-space / tab) — literal në comment scan ───────── */
+
+describe("cross-boundary indented-code: markers literalë, label-i jashtë NDEZ", () => {
+  it("EXPLOIT 4-space: opener komenti në rresht indented s'e fsheh label-in aktiv pas tij", () => {
+    const content = ["    " + unclosedCommentOpen(""), "**Owner:** Sinteti Alfa", "-->"].join("\n");
+    const rs = regionsOf(content);
+    const labelRegion = rs.find((rg) => rg.line === 2);
+    expect(labelRegion).toMatchObject({ kind: "label", state: "REVIEW" });
+    expect(labelRegion?.reasons).toContain("ROLE_VOCAB");
+    const r = scanRoles(content);
+    const vocab = byRule(r, "DC-ROLE-VOCAB");
+    expect(vocab).toHaveLength(1);
+    expect(vocab[0]?.locator).toBe("roles.md:2");
+    expect(JSON.stringify(r)).not.toContain("Sinteti");
+  });
+
+  it("EXPLOIT tab: i njëjti rast me tab para marker-it", () => {
+    const content = ["\t" + unclosedCommentOpen(""), "**Owner:** Sinteti Alfa", "-->"].join("\n");
+    const rs = regionsOf(content);
+    expect(rs.find((rg) => rg.line === 2)).toMatchObject({ kind: "label", state: "REVIEW" });
+    const r = scanRoles(content);
+    const vocab = byRule(r, "DC-ROLE-VOCAB");
+    expect(vocab).toHaveLength(1);
+    expect(vocab[0]?.locator).toBe("roles.md:2");
+    expect(JSON.stringify(r)).not.toContain("Sinteti");
+  });
+
+  it("POSITIVE control: label-i i njëjtë pa indented code prodhon finding-un ekzistues", () => {
+    const r = scanRoles("**Owner:** Sinteti Alfa");
+    const vocab = byRule(r, "DC-ROLE-VOCAB");
+    expect(vocab).toHaveLength(1);
+    expect(vocab[0]?.locator).toBe("roles.md:1");
+  });
+
+  it("INVERSE benign 4-space: indented code legjitim me marker literal → zero REVIEW, zero exit 2", () => {
+    const content = ["    kod sintetik me " + unclosedCommentOpen(" literal jo-rol"), "prozë e lirë pa role"].join("\n");
+    expect(regionsOf(content).filter((rg) => rg.state === "REVIEW")).toHaveLength(0);
+    expect(scanRoles(content).findings).toHaveLength(0);
+  });
+
+  it("INVERSE benign tab: i njëjti inverse me tab", () => {
+    const content = ["\tkod sintetik me " + unclosedCommentOpen(" literal jo-rol"), "prozë e lirë pa role"].join("\n");
+    expect(regionsOf(content).filter((rg) => rg.state === "REVIEW")).toHaveLength(0);
+    expect(scanRoles(content).findings).toHaveLength(0);
+  });
+
+  it("IN_COMMENT inverse: rreshti i indentuar brenda një comment-i real mbetet përmbajtje komenti; '-->' e mbyll normalisht", () => {
+    const content = [unclosedCommentOpen(" koment real"), "    tekst i indentuar brenda komentit", "-->", "**Owner:** Sinteti Beta"].join("\n");
+    const rs = regionsOf(content);
+    expect(rs.find((rg) => rg.line === 4)).toMatchObject({ kind: "label", state: "REVIEW" });
+    const r = scanRoles(content);
+    const vocab = byRule(r, "DC-ROLE-VOCAB");
+    expect(vocab).toHaveLength(1);
+    expect(vocab[0]?.locator).toBe("roles.md:4");
+    expect(JSON.stringify(r)).not.toContain("Sinteti");
+  });
+});
