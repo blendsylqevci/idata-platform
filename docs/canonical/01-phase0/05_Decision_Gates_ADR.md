@@ -16,7 +16,7 @@
 | ADR-007 | **RBAC pa "Fshirje" për financiare** → Anulim/Korrigjim + Aprovim | 27.06 | §9 |
 | ADR-008 | **Ndarje rolesh + iCode Support = break-glass** | 27.06 | §9 |
 | ADR-009 | **Konsignacion = shitje direkte me të drejtë kthimi** (qumështore) | 27.06 | njohja kontabël → pending |
-| ADR-010 | **SUPERSEDED nga ADR-024** — Supabase nuk është më dependency qendrore e target-it | 23.07 | PostgreSQL + Identity/OpenIddict; providerët operativë mbeten gates të veçanta |
+| ADR-010 | **SUPERSEDED nga ADR-024** — Supabase nuk është më dependency qendrore e target-it | 23.07 | PostgreSQL + OIDC/OAuth2 contract; identity provider/store mbeten gate ADR-028 |
 | ADR-013 | **Edge Hub = ASP.NET Core + PostgreSQL lokal; POS/mobile = SQLite lokal** | 23.07 | Pranuar përmes ADR-024; hardware validation mbetet gate |
 | ADR-015 | **Backup / PITR / restore drill** i detyrueshëm para Fazës 1 | 28.06 | I promovuar/mbyllur nga ADR-023 |
 | ADR-018 | **Repo neutral `idata-platform` + monorepo ekzistuese** | 23.07 | E zbatuar; ADR-024 e ruan të njëjtën repo |
@@ -25,7 +25,7 @@
 | ADR-021 | **Secret management** — secrets store; asnjë sekret/SEF-ID/çelës në repo; audit redaction | 28.06 | §9 |
 | ADR-022 | **Branch protection + GitHub 2FA** (PR-based, review i detyrueshëm, pa force-push) | 28.06 | §9 |
 | ADR-023 | **Backup / PITR / restore drill** i detyrueshëm para Fazës 1 (promovon ADR-015) | 28.06 | §2 |
-| ADR-024 | **Platform Runtime & Architecture Stack Freeze** — .NET/Angular/Electron/RN/PostgreSQL, modular monolith, migrim inkremental | 23.07 | **TARGET I APROVUAR · NOT YET IMPLEMENTED** |
+| ADR-024 | **Platform Runtime & Architecture Stack Freeze** — .NET/Angular/POS i instalueshëm/RN/PostgreSQL, modular monolith, migrim inkremental | 23.07 | **TARGET I APROVUAR · NOT YET IMPLEMENTED**; wrapper/OS dhe identity provider/store = OPEN |
 
 **Shënim korrigjues i datuar (12.07.2026 — full-corpus re-audit; NUK rishkruhet historia e ADR-020):** formulimi origjinal "items €0.0001/totals cents" është **i pasaktë për `CouponItem.Total`** — kontrata e saktë: **unit `Price` = ×10000; item `Total` + coupon totals/payments/tax = ×100 (cents)** (Gate v2.0 §3; T2-01). Gjithashtu **org-u zyrtar ka konflikte të regjistruara**: firma **C# P1363 vs Go ASN.1 DER** (CONF-02 — encoding = OPEN deri në server evidence); **PHP proto i vjetër inkompatibil**; **Ruby pa proto**; **Swagger v0.9 vs main pas tag-ut** (CONF-03/04) — **asnjë implementim i vetëm s'është kanonik në heshtje**; referenca e plotë = `../05-sef-atk/ATK_Source_Register.md` §4–§5.
 
@@ -41,15 +41,15 @@
 | Sipërfaqja | Target-i i aprovuar | Kufiri |
 |---|---|---|
 | Admin / Backoffice | **Angular web** | ERP, Accounting, WMS, OMS, Production dhe Finance Ops janë module të izoluara brenda një shell-i; jo sisteme/repo të pavarura |
-| POS | **Angular + Electron**, aplikacion desktop i instalueshëm | Renderer-i Angular është i ndarë nga Backoffice; Windows = baseline production; macOS vetëm pas provës së driverëve/hardware-it |
+| POS | **Angular UI**, aplikacion desktop i instalueshëm | Renderer-i Angular është i ndarë nga Backoffice; wrapper-i dhe Windows/macOS/Linux mbeten OPEN në ADR-027, pas provave ADR-017/PoC-4b |
 | Mobile | **React Native + Expo Development Build** | KABI terren + PLANET kamarier; SQLite lokal |
 | KDS | Klient i fokusuar LAN/kiosk | Shell-i final varet nga PoC-4b, floor-plan dhe hardware-i |
 | API / domain | **C# + ASP.NET Core (.NET 10 target)** + pure C# domain libraries | Platform API; logjika e biznesit nuk jeton në UI |
 | Background | **.NET Worker Services** | Outbox, retry, jobs, integration processing |
 | Edge | **ASP.NET Core Edge Hub + PostgreSQL lokal** | Autoritet operacional i lokacionit gjatë ndërprerjes; sinkronizohet me cloud |
-| POS Local Host | **.NET process i paketuar me POS-in** | Zotëron domain/outbox/SQLite/keys; Electron main menaxhon lifecycle-in dhe typed IPC; renderer-i nuk hap DB/keys |
+| POS Local Host | **.NET process i shpërndarë me instalimin e POS-it** | Zotëron domain/outbox/SQLite/keys dhe ekspozon kontratë lokale IPC të tipizuar; renderer-i nuk hap DB/keys; wrapper-i vendoset në ADR-027 |
 | Pajisje | **.NET Device Agent** | Printerë, skanerë, peshore dhe integrime lokale; pa DB access nga UI |
-| Identity | **ASP.NET Core Identity + OpenIddict/OIDC** | Një SSO/login, company selector, RBAC per modul, break-glass i audituar |
+| Identity | **OIDC/OAuth2 contract + provider-neutral ASP.NET Core authorization boundary** | Një authority/login/SSO, MFA, company selector, RBAC per modul, tenant authorization dhe break-glass i audituar; OpenIddict vs external IdP + store = ADR-028 OPEN |
 | Të dhënat | **PostgreSQL qendror** + module-owned schemas; **SQLite e enkriptuar** në POS/mobile | Cloud = source-of-record afatgjatë; POS SQLite zotërohet nga local host-i, mobile SQLite nga data layer-i; asnjë renderer/UI nuk hap DB/keys direkt |
 | Kontratat | **OpenAPI → generated TypeScript clients** | I vetmi kufi i tipizuar UI/API; DTO-të nuk kopjohen me dorë |
 | Offline | **Versioned outbox + idempotency + retry/replay** | Sync vendor-i nuk kyçet në këtë ADR |
@@ -62,9 +62,9 @@
 4. **CQRS selektiv.** Commands dhe queries ndahen kur ka rregulla/invariante, audit, performancë ose modele leximi të ndryshme; CRUD i thjeshtë nuk dyfishohet pa arsye.
 5. **Një migration owner.** EF Core menaxhon migrimet normale; constraints/triggers/functions PostgreSQL shkruhen si SQL i audituar brenda migrimeve. Nuk lejohen dy mekanizma konkurrues production.
 6. **Fiscal Core mbetet bounded certification surface** brenda së njëjtës monorepo; kufiri final i paketës së certifikimit mbetet `ATK-010`.
-7. **Supabase hiqet si dependency qendrore e target-it.** Node/pnpm mbeten për Angular, Electron, React Native dhe tooling; nuk janë më authority i backend-it të biznesit.
+7. **Supabase hiqet si dependency qendrore e target-it.** Node/pnpm mbeten për Angular, React Native dhe tooling; nuk janë më authority i backend-it të biznesit. Ky vendim nuk zgjedh identity provider-in.
 8. **Fiscal Semantics Conformance Contract është language-neutral authority.** Rregullat/vectors versionohen një herë; C# është reference/server implementation, ndërsa implementimi i kufizuar TypeScript në mobile offline duhet të japë rezultate decimal/protobuf/hash byte-identike. OpenAPI ndan DTO-të, jo logjikën. Step C e provon këtë kontratë në të dy runtime-et para çdo Human Gate fiskal.
-9. **Shumëgjuhësia është kërkesë themelore, jo polish i vonshëm:** Shqip = default, Anglisht dhe Serbisht = të detyrueshme. POS-i zgjedh gjuhën e kuponit/faturës fiskale; resource keys, fallback, font/layout dhe print fixtures hyjnë nga F1 dhe mbyllen para KABI/SEF release. Ledger U11 mbetet MISSING derisa implementimi/testet ta provojnë.
+9. **Shumëgjuhësia është kërkesë themelore, jo polish i vonshëm:** Shqip = default, Anglisht dhe Serbisht = të detyrueshme. POS-i zgjedh gjuhën e kuponit/faturës fiskale; resource keys, fallback, font/layout dhe print fixtures hyjnë nga F1 dhe mbyllen para KABI/SEF release. **Atribuimi:** CORE-02 / UA 01/2026 §32.2.9, f.27 kërkon shumëgjuhësi sipas legjislacionit për gjuhët zyrtare (SQ/SR në Ledger U11); EN është target i detyrueshëm i Pronarit/produktit. Ledger U11 mbetet MISSING derisa implementimi/testet ta provojnë.
 10. **Enkriptimi at-rest është rezultat i detyrueshëm.** Mekanizmi/key custody mbyllen në ADR-025 para se të futen të dhëna reale në POS/mobile/Edge/cloud; renderer-at nuk marrin çelësa. Providerët cloud/storage/secrets mbyllen veçmas në ADR-026.
 
 **Migrimi (strangler / incremental, jo big-bang):**
@@ -75,7 +75,7 @@
 4. Ndërto vertical slices modul-pas-moduli: Master Data/Tax → Accounting → Inventory/WMS → OMS/Sales/Purchasing → Production/Recipes/KABI → POS/KDS/PLANET → Finance Ops/reports.
 5. Ruaj dokumentet canonical, governance/linter-in dhe PoC/testet ekzistuese si evidence/oracle. Legacy Nest/Next/TS hiqet **i fundit**, vetëm pas parity tests, rollback plan, independent review dhe Human Gate. Pa dual-write afatgjatë.
 
-**Gates që mbeten Open:** ADR-011 (PowerSync vs custom), ADR-012 (kufiri final DB-function vs C# për GL), ADR-014 (pooling), ADR-016 (EAS vs bare), ADR-017/ATK-004 (printer/hardware), ADR-025 (encryption/key custody), ADR-026 (hosting/object storage/secrets provider), KDS shell/hardware, P1363 vs DER dhe sjelljet server-dependent të ATK-së. Këto nuk e rihapin stack-un bazë; vendosen në gate-in e tyre.
+**Gates që mbeten Open:** ADR-011 (PowerSync vs custom), ADR-012 (kufiri final DB-function vs C# për GL), ADR-014 (pooling), ADR-016 (EAS vs bare), ADR-017/ATK-004 (printer/hardware), ADR-025 (encryption/key custody), ADR-026 (hosting/object storage/secrets provider), ADR-027 (desktop wrapper + OS matrix), ADR-028 (identity provider/store), KDS shell/hardware, P1363 vs DER dhe sjelljet server-dependent të ATK-së. Këto nuk e rihapin runtime-in bazë ose kufijtë e deployables; vendosen në gate-in e tyre.
 
 **Pasojat:** do të ketë përkohësisht dy runtime-e në repo dhe kosto portimi/testesh; në këmbim ruhet evidence ekzistuese, shmanget rewrite big-bang dhe çdo modul mund të mbyllet me parity të matshme. Asnjë capability e vjetër nuk promovohet automatikisht në IMPLEMENTED/TESTED në target.
 
@@ -106,9 +106,19 @@
 **Scope:** rajoni/rezidenca dhe DPA, compute/PostgreSQL, object storage, secrets/KMS, backup/PITR, queue/realtime, observability, portability/exit plan dhe environment separation.
 **Pronari:** Pronari + Tech. **Afati:** para mjedisit të parë jo-lokal / para lidhjes së providerit në kod.
 
+### ADR-027 · POS Desktop Packaging & Supported OS Matrix
+**Statusi:** Open — POS-i i veçantë dhe i instalueshëm, Angular UI, .NET POS Local Host dhe .NET Device Agent janë të vendosura; **Electron vs wrapper tjetër** dhe **Windows/macOS/Linux** nuk zgjidhen në ADR-024.
+**Scope:** installer/code-signing, update+rollback, offline boot/recovery, lifecycle + IPC boundary, sandbox/least privilege, RAM/footprint dhe përputhshmëria me printerë/skanerë/peshore/driverë. Evidence lidhet me ADR-017, HW-001 dhe PoC-4b.
+**Pronari:** Pronari + Tech. **Afati:** para implementimit të shell-it production të POS-it.
+
+### ADR-028 · Identity Authority & Store
+**Statusi:** Open — OIDC/OAuth2 contract, një authority/login/SSO, MFA, RBAC, tenant authorization dhe audited break-glass janë kërkesa të vendosura; provider-i/store nuk hamendësohen.
+**Scope:** OpenIddict vs external IdP, ASP.NET Core Identity vs model tjetër store, PKCE/token validation, signing-key rotation, refresh-token reuse detection, recovery, session/device revocation, federation, HA/backup dhe incident response.
+**Pronari:** Pronari + Tech. **Afati:** para F1 Identity production implementation ose provider binding.
+
 ---
 ## Përmbledhje statusi
 - **Accepted:** 17 (ADR-002…009, 013, 015, 018…024).
 - **Superseded:** 2 (ADR-001, ADR-010) — historia ruhet; target-i aktiv = ADR-024.
-- **Open:** 7 (ADR-011, ADR-012, ADR-014, ADR-016, ADR-017, ADR-025, ADR-026) — secili me pronar/gate.
-- ADR-024 mbyll stack/topology-n, jo gates domain/ops; implementimi fillon vetëm pas merge-it të aprovuar të PR-së së kanonizimit.
+- **Open:** 9 (ADR-011, ADR-012, ADR-014, ADR-016, ADR-017, ADR-025, ADR-026, ADR-027, ADR-028) — secili me pronar/gate.
+- ADR-024 mbyll runtime-in bazë dhe kufijtë e deployables, jo desktop wrapper/OS, identity provider/store ose gates domain/ops; implementimi fillon vetëm pas merge-it të aprovuar të PR-së së kanonizimit.

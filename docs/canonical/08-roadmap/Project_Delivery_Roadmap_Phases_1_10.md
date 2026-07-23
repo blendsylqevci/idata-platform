@@ -57,6 +57,8 @@ Këto janë datat më të vona të pranueshme që ruajnë shansin real për cuto
 | ADR-024 | Approved target / pending canonical merge | Platform Runtime & Architecture Stack Freeze; target ≠ implemented | Pronari + Tech + PM | Foundation Bootstrap; F1; Step B | para migrimit | pa merge/review nuk nis migrimi i stack-ut |
 | ADR-025 | Open | Encryption-at-rest + key custody për POS/mobile/Edge/cloud; zero keys në renderer/repo/log | Pronari + Tech | F1 / F5 / pilot | para data-bearing F1 | pa vendim s'futen të dhëna reale dhe s'ka pilot |
 | ADR-026 | Open | Hosting/object-storage/secrets/KMS/backup/observability providers + rezidencë/DPA/exit plan | Pronari + Tech | mjediset jo-lokale | para provider binding | zhvillimi mbetet lokal/provider-neutral |
+| ADR-027 | Open | POS desktop wrapper (Electron vs tjetër) + OS matrix Windows/macOS/Linux, me installer/update/rollback dhe hardware/driver evidence | Pronari + Tech | POS production shell / F7 | para implementimit të shell-it production | POS-i mbetet i instalueshëm, por shell/OS nuk ngrihen pa ADR-017/HW-001/PoC-4b |
+| ADR-028 | Open | Identity provider/store: OpenIddict vs external IdP dhe modeli i store-it; OIDC/SSO/MFA/RBAC/tenant auth mbeten kontratë e vendosur | Pronari + Tech | F1 Identity | para provider binding/F1 Identity production | Foundation mbetet provider-neutral deri në vendim |
 | ADR-016 | Open | RN/Expo build strategy | Tech | Mobile/offline apps | 2026-08-10 | mobile PoC ruhet minimal; build pipeline final shtyhet |
 | ADR-017 | Open | Printera fiskalë: hardware vs SEF software | iCode + ATK/vendor | Hardware procurement, SEF | 2026-08-15 | nuk blihet printer fiskal pa vendim; përdoret printer termik test |
 | ACC-003 | Sent/Open | Tax codes/accounts/rounding final | Kontabilisti | Faza 2 VAT/books | 2026-07-24 | përdor config provisional; s'lejohet go-live/sign-off |
@@ -145,7 +147,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Break-glass model për iCode Support.
 - Monitoring minimal: health checks, logs, error boundaries.
 - Backup/PITR/restore drill minimal për mjediset dev/staging.
-- i18n foundation me resource keys/fallback për Shqip (default), Anglisht dhe Serbisht; pa tekste kritike hardcoded.
+- i18n foundation me resource keys/fallback për Shqip (default), Anglisht dhe Serbisht; pa tekste kritike hardcoded. CORE-02 / UA 01/2026 §32.2.9, f.27 + Ledger U11 mbulojnë shumëgjuhësinë zyrtare SQ/SR; EN është target i detyrueshëm i Pronarit/produktit.
 - ADR-025 encryption/key-custody baseline për data stores që mbajnë të dhëna reale.
 - Payroll gate: vendim për full payroll engine vs master-data + kontribute.
 
@@ -160,7 +162,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 - Increment 1 i mbyllur.
 - ADR-024 merged + **Platform Foundation Bootstrap PASS**; ADR-014 me vendim ose workaround të dokumentuar.
-- ADR-025 vendosur para çdo data-bearing implementation; ADR-026 vendosur para mjedisit të parë jo-lokal.
+- ADR-025 vendosur para çdo data-bearing implementation; ADR-026 vendosur para mjedisit të parë jo-lokal; ADR-028 vendosur para F1 Identity production/provider binding.
 - ADR-011 dhe ADR-016 mbeten gates të sync/mobile build; ADR-013 është mbyllur nga ADR-024, por PoC-4b/hardware vazhdon të bllokojë production support.
 - ENG-003: composite FK cross-tenant për tenant-scoped child tables.
 - ENG-004: vendim për `audit_log` group-level events vs business-scoped-only audit.
@@ -537,6 +539,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - FIN-003 floor-plan/KDS/shank/printer routing.
 - OPS-001 RESORT structure.
 - ADR-024 Edge Hub skeleton + PoC-4b/hardware validation.
+- ADR-027 desktop wrapper/OS gate mbyllet me evidence nga ADR-017, HW-001 dhe PoC-4b para shell-it production të POS-it.
 - HW-001 hardware inventory.
 - PoC-4 local hub PASS.
 

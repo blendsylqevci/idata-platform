@@ -1,6 +1,6 @@
 # Arkitektura Offline/Online, Stack dhe Pajisjet (Draft vendimesh)
 
-> **⚠️ TARGET STACK/TOPOLOGY SUPERSEDED nga ADR-024 — 23.07.2026:** ky draft ruhet për arsyetimin offline/hardware dhe historinë e vendimit. Target-i aktiv është: Angular Backoffice · Angular+Electron POS desktop · React Native/Expo mobile · ASP.NET Core API/Workers/Edge/Device Agent · PostgreSQL/SQLite · OpenAPI. Në konflikt fiton `docs/canonical/01-phase0/05_Decision_Gates_ADR.md` (ADR-024). Kjo nuk do të thotë se target-i është implementuar.
+> **⚠️ TARGET STACK/TOPOLOGY SUPERSEDED nga ADR-024 — 23.07.2026:** ky draft ruhet për arsyetimin offline/hardware dhe historinë e vendimit. Target-i aktiv është: Angular Backoffice · Angular POS desktop i instalueshëm + .NET Local Host/Device Agent · React Native/Expo mobile · ASP.NET Core API/Workers/Edge · PostgreSQL/SQLite · OpenAPI. Desktop wrapper/OS dhe identity provider/store mbeten OPEN në ADR-027/028. Në konflikt fiton `docs/canonical/01-phase0/05_Decision_Gates_ADR.md` (ADR-024). Kjo nuk do të thotë se target-i është implementuar.
 
 Status: HISTORICAL decision draft; sync/offline/hardware reasoning mbetet input, stack/topology fitohet nga ADR-024
 Data fillestare: 2026-06-24 · Target sync: 2026-07-23
@@ -13,7 +13,7 @@ Ky dokument nuk eshte implementim final. Eshte vendim arkitekturor paraprak qe n
 Vendimi aktiv (ADR-024):
 
 - Admin/Backoffice: Angular web;
-- POS: aplikacion i veçantë desktop Angular + Electron, i instalueshëm dhe i lidhur me API/Edge;
+- POS: aplikacion i veçantë desktop me Angular UI, i instalueshëm dhe i lidhur me API/Edge përmes .NET POS Local Host/Device Agent; wrapper/OS = ADR-027 OPEN;
 - KABI terren/ambulant dhe PLANET kamarier: React Native/Expo;
 - KDS: klient LAN/kiosk i fokusuar; shell-i final mbetet hardware gate;
 - API/domain/workers/Edge/Device Agent: C# / ASP.NET Core;
@@ -101,7 +101,7 @@ PLANET ka nevoje per offline lokal ne restorant, sidomos per POS/KDS.
 
 Vendimi aktiv:
 
-- POS UI: Angular + Electron desktop i instalueshëm;
+- POS UI: Angular desktop i instalueshëm; wrapper/OS = ADR-027 OPEN;
 - local Edge Hub: ASP.NET Core + PostgreSQL në mini-PC/NUC;
 - KDS: klient LAN/kiosk; teknologjia e shell-it finalizohet pas PoC-4b;
 - printer/skaner/peshore: përmes .NET Device Agent/Edge Hub;
@@ -214,16 +214,16 @@ Kjo nuk duhet te supozohet. Duhet provuar para zhvillimit final te faturimit fis
 - backend/domain: C# + ASP.NET Core (.NET 10 target), modular monolith;
 - workers: .NET Worker Services;
 - Admin/Backoffice: Angular;
-- POS: Angular + Electron;
+- POS: Angular UI desktop i instalueshëm; wrapper/OS = ADR-027 OPEN;
 - mobile: React Native/Expo;
 - Edge Hub: ASP.NET Core + PostgreSQL lokal;
 - POS Local Host: .NET process i paketuar; zotëron domain/outbox/SQLite të enkriptuar/keys dhe ekspozon vetëm typed IPC;
 - Device Agent: .NET;
 - central DB: PostgreSQL; POS/mobile: SQLite e enkriptuar (ADR-025);
 - contracts: OpenAPI → generated TypeScript clients;
-- identity: ASP.NET Core Identity + OpenIddict/OIDC;
+- identity: OIDC/OAuth2 contract + provider-neutral ASP.NET Core authorization boundary; provider/store = ADR-028 OPEN;
 - fiscal semantics: kontratë language-neutral + golden vectors; C# reference dhe TypeScript mobile offline kalojnë equivalence tests;
-- locale të detyrueshme: Shqip (default), Anglisht, Serbisht; print/POS fiskal provohet në të tri;
+- locale të detyrueshme: Shqip (default), Anglisht, Serbisht; print/POS fiskal provohet në të tri; CORE-02 / UA 01/2026 §32.2.9, f.27 kërkon shumëgjuhësi sipas legjislacionit për gjuhët zyrtare (SQ/SR në Ledger U11), ndërsa EN është target i detyrueshëm i Pronarit/produktit;
 - queue/background jobs, object-storage provider, realtime backplane dhe sync vendor: gates të veçanta;
 - audit: append-only audit/event log.
 

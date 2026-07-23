@@ -26,14 +26,14 @@ Ky runtime **nuk është target-i i produktit**. Ruhet përkohësisht për teste
 | Deployable / sipërfaqe | Target-i |
 |---|---|
 | Admin / Backoffice | Angular web; ERP/Accounting/WMS/OMS/Production/Finance Ops si bounded modules në një shell |
-| POS | Angular + Electron, aplikacion desktop i instalueshëm; Windows baseline production |
+| POS | Angular UI, aplikacion desktop i instalueshëm; wrapper-i dhe matrica e OS-it mbeten OPEN (ADR-027, me evidence nga ADR-017/PoC-4b) |
 | Mobile | React Native + Expo Development Build; SQLite lokal |
 | Platform API | C# / ASP.NET Core (.NET 10 target), modular monolith |
 | Workers | .NET Worker Services |
 | Edge Hub | ASP.NET Core + PostgreSQL lokal |
-| POS Local Host | .NET process i paketuar; domain/outbox/encrypted SQLite/keys, typed IPC me Electron |
+| POS Local Host | .NET process i shpërndarë me instalimin e POS-it; domain/outbox/encrypted SQLite/keys dhe kontratë lokale IPC e tipizuar |
 | Device Agent | .NET process për printer/skaner/peshore dhe pajisje lokale |
-| Identity | ASP.NET Core Identity + OpenIddict/OIDC/SSO |
+| Identity | OIDC/OAuth2 contract + një authority/login/SSO dhe kufi autorizimi provider-neutral në ASP.NET Core; provider/store = OPEN (ADR-028) |
 | Data | PostgreSQL qendror me module-owned schemas; SQLite në POS/mobile |
 | Contracts | OpenAPI → generated TypeScript clients |
 
@@ -45,10 +45,10 @@ Ky runtime **nuk është target-i i produktit**. Ruhet përkohësisht për teste
 - Clean/Onion zbatohet brenda moduleve; delivery bëhet me vertical slices.
 - CQRS përdoret selektivisht; CRUD i thjeshtë nuk dyfishohet pa arsye.
 - Asnjë UI nuk lidhet direkt me DB. Çdo shkrim kalon API/domain/invariantet.
-- Electron/Angular renderer-i i POS-it nuk hap SQLite ose keys; .NET POS Local Host është trusted owner.
+- Angular renderer-i i POS-it nuk hap SQLite ose keys; .NET POS Local Host është trusted owner. Wrapper-i vetëm menaxhon lifecycle/IPC sipas ADR-027.
 - Fiscal Core mbetet bounded certification surface.
 - Fiscal semantics janë kontratë language-neutral me vectors versionuar: C# reference + TypeScript mobile offline duhet të kalojnë decimal/protobuf/hash equivalence.
-- Shqip (default), Anglisht dhe Serbisht janë locale të detyrueshme; print/POS fiscal fixtures provohen para release-it.
+- Shqip (default), Anglisht dhe Serbisht janë locale të detyrueshme; print/POS fiscal fixtures provohen para release-it. **Atribuimi:** CORE-02 / UA 01/2026 §32.2.9, f.27 kërkon shumëgjuhësi sipas legjislacionit për gjuhët zyrtare (SQ/SR në Ledger U11); EN është target i detyrueshëm i Pronarit/produktit.
 - Enkriptimi at-rest/key custody është gate i detyrueshëm (ADR-025); providerët cloud/storage/secrets mbyllen në ADR-026.
 - Supabase nuk është dependency qendrore e target-it; Node/pnpm mbeten për UI/mobile/tooling.
 
@@ -71,7 +71,7 @@ Ky runtime **nuk është target-i i produktit**. Ruhet përkohësisht për teste
 
 ## Çfarë NUK është implementuar ende
 
-Target solution/projektet .NET · Angular shell · Electron POS · Identity/OpenIddict · Edge Hub/Device Agent · schema/migrime production · module biznesi · SEF production · UI finale. Gates ADR-011/012/014/016/017/025/026 mbeten OPEN.
+Target solution/projektet .NET · Angular shell/POS · desktop wrapper dhe OS matrix · identity provider/store · Edge Hub/Device Agent · schema/migrime production · module biznesi · SEF production · UI finale. Gates ADR-011/012/014/016/017/025/026/027/028 mbeten OPEN.
 
 ## Traceability
 
