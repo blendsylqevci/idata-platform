@@ -58,13 +58,13 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
 - `docs/canonical/08-roadmap/Cutover_Rollback_Runbook.md`
 
-## Next gate (rendi aktual — 23.07.2026, post PR #21)
+## Next gate (rendi aktual — 23.07.2026, post-merge i ADR-024 / PR #23)
 
 *(**Re-audit-i + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate). **Verdikti: regression lokale 66 PASS/1 LIVE SKIP · Tier 1 PARTIAL/REOPENED · compliance FAIL · Tier 2 NOT IMPLEMENTED/NO-GO** — Gate v2.0.)*
 
 0. **GOV-001 baseline advisory — COMPLETED me merge-in e PR #21.** `DOC-CORE` + `HISTORY-PRIV` aktive advisory; 14 profile NOT_IMPLEMENTED; `HG-LINTER-REQUIRED` mbetet OPEN.
-1. **ADR-024 — GATE AKTUAL docs-only:** kanonizo target-in .NET/Angular/POS të instalueshëm/RN/PostgreSQL dhe supersede stack-un historik; desktop wrapper/OS (`ADR-027`) dhe identity provider/store (`ADR-028`) mbeten OPEN; target ≠ implemented.
-2. **Platform Foundation Bootstrap pre-F1:** solution/CI + API/module smoke path + PostgreSQL dev migration path + OpenAPI client generation + Angular shell minimal; legacy TS ruhet si oracle.
+1. **ADR-024 — MERGED / ACCEPTED (PR #23, merge `e0d4cdc`):** target-i .NET/Angular/POS i instalueshëm/RN/PostgreSQL i kanonizuar; stack-u historik SUPERSEDED; desktop wrapper/OS (`ADR-027`) dhe identity provider/store (`ADR-028`) mbeten OPEN; **target ≠ implemented — NOT YET IMPLEMENTED përtej Bootstrap-it**.
+2. **Platform Foundation Bootstrap pre-F1 — GATE AKTUAL / ACTIVE (NOT YET PASSED):** solution/CI + API/module smoke path + PostgreSQL dev migration path + OpenAPI client generation + Angular shell minimal; identity/audit/outbox/observability vetëm contracts/smoke wiring; legacy TS ruhet si oracle.
 3. **F1 Foundation në stack-un e ri:** Identity/Tenant/RBAC + audit + encryption/key custody + observability + recovery + i18n SQ/EN/SR.
 4. **Step B — code hardening (`ATK-012`, P0/PRE-TIER2) në Fiscal bounded context të ri:** T2-01..T2-10.
 5. **Step C — Fiscal Semantics Conformance Pack:** golden vectors zyrtarë + C#↔TypeScript offline equivalence + fake-HTTP/negative tests.
