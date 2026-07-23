@@ -64,7 +64,7 @@ During implementation, code plus tests become the truth for system behavior.
 
 0. **GOV-001 baseline advisory — COMPLETED me merge-in e PR #21.** `DOC-CORE` + `HISTORY-PRIV` aktive advisory; 14 profile NOT_IMPLEMENTED; `HG-LINTER-REQUIRED` mbetet OPEN.
 1. **ADR-024 — MERGED / ACCEPTED (PR #23, merge `e0d4cdc`):** target-i .NET/Angular/POS i instalueshëm/RN/PostgreSQL i kanonizuar; stack-u historik SUPERSEDED; desktop wrapper/OS (`ADR-027`) dhe identity provider/store (`ADR-028`) mbeten OPEN; **target ≠ implemented — NOT YET IMPLEMENTED përtej Bootstrap-it**.
-2. **Platform Foundation Bootstrap pre-F1 — GATE AKTUAL / ACTIVE (NOT YET PASSED):** solution/CI + API/module smoke path + PostgreSQL dev migration path + OpenAPI client generation + Angular shell minimal; identity/audit/outbox/observability vetëm contracts/smoke wiring; legacy TS ruhet si oracle.
+2. **Platform Foundation Bootstrap pre-F1 — GATE AKTUAL / ACTIVE · statusi: IMPLEMENTED / PENDING_INDEPENDENT_REVIEW (NOT YET PASSED):** solution/CI + API/module smoke path + PostgreSQL dev migration path + OpenAPI client generation + Angular shell minimal; identity/audit/outbox/observability vetëm contracts/smoke wiring; legacy TS ruhet si oracle. Evidence: `docs/canonical/06-architecture/Platform_Foundation_Bootstrap_Record.md`; PASS vetëm pas Fable→Codex→Human Gate→merge.
 3. **F1 Foundation në stack-un e ri:** Identity/Tenant/RBAC + audit + encryption/key custody + observability + recovery + i18n SQ/EN/SR.
 4. **Step B — code hardening (`ATK-012`, P0/PRE-TIER2) në Fiscal bounded context të ri:** T2-01..T2-10.
 5. **Step C — Fiscal Semantics Conformance Pack:** golden vectors zyrtarë + C#↔TypeScript offline equivalence + fake-HTTP/negative tests.
