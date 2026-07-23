@@ -1,0 +1,40 @@
+<section aria-labelledby="status-heading">
+  <h2 id="status-heading">{{ i18n.t('status.heading') }}</h2>
+
+  <div aria-live="polite">
+    @switch (state().kind) {
+      @case ('loading') {
+        <p class="state-loading">{{ i18n.t('status.loading') }}</p>
+      }
+      @case ('error') {
+        <p class="state-error" role="alert">{{ i18n.t('status.error') }}</p>
+        <button type="button" (click)="refresh()">{{ i18n.t('status.retry') }}</button>
+      }
+      @case ('ok') {
+        @if (state(); as current) {
+          @if (current.kind === 'ok') {
+            <dl class="status-grid">
+              <dt>{{ i18n.t('status.overall') }}</dt>
+              <dd data-testid="overall">{{ current.data.status }}</dd>
+              <dt>{{ i18n.t('status.apiVersion') }}</dt>
+              <dd data-testid="api-version">{{ current.data.apiVersion }}</dd>
+              <dt>{{ i18n.t('status.database') }}</dt>
+              <dd data-testid="database">{{ current.data.database }}</dd>
+            </dl>
+            <h3>{{ i18n.t('status.capabilities') }}</h3>
+            <dl class="status-grid">
+              <dt>{{ i18n.t('capability.identity') }}</dt>
+              <dd data-testid="capability-identity">{{ current.data.capabilities.identity }}</dd>
+              <dt>{{ i18n.t('capability.audit') }}</dt>
+              <dd>{{ current.data.capabilities.audit }}</dd>
+              <dt>{{ i18n.t('capability.outbox') }}</dt>
+              <dd>{{ current.data.capabilities.outbox }}</dd>
+              <dt>{{ i18n.t('capability.observability') }}</dt>
+              <dd>{{ current.data.capabilities.observability }}</dd>
+            </dl>
+          }
+        }
+      }
+    }
+  </div>
+</section>

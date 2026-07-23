@@ -1,0 +1,23 @@
+.app-header {
+  padding: 1rem 1.5rem 0.5rem;
+  border-bottom: 1px solid #d0d0d0;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.subtitle {
+  margin: 0.25rem 0 0.75rem;
+  color: #444;
+}
+
+.app-nav {
+  padding: 0.5rem 1.5rem;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.app-main {
+  padding: 1rem 1.5rem;
+}

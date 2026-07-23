@@ -1,0 +1,12 @@
+<header role="banner" class="app-header">
+  <h1>{{ i18n.t('app.title') }}</h1>
+  <p class="subtitle">{{ i18n.t('app.subtitle') }}</p>
+</header>
+
+<nav [attr.aria-label]="i18n.t('nav.status')" class="app-nav">
+  <a routerLink="/">{{ i18n.t('nav.status') }}</a>
+</nav>
+
+<main class="app-main">
+  <router-outlet />
+</main>
