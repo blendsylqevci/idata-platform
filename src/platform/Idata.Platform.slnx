@@ -1,0 +1,21 @@
+<Solution>
+  <Folder Name="/Modules/" />
+  <Folder Name="/Modules/PlatformStatus/" />
+  <Folder Name="/Modules/PlatformStatus/Application/">
+    <Project Path="Modules/PlatformStatus/Application/Idata.Platform.Modules.PlatformStatus.Application.csproj" />
+  </Folder>
+  <Folder Name="/Modules/PlatformStatus/Domain/">
+    <Project Path="Modules/PlatformStatus/Domain/Idata.Platform.Modules.PlatformStatus.Domain.csproj" />
+  </Folder>
+  <Folder Name="/Modules/PlatformStatus/Infrastructure/">
+    <Project Path="Modules/PlatformStatus/Infrastructure/Idata.Platform.Modules.PlatformStatus.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Modules/PlatformStatus/Presentation/">
+    <Project Path="Modules/PlatformStatus/Presentation/Idata.Platform.Modules.PlatformStatus.Presentation.csproj" />
+  </Folder>
+  <Project Path="../../tests/platform/Idata.Platform.ArchitectureTests/Idata.Platform.ArchitectureTests.csproj" />
+  <Project Path="../../tests/platform/Idata.Platform.IntegrationTests/Idata.Platform.IntegrationTests.csproj" />
+  <Project Path="../../tests/platform/Idata.Platform.UnitTests/Idata.Platform.UnitTests.csproj" />
+  <Project Path="Idata.Platform.Api/Idata.Platform.Api.csproj" />
+  <Project Path="Idata.Platform.DbMigrator/Idata.Platform.DbMigrator.csproj" />
+</Solution>

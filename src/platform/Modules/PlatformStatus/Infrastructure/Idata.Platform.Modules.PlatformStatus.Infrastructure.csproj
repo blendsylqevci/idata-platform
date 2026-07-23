@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Infrastructure: adapters (Npgsql) → varet nga Application + Domain. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Application\Idata.Platform.Modules.PlatformStatus.Application.csproj" />
+    <ProjectReference Include="..\Domain\Idata.Platform.Modules.PlatformStatus.Domain.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+</Project>

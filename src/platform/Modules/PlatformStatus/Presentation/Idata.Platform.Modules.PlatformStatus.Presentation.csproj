@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Presentation: endpoint-et HTTP → varet nga Application (Domain vjen si unaza e brendshme). -->
+  <ItemGroup>
+    <ProjectReference Include="..\Application\Idata.Platform.Modules.PlatformStatus.Application.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+</Project>

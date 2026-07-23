@@ -1,0 +1,14 @@
+<Project>
+  <!-- Baseline i përbashkët i target stack-ut ADR-024 (Bootstrap pre-F1).
+       Warnings-as-errors vlen për krejt kodin e ri; lockfiles + locked
+       restore detyrohen që CI të mos zgjidhë versione të reja në heshtje. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <Deterministic>true</Deterministic>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+</Project>

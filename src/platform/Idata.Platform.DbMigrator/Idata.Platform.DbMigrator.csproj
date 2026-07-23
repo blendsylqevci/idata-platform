@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- DbMigrator: i vetmi vend ku aplikohen migrimet e target DB-së → Infrastructure. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Modules\PlatformStatus\Infrastructure\Idata.Platform.Modules.PlatformStatus.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

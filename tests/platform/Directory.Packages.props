@@ -1,0 +1,4 @@
+<Project>
+  <!-- Central Package Management i përbashkët — versionet vetëm në një vend. -->
+  <Import Project="..\..\src\platform\Directory.Packages.props" />
+</Project>

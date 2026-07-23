@@ -1,0 +1,51 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net10.0": {
+      "Microsoft.AspNetCore.OpenApi": {
+        "type": "Direct",
+        "requested": "[10.0.10, )",
+        "resolved": "10.0.10",
+        "contentHash": "d4Atx9IHq7JgX0F/h7Db+m9zAUzC+cKdI9k+OWnnyQIOUQtfvjIEuhvbjPigVMkAmPUgCbJ8Yp6M9ghUqHtJSQ==",
+        "dependencies": {
+          "Microsoft.OpenApi": "2.0.0"
+        }
+      },
+      "Microsoft.OpenApi": {
+        "type": "Direct",
+        "requested": "[2.11.0, )",
+        "resolved": "2.11.0",
+        "contentHash": "/ignjfdeKT2SGLIR7QEv19KnI0rvoxRG/TYDOZdK9EsWLjKK9IK8i1Mo5NRm9PRV3i64DzlTqnIflWvoyfljLg=="
+      },
+      "idata.platform.modules.platformstatus.application": {
+        "type": "Project",
+        "dependencies": {
+          "Idata.Platform.Modules.PlatformStatus.Domain": "[1.0.0, )"
+        }
+      },
+      "idata.platform.modules.platformstatus.domain": {
+        "type": "Project"
+      },
+      "idata.platform.modules.platformstatus.infrastructure": {
+        "type": "Project",
+        "dependencies": {
+          "Idata.Platform.Modules.PlatformStatus.Application": "[1.0.0, )",
+          "Idata.Platform.Modules.PlatformStatus.Domain": "[1.0.0, )",
+          "Npgsql": "[10.0.3, )"
+        }
+      },
+      "idata.platform.modules.platformstatus.presentation": {
+        "type": "Project",
+        "dependencies": {
+          "Idata.Platform.Modules.PlatformStatus.Application": "[1.0.0, )"
+        }
+      },
+      "Npgsql": {
+        "type": "CentralTransitive",
+        "requested": "[10.0.3, )",
+        "resolved": "10.0.3",
+        "contentHash": "7nb5YzXuvWWJxB0J8DiyL3we+X4FOctZrt0fIBnucOIaIevFEEwGQVZKtiu9olXdlNAK1eNgqSral6r/jlhI4w=="
+      }
+    }
+  }
+}
