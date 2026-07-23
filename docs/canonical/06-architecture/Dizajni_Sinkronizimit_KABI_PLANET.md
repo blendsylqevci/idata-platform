@@ -1,6 +1,7 @@
 # Dizajni i Sinkronizimit (Sync Engine) — KABI & PLANET
 
-**Versioni:** 1 · **Data:** 23.06.2026 · **iCode L.L.C**
+**Versioni:** 1.1 · **Data:** 23.07.2026 · **iCode L.L.C**
+**Stack boundary:** semantika e sync-ut ruhet; deployables/teknologjitë sinkronizohen me ADR-024. Target-i i aprovuar është ende **NOT YET IMPLEMENTED**.
 **Dokument i brendshëm zhvillimi** · Plotëson seksionin 7 të Planit Teknik
 
 ---
@@ -22,15 +23,15 @@ Parimet bazë:
 
 ```
                     ┌─────────────── CLOUD ───────────────────┐
-                    │  API · PostgreSQL (e vërteta afatgjatë)  │
-                    │  WebSocket gateway · Backups · Sentry    │
+                    │ ASP.NET API · PostgreSQL (source-of-record)│
+                    │ WebSocket gateway · Backups · Telemetry  │
                     └────────▲──────────────────────▲──────────┘
                              │ sync delta            │ sync delta
         KABI mobile ─────────┘                       │ (internet)
        (agjentë në terren,                           │
         offline-first, sync                ┌─────────┴──────────┐
         direkt me cloud)                   │   HUB LOKAL (PLANET) │
-                                           │   Node + PostgreSQL  │ ◀─ realtime mbi LAN:
+                                           │ ASP.NET + PostgreSQL │ ◀─ realtime mbi LAN:
                                            │   e vërteta gjatë    │    kamarier↔KDS↔arkë
                                            │   shërbimit          │
                                            └──▲─────▲─────▲───────┘
@@ -89,7 +90,7 @@ Pikat kyçe:
 
 - Çdo operacion ka **UUID të gjeneruar nga pajisja**.
 - Serveri mban një regjistër të id-ve të aplikuara; nëse merr të njëjtin id sërish (për shkak retry/dublim rrjeti) → **e injoron**, s'e riaplikon.
-- Rezultati: efektivisht **"exactly-once"** edhe në kushte rrjeti të dobët. Asnjë porosi/pagesë e dubluar.
+- Garancia reale: **at-least-once delivery + idempotent effect/dedup**. Retry mund ta dërgojë të njëjtin operacion disa herë; serveri e aplikon vetëm një herë. Nuk pretendohet exactly-once transport përtej pajisje/Edge/cloud.
 
 ---
 
@@ -208,9 +209,12 @@ Konfliktet që s'zgjidhen automatikisht shkojnë te një **tabelë konfliktesh**
 
 ## 17. Teknologjitë (referencë e brendshme)
 
-- **Mobile:** WatermelonDB / SQLite me sync adapter (ose PowerSync) për offline-first.
-- **Realtime:** WebSockets (Socket.IO).
-- **Hub lokal:** Node + PostgreSQL.
-- **Cloud:** NestJS + PostgreSQL.
+- **Mobile/POS local:** SQLite e enkriptuar + sync adapter; PowerSync vs custom mbetet ADR-011. Te POS, .NET Local Host zotëron DB/outbox/keys dhe renderer-i Angular komunikon vetëm me typed IPC; te mobile, data layer-i i aplikacionit zotëron SQLite/keystore.
+- **Semantika fiskale offline:** rregulla/vectors language-neutral; C# reference + TypeScript mobile duhet të kalojnë decimal/protobuf/hash equivalence në Step C. OpenAPI vetëm nuk mjafton për logjikën.
+- **Realtime:** WebSocket/SSE; backplane/provider mbetet gate operacional.
+- **Edge Hub:** ASP.NET Core + PostgreSQL lokal.
+- **Cloud:** ASP.NET Core Platform API/Workers + PostgreSQL qendror.
+- **Contracts:** OpenAPI → generated TypeScript clients.
+- **Device integrations:** .NET Device Agent; hardware-i final varet nga PoC-4b/ADR-017.
 
 *Shënim: ky dokument fokusohet te dizajni i sinkronizimit; zgjedhja e plotë e stack-ut është te Plani Teknik.*

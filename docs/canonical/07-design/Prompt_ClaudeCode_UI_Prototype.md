@@ -128,4 +128,4 @@ Acceptance: të tre ekranet duken realë dhe të klikueshëm; offline/LOT/POD/ca
 - Numra pa tabular-nums; tabela kontabël "ajrore" (duhet dendur me totale).
 - Pa backend/DB në këtë fazë — vetëm mock data dhe UI.
 
-*Pas prototipit dhe miratimit të stilit, e kthejmë në Prompt-Pack v3 për ndërtimin real (me arkitekturën NestJS/Supabase).*
+*Pas prototipit dhe miratimit të stilit, e kthejmë në Prompt-Pack v3 për target-in ADR-024: Angular Backoffice/POS UI, ASP.NET Core API, OpenAPI-generated clients dhe i18n të detyrueshëm Shqip (default)/Anglisht/Serbisht. Ky prototip mbetet vetëm evidence UI; nuk provon implementimin e target-it.*
