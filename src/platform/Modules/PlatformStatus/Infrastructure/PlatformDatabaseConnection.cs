@@ -1,4 +1,4 @@
-namespace Idata.Platform.Api;
+namespace Idata.Platform.Modules.PlatformStatus.Infrastructure;
 
 /// <summary>
 /// Connection string i TARGET database-it për dev/CI LOKAL me trust auth —

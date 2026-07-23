@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\platform\Idata.Platform.Api\Idata.Platform.Api.csproj" />
+    <ProjectReference Include="..\..\..\src\platform\Modules\PlatformStatus\Infrastructure\Idata.Platform.Modules.PlatformStatus.Infrastructure.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />

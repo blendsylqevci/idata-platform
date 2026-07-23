@@ -1,4 +1,3 @@
-using Idata.Platform.Api;
 using Idata.Platform.Modules.PlatformStatus.Application;
 using Idata.Platform.Modules.PlatformStatus.Infrastructure;
 using Idata.Platform.Modules.PlatformStatus.Presentation;

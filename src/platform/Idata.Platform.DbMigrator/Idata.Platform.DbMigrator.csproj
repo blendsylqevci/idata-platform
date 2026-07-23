@@ -6,4 +6,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Modules\PlatformStatus\Infrastructure\Idata.Platform.Modules.PlatformStatus.Infrastructure.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
 </Project>
