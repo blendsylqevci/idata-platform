@@ -1,0 +1,85 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Idata.Platform.Api | platform-v1",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/platform/status": {
+      "get": {
+        "tags": [
+          "Idata.Platform.Api"
+        ],
+        "summary": "Statusi teknik i platformës (Bootstrap smoke slice).",
+        "operationId": "GetPlatformStatus",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PlatformCapabilitiesResponse": {
+        "required": [
+          "identity",
+          "audit",
+          "outbox",
+          "observability"
+        ],
+        "type": "object",
+        "properties": {
+          "identity": {
+            "type": "string"
+          },
+          "audit": {
+            "type": "string"
+          },
+          "outbox": {
+            "type": "string"
+          },
+          "observability": {
+            "type": "string"
+          }
+        }
+      },
+      "PlatformStatusResponse": {
+        "required": [
+          "status",
+          "apiVersion",
+          "database",
+          "capabilities"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "apiVersion": {
+            "type": "string"
+          },
+          "database": {
+            "type": "string"
+          },
+          "capabilities": {
+            "$ref": "#/components/schemas/PlatformCapabilitiesResponse"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Idata.Platform.Api"
+    }
+  ]
+}

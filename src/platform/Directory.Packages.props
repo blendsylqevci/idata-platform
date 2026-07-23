@@ -9,6 +9,7 @@
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.10" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <!-- Pin direkt i një varësie TRANSITIVE: AspNetCore.OpenApi 10.0.10 tërheq
          Microsoft.OpenApi 2.0.0 me vulnerabilitet HIGH të njohur
