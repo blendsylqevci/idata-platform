@@ -56,14 +56,47 @@ jobs:
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
-      - name: Build (6 workspaces)
+      - name: Build (8 workspaces — legacy + backoffice/client)
         run: pnpm build
 
       - name: Migrate database (nga zero në DB-në e pastër të CI-së)
         run: pnpm --filter @idata/database migrate
 
-      - name: Typecheck (6 workspaces)
+      - name: Typecheck (8 workspaces)
         run: pnpm typecheck
 
-      - name: Test (6 workspaces; api/web/database prekin Postgres)
+      - name: Test (8 workspaces; api/web/database prekin Postgres; backoffice = vitest)
         run: pnpm test
+
+      # ── Target stack ADR-024 (Bootstrap pre-F1) — i NDARE nga legacy ──
+      # DB logjike e vecante: idata_platform (DbMigrator e krijon vete ne
+      # te njejtin sherbim Postgres); legacy 'idata' nuk preket. Zero secrets.
+      - name: Setup .NET (nga global.json)
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+
+      - name: Platform tool restore (dotnet-ef i pin-uar)
+        run: dotnet tool restore
+
+      - name: Platform restore (locked mode)
+        run: dotnet restore src/platform --locked-mode
+
+      - name: Platform build (warnings-as-errors; gjeneron edhe OpenAPI spec)
+        run: dotnet build src/platform --no-restore
+
+      - name: Target migration cycle (fresh / no-op / down / reapply)
+        run: |
+          dotnet run --no-build --project src/platform/Idata.Platform.DbMigrator -- migrate
+          dotnet run --no-build --project src/platform/Idata.Platform.DbMigrator -- migrate
+          dotnet run --no-build --project src/platform/Idata.Platform.DbMigrator -- status
+          dotnet run --no-build --project src/platform/Idata.Platform.DbMigrator -- down-to-zero
+          dotnet run --no-build --project src/platform/Idata.Platform.DbMigrator -- migrate
+
+      - name: Platform tests (unit + architecture + integration kunder target DB)
+        run: dotnet test src/platform --no-build
+
+      - name: Contracts drift-check (OpenAPI + generated client, zero diff)
+        run: |
+          pnpm --filter @idata/platform-api-client generate
+          git diff --exit-code -- contracts/openapi packages/platform-api-client/src/generated
