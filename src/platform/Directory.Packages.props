@@ -8,6 +8,11 @@
   <ItemGroup>
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
+    <!-- Pin i unifikuar i EF Core runtime: provider-i Npgsql 10.0.3 kerkon
+         10.0.4 ndersa Design 10.0.10 — pa pin te perbashket MSBuild leshon
+         MSB3277 (konflikt versionesh) ne testet qe bashkojne te dy grafet. -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10" />
     <PackageVersion Include="Microsoft.Extensions.ApiDescription.Server" Version="10.0.10" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
