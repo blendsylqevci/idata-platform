@@ -1,43 +1,78 @@
-# ARCHITECTURE — iData+ (Walking Skeleton)
+# ARCHITECTURE — iData+ (Current Baseline → ADR-024 Target)
 
-**Statusi:** themel (Increment 1). Burimi: `docs/canonical/01-phase0/Repo_Assembly_Walking_Skeleton_Runbook_2026-06-30.md` + `04_Data_Model_Draft.md` (v2.2.1).
+**Statusi:** walking skeleton-i TypeScript ekziston; **target-i ADR-024 është i aprovuar, por ende NOT YET IMPLEMENTED**.
+**Autoriteti i target-it:** `docs/canonical/01-phase0/05_Decision_Gates_ADR.md` · ADR-024.
+**Burimi historik i skeleton-it:** `docs/canonical/01-phase0/Repo_Assembly_Walking_Skeleton_Runbook_2026-06-30.md` + `04_Data_Model_Draft.md` (v2.2.1).
 
-Ky dokument mban invariantet arkitekturore që hyjnë **që nga commit-i i parë** (jo retrofit) dhe zgjedhjet teknike fillestare. Zgjedhjet janë **default të sigurt dhe të zëvendësueshme** (ADR-të e hapura mbeten të hapura — shih runbook §7).
+Ky dokument ndan qartë **çfarë ekziston sot** nga **çfarë do të ndërtohet**. Merge-i i ADR-024 nuk e promovon target-in në implemented; migrimi bëhet inkrementalisht, me parity dhe rollback.
 
-## Struktura (pnpm + turbo monorepo)
+## Gjendja aktuale — evidence/oracle historik
 
 ```
 apps/
-  api/        # NestJS — health route (Increment 2)
-  web/        # Next.js — bosh që starton (Increment 2)
+  api/        # NestJS walking skeleton
+  web/        # Next.js walking skeleton
 packages/
   shared-types/   # Money (decimal-safe), branded IDs, enums, invariante
   accounting/     # posting simulator (library-first, PA DB) + fixtures + teste
-  database/       # skeleton (lidhje + migrime bosh) — Increment 2
+  database/       # skeleton + migrime/PoC
+  integrity-linter/
 ```
+
+Ky runtime **nuk është target-i i produktit**. Ruhet përkohësisht për teste, PoC dhe parity; nuk zgjerohet me module të reja biznesi dhe hiqet i fundit.
+
+## Target-i ADR-024
+
+| Deployable / sipërfaqe | Target-i |
+|---|---|
+| Admin / Backoffice | Angular web; ERP/Accounting/WMS/OMS/Production/Finance Ops si bounded modules në një shell |
+| POS | Angular UI, aplikacion desktop i instalueshëm; wrapper-i dhe matrica e OS-it mbeten OPEN (ADR-027, me evidence nga ADR-017/PoC-4b) |
+| Mobile | React Native + Expo Development Build; SQLite lokal |
+| Platform API | C# / ASP.NET Core (.NET 10 target), modular monolith |
+| Workers | .NET Worker Services |
+| Edge Hub | ASP.NET Core + PostgreSQL lokal |
+| POS Local Host | .NET process i shpërndarë me instalimin e POS-it; domain/outbox/encrypted SQLite/keys dhe kontratë lokale IPC e tipizuar |
+| Device Agent | .NET process për printer/skaner/peshore dhe pajisje lokale |
+| Identity | OIDC/OAuth2 contract + një authority/login/SSO dhe kufi autorizimi provider-neutral në ASP.NET Core; provider/store = OPEN (ADR-028) |
+| Data | PostgreSQL qendror me module-owned schemas; SQLite në POS/mobile |
+| Contracts | OpenAPI → generated TypeScript clients |
+
+### Kufijtë
+
+- **Një monorepo**, jo repo të reja për POS/ERP/WMS/OMS.
+- POS-i është deployable i ndarë nga Backoffice, por përdor të njëjtin identity/API/kontrata.
+- Modular monolith fillimisht; nxjerrja në microservice kërkon evidence + ADR të ri.
+- Clean/Onion zbatohet brenda moduleve; delivery bëhet me vertical slices.
+- CQRS përdoret selektivisht; CRUD i thjeshtë nuk dyfishohet pa arsye.
+- Asnjë UI nuk lidhet direkt me DB. Çdo shkrim kalon API/domain/invariantet.
+- Angular renderer-i i POS-it nuk hap SQLite ose keys; .NET POS Local Host është trusted owner. Wrapper-i vetëm menaxhon lifecycle/IPC sipas ADR-027.
+- Fiscal Core mbetet bounded certification surface.
+- Fiscal semantics janë kontratë language-neutral me vectors versionuar: C# reference + TypeScript mobile offline duhet të kalojnë decimal/protobuf/hash equivalence.
+- Shqip (default), Anglisht dhe Serbisht janë locale të detyrueshme; print/POS fiscal fixtures provohen para release-it. **Atribuimi:** CORE-02 / UA 01/2026 §32.2.9, f.27 kërkon shumëgjuhësi sipas legjislacionit për gjuhët zyrtare (SQ/SR në Ledger U11); EN është target i detyrueshëm i Pronarit/produktit.
+- Enkriptimi at-rest/key custody është gate i detyrueshëm (ADR-025); providerët cloud/storage/secrets mbyllen në ADR-026.
+- Supabase nuk është dependency qendrore e target-it; Node/pnpm mbeten për UI/mobile/tooling.
 
 ## Invariantet jo-negociueshme (runbook §6)
 
 1. **`business_id` në çdo tabelë tenant-scoped** — direkt, jo i nënkuptuar (rule==model, sipas Data Model v2.2.1). Testet e refuzojnë çdo rresht postimi pa `business_id`.
-2. **Para = decimal, kurrë `float`/JS `number`.** Aritmetika monetare kalon nëpër `Money` (shih `shared-types`). **SEF money-scale mbahet ndaras** nga numeric-i i brendshëm i GL-së.
+2. **Para = decimal, kurrë float.** Aritmetika monetare e target-it kalon në pure C# domain types; legacy `Money` TS mbetet oracle vetëm deri në parity. **SEF money-scale mbahet ndaras** nga numeric-i i brendshëm i GL-së.
 3. **Audit append-only** për veprime kritike (pa mbishkrim; korrigjim = ngjarje e re).
 4. **Idempotency** — një `idempotency_key` → një postim; ripërsëritja s'krijon dyfish (offline/POS/van/postime).
 5. **Tenant isolation** — modeli që në fillim; RLS si safety-net më vonë.
 6. **No hard delete** për dokumente financiare → anulim / korrigjim / reversal.
 
-## Zgjedhje teknike fillestare (të zëvendësueshme)
+## Rendi i migrimit
 
-| Fusha | Zgjedhja | Arsyeja / alternativa |
-|---|---|---|
-| Package manager | **pnpm** + **turbo** | Sipas runbook §4. |
-| Gjuha | **TypeScript** `strict` + `noUncheckedIndexedAccess` | Siguri tipi për financa. |
-| Testet | **Vitest** | TS-native, i shpejtë; alternativë: Jest. |
-| Para (decimal) | **decimal.js** brenda një `Money` value-object | Aritmetikë e saktë; alternativa: big.js, bigint minor-units. E izoluar prapa `Money` → e zëvendësueshme. |
+1. ADR-024 dhe sinkronizimi docs.
+2. Platform Foundation Bootstrap pre-F1: solution/build/CI, një API/module smoke path, DB migration path, OpenAPI generation dhe Angular shell minimal.
+3. F1 Foundation: Identity/Tenant/RBAC, audit, encryption/key custody, observability dhe recovery; pastaj zinxhiri fiskal në Fiscal bounded context të ri: Step B/ATK → Step C cross-runtime conformance → independent re-review → HUMAN GATE → private `/ca/verify` PREFLIGHT → pjesa tjetër e Tier 2; pa endpoint real para Human Gate.
+4. Vertical slices modul-pas-moduli; UI dhe backend përfundojnë bashkë per capability.
+5. Legacy TS hiqet vetëm pas parity tests, rollback plan, independent review dhe Human Gate; pa dual-write afatgjatë.
 
-## Çfarë NUK është këtu ende (runbook §9)
+## Çfarë NUK është implementuar ende
 
-POS/KDS · logjika e prodhimit KABI (qumësht/fermerë/batch/van) · SEF full · UI finale · asete (Faza 2). DB schema/migrime për accounting vijnë **pas PoC-2**. ADR-10..17 mbeten të hapura.
+Target solution/projektet .NET · Angular shell/POS · desktop wrapper dhe OS matrix · identity provider/store · Edge Hub/Device Agent · schema/migrime production · module biznesi · SEF production · UI finale. Gates ADR-011/012/014/016/017/025/026/027/028 mbeten OPEN.
 
 ## Traceability
 
-Çdo pretendim që prek implementimin → cito Data Model / SSOT / evidence. `packages/accounting` teston invariantet kundër fixtures **sintetike** (asnjë vlerë reale klienti — shih `PROJECT_RULES.md` §3,§4).
+Çdo pretendim që prek implementimin → cito Data Model / SSOT / ADR-024 / evidence. Testet përdorin fixtures **sintetike**; asnjë vlerë reale klienti (shih `PROJECT_RULES.md` §3,§4).

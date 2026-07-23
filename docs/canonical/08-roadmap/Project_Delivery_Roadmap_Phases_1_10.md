@@ -1,7 +1,7 @@
 # iData+ — Project Delivery Roadmap, Fazat 1–10
 
 **Status:** canonical / approved (kopja kanonike e roadmap-it — miratuar nga Pronari; merged PR #9, përditësime me PR review)  
-**Data:** 2026-07-07 · **Përditësuar:** 2026-07-21
+**Data:** 2026-07-07 · **Përditësuar:** 2026-07-23
 **Burime kryesore:** SSOT §3/§8/§12, Feature Status Register, Outstanding Confirmations Tracker, ADR Register, 5 PoC Specs, PRO DATA Evidence Closure, KABI Operational Evidence Update, Accountant Confirmation Pack, Increment 1 PR #4/#6, security PR #8  
 **Rregull i hekurt:** ky roadmap **nuk krijon numërim të ri fazash**. Ndjek 1:1 SSOT §3. Nëse ndryshon numërimi, duhet vendim formal në SSOT + Decisions Log.
 
@@ -14,6 +14,8 @@ Increment 1 është mbyllur teknikisht:
 - PR #4: Hapi A — monorepo foundation + shared-types + accounting library-first.
 - PR #6: Hapi B — `packages/database`, `apps/api`, `apps/web`, ping real `web → api → db`.
 - PR #8: security dependency bump — NestJS 11, Vitest 3, `multer` patch përmes `pnpm.overrides`; Dependabot alerts ranë nga 21 në 6.
+- PR #21: GOV-001 integrity-linter baseline advisory (`DOC-CORE` + `HISTORY-PRIV`) — merged; required-CI mbetet gated.
+- ADR-024: target stack/topology i aprovuar për kanonizim; **ende NOT YET IMPLEMENTED**. Walking skeleton-i TS ruhet si evidence/oracle gjatë migrimit.
 - Faza 0 ka bazë të fortë dokumentimi, data model, evidence nga PRO DATA, SEF test phase active, formula USAID e validuar dhe canonical docs të pastruara.
 
 Ky dokument është ura mes “kemi bazën” dhe “dimë çka ndërtojmë, në çfarë rendi, me cilat porta, dhe çka ndodh nëse diçka dështon”.
@@ -42,16 +44,21 @@ Këto janë datat më të vona të pranueshme që ruajnë shansin real për cuto
 | ID / Gate | Status aktual | Çka duhet konfirmuar | Owner | Bllokon | Data më e vonë | Nëse vonohet |
 |---|---|---|---:|---|---:|---|
 | SSOT-VERSION | Closed (PR #11, 07.07) | Header-i i SSOT të përputhet me Decisions Log aktual para PR roadmap | Codex/PM | PR roadmap | 2026-07-08 | PR roadmap nuk hapet pa bump/version consistency |
-| ENG-001 | Open | Boundary NestJS service/repository; controller-i nuk duhet të mbetet varësi direkte për Accounting Core | Tech + Codex | Faza 2 | 2026-07-24 | accounting endpoints mbeten thin/prototype; nuk ngrihet API contract final |
-| ENG-002 | Open | Custom migration runner vs tool standard për migrime production-grade | Tech + Codex | Faza 2 / Faza 9 | 2026-07-24 | custom runner lejohet vetëm për skeleton/PoC; jo për prod migration freeze |
+| ENG-001 | Superseded by ADR-024 | Boundary historik NestJS service/repository; target-i = module boundary ASP.NET Core + OpenAPI | Tech + PM | Foundation Bootstrap / F2 | 2026-07-23 | mos zgjero Nest skeleton-in; prove module boundary në Bootstrap |
+| ENG-002 | Resolved by ADR-024; implementation pending | Një migration owner: EF Core + SQL i audituar brenda migrimeve për DB invariants | Tech + PM | Foundation Bootstrap / F2 / F9 | Bootstrap gate | asnjë migration production-grade pa fresh-apply/no-op/rollback tests |
 | ENG-003 | Closed (PR #10, 07.07) | Composite FK cross-tenant, p.sh. `role_permission (business_id, role_id) REFERENCES role (business_id, id)` | Tech | PoC-1 / Faza 1 | 2026-07-18 | PoC-1 nuk kalon PASS; tenant isolation mbetet e paprovuar në DB |
 | ENG-004 | Open | `audit_log` group-level events vs `business_id NOT NULL` skeleton | Pronari + Tech | Faza 1 audit model | 2026-07-20 | vazhdohet vetëm me business-scoped audit; group-level events shtyhen si model i veçantë |
 | SEC-DEP | Active / recurring | Dependabot governance: no auto-merge, CI/gitleaks/review, weekly Security tab + `pnpm.overrides` review | Pronari + Tech | Security process | Weekly | security alerts nuk mbyllen si “done” pa review; override i vjetër hiqet kur upstream e mbulon |
-| ADR-010 | Open | Hosted vs self-host EU për cloud DB/services | Pronari + Tech | Faza 1/PoC infra | 2026-07-15 | përdor Postgres lokal/neutral deri në vendim; s'kyçet cloud vendor në kod |
+| ADR-010 | Superseded by ADR-024 | Supabase nuk është dependency qendrore e target-it; providerët hosting/storage/secrets ndiqen si gates operative | Pronari + Tech | Foundation Bootstrap | ADR-026 gate | mos kyç provider para vendimit të vet |
 | ADR-011 | Open | Sync engine: PowerSync vs custom sync | Tech + PM | PoC-3, offline, mobile/hub | 2026-07-31 | PoC-3 bëhet me adapter abstraction; nuk kyçet vendor deri në vendim |
 | ADR-014 | Open | Connection pooling strategy | Tech | Faza 1/2 load path | 2026-07-20 | vazhdo me dev pool vetëm për PoC; mos bëj load commitments |
-| ADR-012 | Open | GL posting: DB functions vs NestJS transaction/hybrid | Codex + Tech | PoC-2, Accounting Core | 2026-07-24 | PoC-2 teston të dy variantet minimalisht; pa Accounting Core freeze |
-| ADR-013 | Open | Local hub DB: Postgres vs SQLite/embedded | Tech + ops | PoC-4, PLANET/KABI local hub | 2026-08-10 | hub PoC ndërtohet me interface; hardware/DB final nuk blihet |
+| ADR-012 | Open | GL posting: PostgreSQL invariants/functions vs C# transaction/hybrid | Tech + PM | Accounting Core | para F2 freeze | pa Accounting Core freeze |
+| ADR-013 | Closed via ADR-024 | Edge Hub = ASP.NET Core + PostgreSQL lokal; POS/mobile = SQLite | Tech + ops | Foundation Bootstrap / PoC-4b | 2026-07-23 | hardware/support final mbetet gate |
+| ADR-024 | Approved target / pending canonical merge | Platform Runtime & Architecture Stack Freeze; target ≠ implemented | Pronari + Tech + PM | Foundation Bootstrap; F1; Step B | para migrimit | pa merge/review nuk nis migrimi i stack-ut |
+| ADR-025 | Open | Encryption-at-rest + key custody për POS/mobile/Edge/cloud; zero keys në renderer/repo/log | Pronari + Tech | F1 / F5 / pilot | para data-bearing F1 | pa vendim s'futen të dhëna reale dhe s'ka pilot |
+| ADR-026 | Open | Hosting/object-storage/secrets/KMS/backup/observability providers + rezidencë/DPA/exit plan | Pronari + Tech | mjediset jo-lokale | para provider binding | zhvillimi mbetet lokal/provider-neutral |
+| ADR-027 | Open | POS desktop wrapper (Electron vs tjetër) + OS matrix Windows/macOS/Linux, me installer/update/rollback dhe hardware/driver evidence | Pronari + Tech | POS production shell / F7 | para implementimit të shell-it production | POS-i mbetet i instalueshëm, por shell/OS nuk ngrihen pa ADR-017/HW-001/PoC-4b |
+| ADR-028 | Open | Identity provider/store: OpenIddict vs external IdP dhe modeli i store-it; OIDC/SSO/MFA/RBAC/tenant auth mbeten kontratë e vendosur | Pronari + Tech | F1 Identity | para provider binding/F1 Identity production | Foundation mbetet provider-neutral deri në vendim |
 | ADR-016 | Open | RN/Expo build strategy | Tech | Mobile/offline apps | 2026-08-10 | mobile PoC ruhet minimal; build pipeline final shtyhet |
 | ADR-017 | Open | Printera fiskalë: hardware vs SEF software | iCode + ATK/vendor | Hardware procurement, SEF | 2026-08-15 | nuk blihet printer fiskal pa vendim; përdoret printer termik test |
 | ACC-003 | Sent/Open | Tax codes/accounts/rounding final | Kontabilisti | Faza 2 VAT/books | 2026-07-24 | përdor config provisional; s'lejohet go-live/sign-off |
@@ -79,11 +86,11 @@ Këto janë datat më të vona të pranueshme që ruajnë shansin real për cuto
 
 ## 3. Critical Path i fazave
 
-Ky plan ruan dhjetorin për parallel run, UAT, trajnim, freeze dhe cutover rehearsal. Datat janë planifikuese; nëse një fazë rrëshqet, Go/No-Go duhet të rivlerësohet, jo të fshihet rreziku.
+Ky plan ruan dhjetorin për parallel run, UAT, trajnim, freeze dhe cutover rehearsal. **Dritaret e tabelës më poshtë janë baseline para ADR-024 dhe kërkojnë rebaseline formal pas Platform Foundation Bootstrap; nuk janë premtime aktive të stack-migration-it.** Numërimi F1–F10 dhe gates mbeten; nëse një fazë rrëshqet, Go/No-Go duhet të rivlerësohet, jo të fshihet rreziku.
 
 | Faza | Owner kryesor | Kohëzgjatje e vlerësuar | Dritarja e synuar | Data më e vonë e nisjes | Milestone / alarm |
 |---|---|---:|---|---:|---|
-| F1 Foundation | Tech Lead + PM | 3–4 javë | 2026-07-08 → 2026-08-05 | 2026-07-15 | PoC-1 duhet të nisë brenda korrikut |
+| F1 Foundation | Tech Lead + PM | 3–4 javë | HISTORICAL baseline: 2026-07-08 → 2026-08-05 | **OVERDUE:** 2026-07-15; rebaseline = TBD pas ADR-024 + Bootstrap PASS | F1 nis vetëm mbi Bootstrap PASS; data e re regjistrohet pa backdating |
 | F2 Accounting Core | Accounting Lead + Tech | 4–5 javë | 2026-08-01 → 2026-09-05 | 2026-08-05 | Pa F2, as KABI as PLANET nuk kanë GL/TVSH |
 | F3 Stok + Recetura + COGS | Inventory/Accounting Lead | 3–4 javë | 2026-08-20 → 2026-09-20 | 2026-08-25 | COGS/LOT/FEFO para KABI MVP |
 | F4 KABI Operacional MVP | KABI Product Lead + Tech | 4 javë | 2026-09-05 → 2026-10-05 | 2026-09-10 | Farmer intake/lab/tank/settlement duhet të hyjë në UAT |
@@ -127,7 +134,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 **Qëllimi:** të krijohet bazamenti i përdorshëm dhe i sigurt: auth, multi-company, RBAC, audit, monitorim, backup discipline dhe vendimi i payroll-it minimal.
 
-**Owner / kohëzgjatje / data më e vonë:** Tech Lead + PM · 3–4 javë · nisje jo më vonë se 2026-07-15  
+**Owner / kohëzgjatje / rebaseline:** Tech Lead + PM · 3–4 javë · target-i i vjetër 2026-07-15 = **OVERDUE / SUPERSEDED nga prerequisite-i ADR-024 + Bootstrap**; data e re e nisjes vendoset menjëherë pas merge-it të ADR-024 dhe PASS-it të Bootstrap-it, pa u shpikur retroaktivisht.
 **Feature buckets:** Shared MVP, Accounting MVP foundations, Requires-ADR.
 
 **Scope brenda**
@@ -140,6 +147,8 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - Break-glass model për iCode Support.
 - Monitoring minimal: health checks, logs, error boundaries.
 - Backup/PITR/restore drill minimal për mjediset dev/staging.
+- i18n foundation me resource keys/fallback për Shqip (default), Anglisht dhe Serbisht; pa tekste kritike hardcoded. CORE-02 / UA 01/2026 §32.2.9, f.27 + Ledger U11 mbulojnë shumëgjuhësinë zyrtare SQ/SR; EN është target i detyrueshëm i Pronarit/produktit.
+- ADR-025 encryption/key-custody baseline për data stores që mbajnë të dhëna reale.
 - Payroll gate: vendim për full payroll engine vs master-data + kontribute.
 
 **Jashtë scope**
@@ -152,8 +161,9 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 **Prerequisites**
 
 - Increment 1 i mbyllur.
-- ADR-010, ADR-014 me vendim ose workaround të dokumentuar.
-- ADR-011, ADR-013, ADR-016 si gates të dizajnit offline/mobile/hub; nuk bllokojnë skeleton-in, por bllokojnë ngrirjen e PoC-3/PoC-4/mobile build.
+- ADR-024 merged + **Platform Foundation Bootstrap PASS**; ADR-014 me vendim ose workaround të dokumentuar.
+- ADR-025 vendosur para çdo data-bearing implementation; ADR-026 vendosur para mjedisit të parë jo-lokal; ADR-028 vendosur para F1 Identity production/provider binding.
+- ADR-011 dhe ADR-016 mbeten gates të sync/mobile build; ADR-013 është mbyllur nga ADR-024, por PoC-4b/hardware vazhdon të bllokojë production support.
 - ENG-003: composite FK cross-tenant për tenant-scoped child tables.
 - ENG-004: vendim për `audit_log` group-level events vs business-scoped-only audit.
 - Payroll scope decision.
@@ -226,8 +236,8 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - ACC-008: correction/write-off/credit note policy.
 - ACC-010/011: closed-month validation dhe ATK book format janë bazë evidence.
 - ADR-012: GL posting architecture.
-- ENG-001: service/repository boundary për NestJS para se Accounting Core API të ngrijë.
-- ENG-002: vendim migration runner custom vs tool standard para migrimeve production-grade.
+- ADR-024/Foundation Bootstrap: module boundary ASP.NET Core + OpenAPI duhet të jetë provuar para Accounting Core API freeze.
+- ENG-002: EF Core + audited SQL migration path me fresh-apply/no-op/rollback tests para migrimeve production-grade.
 - **Dizajn concurrency-safe për `partner_card_entry.running_balance`** (lock ose llogaritje në lexim, jo read-modify-write i pambrojtur) — gjetje e PoC-2.
 
 **Deliverables**
@@ -427,6 +437,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 - KABI van-sales app/workflow.
 - SEF certified fiscal path.
+- POS/print fiscal language selector + fixtures të verifikuara për Shqip (default), Anglisht dhe Serbisht.
 - Offline retry/48h alarm.
 - Driver reconciliation.
 - KABI operational go-live package.
@@ -435,6 +446,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 - 5 fatura offline sync-ohen pa dublim.
 - Kuponi/fatura fiskalizohet sipas rregullave SEF.
+- I njëjti kupon/faturë kalon layout/content tests në SQ/EN/SR dhe gjuha e zgjedhur nuk ndryshon semantikën fiskale.
 - Driver loading - sales - returns - remaining stock rakordohet.
 - Kthim/refuzim LOT krijon dokument korrekt dhe kartelë klienti të saktë.
 - KABI mund të operojë një ditë pune me sistemin e ri dhe të rakordohet me kontabilitetin.
@@ -526,7 +538,8 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - FIN-001 and FIN-002 meeting with PLANET finance.
 - FIN-003 floor-plan/KDS/shank/printer routing.
 - OPS-001 RESORT structure.
-- ADR-013 local hub DB decision/workaround.
+- ADR-024 Edge Hub skeleton + PoC-4b/hardware validation.
+- ADR-027 desktop wrapper/OS gate mbyllet me evidence nga ADR-017, HW-001 dhe PoC-4b para shell-it production të POS-it.
 - HW-001 hardware inventory.
 - PoC-4 local hub PASS.
 
@@ -676,18 +689,23 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 ---
 
-## 6. Rendi aktual i punës (përditësuar 21.07.2026 — pa cikël)
+## 6. Rendi aktual i punës (përditësuar 23.07.2026 — pa cikël)
 
-*(**Full-corpus re-audit + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim — `ATK_Source_Register.md` v2.4 + `ATK_SEF_Requirements_Ledger.md` v1.6 + Gate v2.0; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate).)*
+*(**Full-corpus re-audit + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim — `ATK_Source_Register.md` v2.4 + `ATK_SEF_Requirements_Ledger.md` v1.7 + Gate v2.0; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate).)*
 
 1. **Step A — docs correction PR (HISTORICAL — COMPLETED me merge-in e PR #20)** (kanonizimi i verdiktit + kontratave).
-1a. **GOVERNANCE PREREQUISITE — GOV-001** *(jashtë zinxhirit SEF)*: linter engine + `DOC-CORE` + `HISTORY-PRIV`, advisory, në **PR tooling të veçantë**; **përfundon para hapjes së PR-së së parë Step B** (nuk ecën njëkohësisht me të). Required-CI mbetet gated (`HG-LINTER-REQUIRED`). **Statusi: PLOTËSOHET me merge-in e PR-së tooling GOV-001** (engine + `DOC-CORE`/`HISTORY-PRIV` advisory; 14 profile NOT_IMPLEMENTED; `SEF-ATK` gjatë Step B para mbylljes së tij). **Gate aktual: PR #21 (GOV-001 hardening) në review — Step B hapet VETËM pas merge-it të aprovuar të tij, jo aktiv ende.**
-2. **Step B — PRE-Tier2 code hardening (`ATK-012`, P0):** mbyllja e **T2-01..T2-10** (Gate v2 §4).
-3. **Step C — official golden vectors + fake-HTTP/negative tests** (kundër C#/Go @ pins).
+1a. **GOVERNANCE PREREQUISITE — GOV-001 (COMPLETED BASELINE me merge-in e PR #21):** engine + `DOC-CORE`/`HISTORY-PRIV` advisory; 14 profile NOT_IMPLEMENTED; required-CI mbetet gated (`HG-LINTER-REQUIRED`).
+1b. **GATE AKTUAL — ADR-024 docs-only:** kanonizimi i stack-ut/topologjisë së aprovuar; target-i mbetet **NOT YET IMPLEMENTED** deri te Foundation Bootstrap/F1.
+1c. **PLATFORM FOUNDATION BOOTSTRAP / STACK MIGRATION PRE-F1:** solution .NET + CI · një API/module smoke path · PostgreSQL dev migration path · OpenAPI client generation · Angular shell minimal. Identity/audit/outbox/observability këtu janë vetëm contracts/smoke wiring; production enforcement mbetet F1. Legacy TS ruhet si oracle; asnjë modul biznesi nuk zgjerohet mbi stack-un e vjetër.
+1d. **F1 FOUNDATION në stack-un e ri:** Identity/Tenant/RBAC · audit · encryption/key custody · observability · backup/recovery · i18n foundation.
+2. **Step B — PRE-Tier2 code hardening (`ATK-012`, P0) në Fiscal bounded context të stack-ut të ri:** mbyllja e **T2-01..T2-10** (Gate v2 §4).
+3. **Step C — Fiscal Semantics Conformance Pack:** official golden vectors + C#↔TypeScript offline decimal/protobuf/hash equivalence + fake-HTTP/negative tests (kundër C#/Go @ pins).
 4. **Independent re-review** i deltës + i të gjitha gates të Tier 2.
 5. **HUMAN GATE** — autorizimi eksplicit i Pronarit **për thirrjen e PARË reale** (asnjë `/ca/*`, `/ca/signcsr`, `/pos/*`, `/citizen/*` para tij).
 6. **Private `/ca/verify` PREFLIGHT** (wrapper evidence-safe i ndërtuar në Step B/C — sot NUK ekziston) → **vetëm pas suksesit vazhdon pjesa tjetër e Tier 2**.
 7. **Certifikimi / go-live = NO-GO më vete** (blockers shtesë — Gate v2 §5).
 8. **Paralel:** PoC-4b ecën i pavarur kur vjen hardware-i.
+
+**Kufiri:** Foundation Bootstrap + F1 janë prerequisites teknike para Step B, por **nuk janë hallka brenda zinxhirit fiskal**. Zinxhiri Step B→Step C→review→Human Gate→preflight→Tier 2 mbetet verbatim dhe pa endpoint real para Human Gate.
 
 *(Rendi origjinal i 07.07.2026 — HISTORIK: review Fable/Codex → aprovim → PR docs → 5 PoC-të me radhë. Sekuenca është ekzekutuar; statusi final është te §4 "Statusi real": **PoC-4b dhe PoC-5 Tier 2 mbeten pending**.)*

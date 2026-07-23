@@ -1,28 +1,25 @@
 # Arkitektura Offline/Online, Stack dhe Pajisjet (Draft vendimesh)
 
-> **⚠️ SUPERSEDED (pjesët PWA) — 07.07.2026:** çdo propozim në këtë draft për **PWA / web-app si UI kryesore** (POS/KDS/kamarier) është **i tejkaluar** nga **ADR-002 (Accepted): mobile = native React Native/Expo; PWA e përjashtuar** — shih `docs/canonical/01-phase0/05_Decision_Gates_ADR.md` dhe `iData_Plus_SSOT.md` §2. Pjesët e tjera (hub lokal, offline-first, hardware) mbeten referencë historike. Në konflikt, **fiton ADR-002**.
+> **⚠️ TARGET STACK/TOPOLOGY SUPERSEDED nga ADR-024 — 23.07.2026:** ky draft ruhet për arsyetimin offline/hardware dhe historinë e vendimit. Target-i aktiv është: Angular Backoffice · Angular POS desktop i instalueshëm + .NET Local Host/Device Agent · React Native/Expo mobile · ASP.NET Core API/Workers/Edge · PostgreSQL/SQLite · OpenAPI. Desktop wrapper/OS dhe identity provider/store mbeten OPEN në ADR-027/028. Në konflikt fiton `docs/canonical/01-phase0/05_Decision_Gates_ADR.md` (ADR-024). Kjo nuk do të thotë se target-i është implementuar.
 
-Status: Drejtim i aprovuar per dokumentim, me disa pika qe kerkojne verifikim teknik/ATK
-Data: 2026-06-24
+Status: HISTORICAL decision draft; sync/offline/hardware reasoning mbetet input, stack/topology fitohet nga ADR-024
+Data fillestare: 2026-06-24 · Target sync: 2026-07-23
 Qellimi: te definohet si duhet te funksionoje platforma KABI + PLANET para se te filloje dokumentimi baze dhe zhvillimi.
 
 Ky dokument nuk eshte implementim final. Eshte vendim arkitekturor paraprak qe na mbron nga supozimet e gabuara.
 
 ## 1. Vendimi kryesor
 
-Platforma nuk duhet te jete vetem web dhe nuk duhet te jete vetem Electron.
+Vendimi aktiv (ADR-024):
 
-Vendimi i aprovuar:
-
-- backoffice, administrata, kontabiliteti dhe raportet: web app;
-- KABI terren/ambulant/merchandising: mobile app native/cross-platform, default React Native/Expo;
-- PLANET KDS dhe dashboard: web/PWA;
-- PLANET POS: web/PWA si UI kryesore + local hardware gateway/hub;
-- Electron nuk eshte baza e krejt platformes; perdoret vetem nese duhet per hardware bridge, local gateway ose paketim desktop;
-- databaza qendrore: PostgreSQL;
-- databaza lokale ne pajisje: SQLite;
-- files/foto/PDF/dokumente: object storage;
-- arkitektura fillestare: modular monolith, jo microservices.
+- Admin/Backoffice: Angular web;
+- POS: aplikacion i veçantë desktop me Angular UI, i instalueshëm dhe i lidhur me API/Edge përmes .NET POS Local Host/Device Agent; wrapper/OS = ADR-027 OPEN;
+- KABI terren/ambulant dhe PLANET kamarier: React Native/Expo;
+- KDS: klient LAN/kiosk i fokusuar; shell-i final mbetet hardware gate;
+- API/domain/workers/Edge/Device Agent: C# / ASP.NET Core;
+- databaza qendrore: PostgreSQL; Edge Hub: PostgreSQL lokal; POS/mobile: SQLite;
+- files/foto/PDF/dokumente: object storage (provider = gate);
+- arkitektura fillestare: modular monolith, Clean/Onion brenda moduleve, vertical slices; jo microservices.
 
 ## 2. Parimi i pergjithshem online/offline
 
@@ -102,13 +99,13 @@ Ky model e ul konfliktin kur ambulanti punon offline.
 
 PLANET ka nevoje per offline lokal ne restorant, sidomos per POS/KDS.
 
-Vendimi paraprak:
+Vendimi aktiv:
 
-- POS UI: web/PWA;
-- local hub/gateway: mini-PC/NUC ne lokacion;
-- KDS: web/PWA ne tableta/ekrana;
-- printer backup: lidhet permes hub/gateway;
-- Electron perdoret vetem nese gateway/hardware bridge kerkon paketim desktop.
+- POS UI: Angular desktop i instalueshëm; wrapper/OS = ADR-027 OPEN;
+- local Edge Hub: ASP.NET Core + PostgreSQL në mini-PC/NUC;
+- KDS: klient LAN/kiosk; teknologjia e shell-it finalizohet pas PoC-4b;
+- printer/skaner/peshore: përmes .NET Device Agent/Edge Hub;
+- Backoffice web nuk është POS dhe nuk lidhet direkt me hardware/DB.
 
 ### Pse local hub eshte kritik per PLANET
 
@@ -126,25 +123,9 @@ Hub-i lokal duhet te mundesoje:
 
 Per PLANET, hub-i lokal trajtohet si pothuajse i detyrueshem.
 
-## 5. App i kamarierit - decision gate
+## 5. App i kamarierit
 
-Kjo pike nuk mbyllet pa vendim me PLANET.
-
-Opsioni A: React Native/Expo
-
-- me i forte per offline;
-- me i mire per pajisje te kontrolluara nga biznesi;
-- me i mire per njoftime, kamera, skanim dhe stabilitet;
-- kerkon instalim dhe menaxhim app-i.
-
-Opsioni B: PWA
-
-- me i lehte per BYOD/telefon personal;
-- pa instalim nga store;
-- nje kodbaze me web;
-- kufizime me hardware/offline/background ne disa pajisje.
-
-Default profesional: React Native/Expo nese biznesi i kontrollon pajisjet; PWA nese PLANET insiston ne BYOD pa instalim.
+ADR-002 + ADR-024 e mbyllin runtime-in: **React Native/Expo Development Build**. BYOD/device management, distribution dhe EAS-vs-bare mbeten gates operative (ADR-016), jo rihapje e PWA-së si target kryesor.
 
 ## 6. Databaza dhe storage
 
@@ -163,12 +144,8 @@ Arsye:
 
 ### Lokale
 
-SQLite eshte databaza lokale per:
-
-- KABI mobile app;
-- app/pajisje offline;
-- gateway/hub lokal nese duhet;
-- cache operative.
+- PostgreSQL lokal = Edge Hub.
+- SQLite = POS desktop/mobile dhe cache operative.
 
 IndexedDB perdoret vetem per PWA te lehta ose cache browser-i, jo si baze kryesore per fiskalizim/ambulant.
 
@@ -185,8 +162,9 @@ Vendimi: nuk duhet te shkruajme sync engine komplet nga zero pa analizuar zgjidh
 Kandidatet:
 
 - PowerSync;
-- WatermelonDB;
 - custom sync vetem nese zgjidhjet ekzistuese nuk i mbulojne kerkesat.
+
+**HISTORICAL / EXCLUDED nga ADR-011 aktual:** WatermelonDB u konsiderua në draftin fillestar, por nuk është më kandidat aktiv i gate-it.
 
 Default per vleresim: PowerSync, sepse eshte i orientuar per SQLite local + backend database sync dhe ka mbeshtetje per React Native/Expo dhe Postgres.
 
@@ -231,22 +209,22 @@ Para implementimit final duhet te verifikohet ne SEF sandbox/ATK/ofrues fiskal:
 
 Kjo nuk duhet te supozohet. Duhet provuar para zhvillimit final te faturimit fiskal.
 
-## 9. Stack i propozuar
+## 9. Stack-u aktiv i target-it (ADR-024; NOT YET IMPLEMENTED)
 
-Ky eshte drejtim teknik, jo dokument marrëveshjeje finale:
-
-- language: TypeScript;
-- backend: NestJS ose framework ekuivalent TypeScript modular;
-- frontend web: React/Next.js;
+- backend/domain: C# + ASP.NET Core (.NET 10 target), modular monolith;
+- workers: .NET Worker Services;
+- Admin/Backoffice: Angular;
+- POS: Angular UI desktop i instalueshëm; wrapper/OS = ADR-027 OPEN;
 - mobile: React Native/Expo;
-- POS/KDS web: React/Next.js PWA;
-- desktop/gateway: Node.js service ose Electron vetem kur duhet UI/hardware bridge;
-- central DB: PostgreSQL;
-- local DB: SQLite;
-- queue/background jobs: sistem queue i kontrolluar;
-- object storage: S3-compatible;
-- realtime: WebSocket/SSE per KDS, alerts dhe status;
-- auth: RBAC + 2FA + device registration;
+- Edge Hub: ASP.NET Core + PostgreSQL lokal;
+- POS Local Host: .NET process i paketuar; zotëron domain/outbox/SQLite të enkriptuar/keys dhe ekspozon vetëm typed IPC;
+- Device Agent: .NET;
+- central DB: PostgreSQL; POS/mobile: SQLite e enkriptuar (ADR-025);
+- contracts: OpenAPI → generated TypeScript clients;
+- identity: OIDC/OAuth2 contract + provider-neutral ASP.NET Core authorization boundary; provider/store = ADR-028 OPEN;
+- fiscal semantics: kontratë language-neutral + golden vectors; C# reference dhe TypeScript mobile offline kalojnë equivalence tests;
+- locale të detyrueshme: Shqip (default), Anglisht, Serbisht; print/POS fiskal provohet në të tri; CORE-02 / UA 01/2026 §32.2.9, f.27 kërkon shumëgjuhësi sipas legjislacionit për gjuhët zyrtare (SQ/SR në Ledger U11), ndërsa EN është target i detyrueshëm i Pronarit/produktit;
+- queue/background jobs, object-storage provider, realtime backplane dhe sync vendor: gates të veçanta;
 - audit: append-only audit/event log.
 
 ## 10. Pajisjet qe duhen planifikuar
@@ -310,7 +288,7 @@ Te rekomanduara:
 
 - SEF mobile/fiskalizimi mund te kete kufizime praktike qe ndryshojne arkitekturen.
 - Printeret/peshoret mund te mos kene SDK/protokoll te mire.
-- PWA mund te kete kufizime ne background/offline/hardware.
+- **HISTORICAL:** kufizimet e PWA-së ishin input për ADR-002/ADR-024; PWA nuk është target-i kryesor për mobile/POS.
 - Sync engine i gatshem mund te mos mbuloje fiscal/legal workflow.
 - Offline me stok/LOT mund te krijoje konflikte nese ownership nuk dizajnohet sakte.
 - OTA updates ne mobile nuk duhet te ndryshojne logjiken fiskale pa kontroll/versionim.
@@ -352,12 +330,13 @@ Pa keto PoC, nuk duhet te premtohet qe arkitektura eshte 100% e mbyllur.
 
 ## 13. Vendime te hapura
 
-- PowerSync vs WatermelonDB vs custom sync.
-- React Native vs PWA per app-in e kamarierit.
-- Modeli final i local hub: service pa UI, Electron app, apo kombinim.
+- PowerSync vs custom sync (ADR-011); WatermelonDB = HISTORICAL/EXCLUDED.
+- Expo/EAS vs bare workflow dhe device-management/distribution.
+- KDS shell-i final dhe packaging-u operational.
 - Printeret/peshoret/modeli i pajisjeve qe do blihen.
 - SEF provider/integrim direkt dhe kufizimet e certifikimit.
-- Hosting/cloud provider.
+- Hosting/cloud, object storage, queue dhe secrets provider.
+- Encryption-at-rest dhe key custody per POS/mobile/Edge/cloud (ADR-025).
 - Menaxhimi i pajisjeve mobile ne terren.
 
 ## 14. Rregulla arkitekturore te pakalueshme

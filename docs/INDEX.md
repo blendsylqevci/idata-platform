@@ -1,6 +1,6 @@
 # iData+ Project Documentation Index
 
-Date: 2026-07-21 (canonical split origjinal: 2026-07-02)
+Date: 2026-07-23 (canonical split origjinal: 2026-07-02)
 Status: Canonical split v0.1, prepared from `00_raw/claude` and `00_raw/codex`; mirëmbahet me docs-PR.
 
 ## Mandatory project rules
@@ -43,6 +43,7 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/00-ssot/Outstanding_Confirmations_Tracker_2026-06-29.md`
 - `docs/canonical/01-phase0/00_Phase0_Execution_Plan.md`
 - `docs/canonical/01-phase0/Repo_Assembly_Walking_Skeleton_Runbook_2026-06-30.md`
+- `docs/canonical/01-phase0/05_Decision_Gates_ADR.md` — ADR Register; ADR-024 = target stack/topology i aprovuar, jo ende i implementuar
 - `docs/canonical/01-phase0/07_PRODATA_Evidence_Closure_Parity_Matrix.md` — v2 Source→Target Closure (dy boshte + capability map)
 - `docs/canonical/02-accounting/Accounting_Posting_Rules_v0_2026-06-29.md`
 - `docs/canonical/02-accounting/VAT_Book_Mapping_v0_2026-06-29.md`
@@ -51,23 +52,28 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/05-sef-atk/ATK_SEF_Offline_Faturimi_Findings.md`
 - `docs/canonical/05-sef-atk/ATK_Compliance_Gate.md`
 - `docs/canonical/05-sef-atk/ATK_Source_Register.md` — v2.4 source graph (CORE/EXT/LIN/CONF, bounded registered corpus)
-- `docs/canonical/05-sef-atk/ATK_SEF_Requirements_Ledger.md` — v1.6: 132 source-rows · 46 closure keys · disposition substantiv 1–123 (burimi i statusit)
+- `docs/canonical/05-sef-atk/ATK_SEF_Requirements_Ledger.md` — v1.7: 132 source-rows · 46 closure keys · U11 i sinkronizuar me F1→F5 · disposition substantiv 1–123 (burimi i statusit)
 - `docs/canonical/05-sef-atk/Kupon_Print_Spec.md`
 - `docs/canonical/06-architecture/Reliability_Gate.md`
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
 - `docs/canonical/08-roadmap/Cutover_Rollback_Runbook.md`
 
-## Next gate (rendi aktual — 21.07.2026, post full-corpus re-audit)
+## Next gate (rendi aktual — 23.07.2026, post PR #21)
 
 *(**Re-audit-i + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate). **Verdikti: regression lokale 66 PASS/1 LIVE SKIP · Tier 1 PARTIAL/REOPENED · compliance FAIL · Tier 2 NOT IMPLEMENTED/NO-GO** — Gate v2.0.)*
 
-0. **GOVERNANCE PREREQUISITE — GOV-001:** PR tooling për linter engine + `DOC-CORE` + `HISTORY-PRIV`, advisory. **Duhet të përfundojë para hapjes së PR-së së parë Step B.** `HG-LINTER-BUILD` = APPROVED; required-CI mbetet gated nga `HG-LINTER-REQUIRED`. *(Prerequisite governance JASHTË zinxhirit SEF — nuk është hallkë e tij.)* **Statusi: PLOTËSOHET me merge-in e PR-së tooling GOV-001** (`packages/integrity-linter` + workflow advisory jo-required; engine + 2/16 profile advisory; 14 NOT_IMPLEMENTED) — pas atij merge-i **Step B është hapi pasues**; `SEF-ATK` implementohet **gjatë Step B, para mbylljes së tij**.
-1. **Step B — code hardening (`ATK-012`, P0/PRE-TIER2):** T2-01..T2-10 (Gate v2 §4).
-2. **Step C — golden vectors zyrtarë + fake-HTTP/negative tests.**
-3. **Independent re-review** i deltës + gates.
-4. **HUMAN GATE** — autorizimi për thirrjen e PARË reale (asnjë `/ca/*`, `/pos/*`, `/citizen/*` para tij).
-5. **Private `/ca/verify` PREFLIGHT** (wrapper-i ndërtohet në Step B/C — sot s'ekziston) → vetëm pas suksesit, pjesa tjetër e **Tier 2**; certifikimi/go-live = NO-GO më vete.
-6. **Paralel:** PoC-4b — dita e hardware-it (checklist në `poc/poc4-local-hub/README.md`).
+0. **GOV-001 baseline advisory — COMPLETED me merge-in e PR #21.** `DOC-CORE` + `HISTORY-PRIV` aktive advisory; 14 profile NOT_IMPLEMENTED; `HG-LINTER-REQUIRED` mbetet OPEN.
+1. **ADR-024 — GATE AKTUAL docs-only:** kanonizo target-in .NET/Angular/POS të instalueshëm/RN/PostgreSQL dhe supersede stack-un historik; desktop wrapper/OS (`ADR-027`) dhe identity provider/store (`ADR-028`) mbeten OPEN; target ≠ implemented.
+2. **Platform Foundation Bootstrap pre-F1:** solution/CI + API/module smoke path + PostgreSQL dev migration path + OpenAPI client generation + Angular shell minimal; legacy TS ruhet si oracle.
+3. **F1 Foundation në stack-un e ri:** Identity/Tenant/RBAC + audit + encryption/key custody + observability + recovery + i18n SQ/EN/SR.
+4. **Step B — code hardening (`ATK-012`, P0/PRE-TIER2) në Fiscal bounded context të ri:** T2-01..T2-10.
+5. **Step C — Fiscal Semantics Conformance Pack:** golden vectors zyrtarë + C#↔TypeScript offline equivalence + fake-HTTP/negative tests.
+6. **Independent re-review** i deltës + gates.
+7. **HUMAN GATE** — autorizimi për thirrjen e PARË reale (asnjë `/ca/*`, `/pos/*`, `/citizen/*` para tij).
+8. **Private `/ca/verify` PREFLIGHT** → vetëm pas suksesit, pjesa tjetër e **Tier 2**; certifikimi/go-live = NO-GO më vete.
+9. **Paralel:** PoC-4b — dita e hardware-it (checklist në `poc/poc4-local-hub/README.md`).
+
+Foundation Bootstrap + F1 janë prerequisites teknike, **jo hallka të reja brenda zinxhirit fiskal**; rendi Step B→C→review→Human Gate→preflight→Tier 2 mbetet i pandryshuar.
 
 *(Gate historik i split-it — kaluar: pa humbje kërkesash; pa PII/sekrete të promovuara; pending items të trackuara; kontratat jashtë git.)*
 
