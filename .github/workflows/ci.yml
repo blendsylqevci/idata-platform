@@ -100,18 +100,18 @@ jobs:
           PLATFORM_PGDATABASE: idata_platform_ci
         run: |
           M="dotnet run --no-build --project src/platform/Idata.Platform.DbMigrator --"
-          # 1. Fresh: 1 e re → applied=1, pending=0, sentinel present
+          # 1. Fresh: 0001+0002 → applied=2, pending=0, sentinel present
           $M migrate
-          $M assert-state 1 0 present
-          # 2. No-op: 0 të reja → applied=1, pending=0
+          $M assert-state 2 0 present
+          # 2. No-op: 0 të reja → applied=2, pending=0
           $M migrate
-          $M assert-state 1 0 present
-          # 3. Guarded down-to-zero (opt-in VETEM inline) → applied=0, pending=1, sentinel absent
+          $M assert-state 2 0 present
+          # 3. Guarded down-to-zero (opt-in VETEM inline) → applied=0, pending=2, sentinel absent
           IDATA_ALLOW_DESTRUCTIVE_MIGRATION_RESET=YES_I_UNDERSTAND_DATA_WILL_BE_DELETED $M down-to-zero
-          $M assert-state 0 1 absent
-          # 4. Reapply → applied=1, pending=0, sentinel rikthehet
+          $M assert-state 0 2 absent
+          # 4. Reapply → applied=2, pending=0, sentinel rikthehet
           $M migrate
-          $M assert-state 1 0 present
+          $M assert-state 2 0 present
 
       - name: Platform tests (unit + architecture + integration kunder target DB)
         run: dotnet test src/platform --no-build

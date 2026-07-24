@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Persistence: MIGRATION OWNER I VETËM i platform DB-së (ADR-024 "Një
+       migration owner"). NEUTRAL ndaj moduleve — modelon vetëm storage
+       records POCO; NUK referon asnjë Domain moduli (mbyll varësinë
+       transitive PlatformStatus → Persistence → AccessControl.Domain).
+       Çdo modul mapon records ↔ tipet e veta në Infrastructure-in e vet. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+  </ItemGroup>
+</Project>

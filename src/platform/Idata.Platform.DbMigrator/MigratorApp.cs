@@ -1,5 +1,6 @@
-using Idata.Platform.Modules.PlatformStatus.Infrastructure;
+using Idata.Platform.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Idata.Platform.DbMigrator;
 
@@ -69,12 +70,48 @@ public static class MigratorApp
 
         await using var context = PlatformDbContextFactory.Create(settings.ToConnectionString());
 
+        // §6A (klasa F16): DB-ja EFEKTIVE e lidhjes duhet te jete EKZAKT ajo e
+        // konfiguruar/validuar — SELECT current_database() para cdo veprimi.
+        // Perjashtim i vetem: `migrate` mbi DB inekzistente (3D000) — krijimi
+        // behet nga MigrateAsync me te NJEJTIN connection string te validuar
+        // dhe verifikohet PAS krijimit. Mismatch → exit 2, zero mutacion,
+        // zero emra/connection string ne output.
+        var verifyAfterCreate = false;
+        try
+        {
+            if (!await EffectiveDatabaseMatchesAsync(context, settings.Database))
+            {
+                Console.Error.WriteLine("DbMigrator: DB-ja efektive e lidhjes NUK perputhet me konfigurimin — refuzim fail-closed.");
+                return 2;
+            }
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.InvalidCatalogName && command == "migrate")
+        {
+            verifyAfterCreate = true; // DB-ja krijohet nga migrate; verifikohet me poshte
+        }
+        catch (NpgsqlException)
+        {
+            if (command is "down-to-zero")
+            {
+                Console.Error.WriteLine("DbMigrator: lidhja per verifikimin e target DB-se deshtoi — down-to-zero refuzohet fail-closed.");
+                return 2;
+            }
+
+            throw; // komandat e tjera raportojne deshtimin e lidhjes si me pare
+        }
+
         switch (command)
         {
             case "migrate":
             {
                 var pending = (await context.Database.GetPendingMigrationsAsync()).ToArray();
                 await context.Database.MigrateAsync();
+                if (verifyAfterCreate && !await EffectiveDatabaseMatchesAsync(context, settings.Database))
+                {
+                    Console.Error.WriteLine("DbMigrator: DB-ja efektive pas krijimit NUK perputhet me konfigurimin — gjendje e refuzuar.");
+                    return 2;
+                }
+
                 var applied = (await context.Database.GetAppliedMigrationsAsync()).Count();
                 Console.WriteLine($"DbMigrator: aplikoi {pending.Length} migrime te reja; historia tani = {applied}.");
                 return 0;
@@ -141,11 +178,29 @@ public static class MigratorApp
         }
     }
 
+    /// <summary>Krahasim READ-ONLY i `current_database()` me emrin e validuar.</summary>
+    private static async Task<bool> EffectiveDatabaseMatchesAsync(PlatformDbContext context, string expected)
+    {
+        var connection = context.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync();
+        }
+
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT current_database()";
+        var effective = await command.ExecuteScalarAsync() as string;
+        return string.Equals(effective, expected, StringComparison.Ordinal);
+    }
+
     /// <summary>Kontroll READ-ONLY i tabelës sentinel — pa asnjë mutacion.</summary>
     private static async Task<bool> SentinelExistsAsync(PlatformDbContext context)
     {
         var connection = context.Database.GetDbConnection();
-        await connection.OpenAsync();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync();
+        }
         await using var command = connection.CreateCommand();
         command.CommandText = "SELECT to_regclass('platform.migration_smoke_check') IS NOT NULL";
         return await command.ExecuteScalarAsync() is true;

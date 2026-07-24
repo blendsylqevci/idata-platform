@@ -129,6 +129,9 @@
         "resolved": "10.0.10",
         "contentHash": "5wu/GrYVd8mG2DVUw3vFJzF+O336TyTGg/Kmcgw9bfwYhCoFiV5lR5QeEmKecJyrW4W54nMfD3p3589E8a7czQ=="
       },
+      "idata.platform.modules.accesscontrol.domain": {
+        "type": "Project"
+      },
       "idata.platform.modules.platformstatus.application": {
         "type": "Project",
         "dependencies": {
@@ -137,6 +140,16 @@
       },
       "idata.platform.modules.platformstatus.domain": {
         "type": "Project"
+      },
+      "idata.platform.persistence": {
+        "type": "Project",
+        "dependencies": {
+          "Idata.Platform.Modules.AccessControl.Domain": "[1.0.0, )",
+          "Microsoft.EntityFrameworkCore": "[10.0.10, )",
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
+          "Npgsql": "[10.0.3, )",
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
+        }
       }
     }
   }

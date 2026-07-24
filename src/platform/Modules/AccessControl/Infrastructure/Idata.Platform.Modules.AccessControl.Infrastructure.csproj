@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Infrastructure: adapters EF mbi Persistence (migration owner-i i vetëm)
+       → implementon portat e Application. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Application\Idata.Platform.Modules.AccessControl.Application.csproj" />
+    <ProjectReference Include="..\Domain\Idata.Platform.Modules.AccessControl.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Idata.Platform.Persistence\Idata.Platform.Persistence.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Npgsql" />
+  </ItemGroup>
+</Project>

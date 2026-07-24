@@ -3,6 +3,9 @@
   <ItemGroup>
     <ProjectReference Include="..\Application\Idata.Platform.Modules.PlatformStatus.Application.csproj" />
     <ProjectReference Include="..\Domain\Idata.Platform.Modules.PlatformStatus.Domain.csproj" />
+    <!-- Probe-i i readiness-it lexon katalogun/historine e migrimeve permes
+         context-it te Persistence (migration owner-i i vetem); READ-ONLY. -->
+    <ProjectReference Include="..\..\..\Idata.Platform.Persistence\Idata.Platform.Persistence.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore" />

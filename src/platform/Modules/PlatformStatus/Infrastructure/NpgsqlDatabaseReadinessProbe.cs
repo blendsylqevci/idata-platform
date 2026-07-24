@@ -1,5 +1,6 @@
 using Idata.Platform.Modules.PlatformStatus.Application;
 using Idata.Platform.Modules.PlatformStatus.Domain;
+using Idata.Platform.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 namespace Idata.Platform.Modules.PlatformStatus.Infrastructure;

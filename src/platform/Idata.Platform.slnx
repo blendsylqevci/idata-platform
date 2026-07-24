@@ -1,5 +1,18 @@
 <Solution>
   <Folder Name="/Modules/" />
+  <Folder Name="/Modules/AccessControl/" />
+  <Folder Name="/Modules/AccessControl/Application/">
+    <Project Path="Modules/AccessControl/Application/Idata.Platform.Modules.AccessControl.Application.csproj" />
+  </Folder>
+  <Folder Name="/Modules/AccessControl/Domain/">
+    <Project Path="Modules/AccessControl/Domain/Idata.Platform.Modules.AccessControl.Domain.csproj" />
+  </Folder>
+  <Folder Name="/Modules/AccessControl/Infrastructure/">
+    <Project Path="Modules/AccessControl/Infrastructure/Idata.Platform.Modules.AccessControl.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Modules/AccessControl/Presentation/">
+    <Project Path="Modules/AccessControl/Presentation/Idata.Platform.Modules.AccessControl.Presentation.csproj" />
+  </Folder>
   <Folder Name="/Modules/PlatformStatus/" />
   <Folder Name="/Modules/PlatformStatus/Application/">
     <Project Path="Modules/PlatformStatus/Application/Idata.Platform.Modules.PlatformStatus.Application.csproj" />
@@ -18,4 +31,5 @@
   <Project Path="../../tests/platform/Idata.Platform.UnitTests/Idata.Platform.UnitTests.csproj" />
   <Project Path="Idata.Platform.Api/Idata.Platform.Api.csproj" />
   <Project Path="Idata.Platform.DbMigrator/Idata.Platform.DbMigrator.csproj" />
+  <Project Path="Idata.Platform.Persistence/Idata.Platform.Persistence.csproj" />
 </Solution>
