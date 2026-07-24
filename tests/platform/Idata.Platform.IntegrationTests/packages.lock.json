@@ -502,6 +502,12 @@
           "Microsoft.OpenApi": "[2.11.0, )"
         }
       },
+      "idata.platform.dbmigrator": {
+        "type": "Project",
+        "dependencies": {
+          "Idata.Platform.Modules.PlatformStatus.Infrastructure": "[1.0.0, )"
+        }
+      },
       "idata.platform.modules.platformstatus.application": {
         "type": "Project",
         "dependencies": {

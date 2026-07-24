@@ -56,6 +56,14 @@ jobs:
       - name: Install (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
+      # Fresh-checkout reproducibility: root scripts backoffice:* ndertojne
+      # varesin @idata/platform-api-client PARA Angular-it (Turbo dependency
+      # graph), PARA build-it global — deshton nese client-i dist mungon.
+      - name: Backoffice reproducible commands (fresh workspace state)
+        run: |
+          pnpm backoffice:build
+          pnpm backoffice:test
+
       - name: Build (8 workspaces — legacy + backoffice/client)
         run: pnpm build
 
@@ -69,8 +77,9 @@ jobs:
         run: pnpm test
 
       # ── Target stack ADR-024 (Bootstrap pre-F1) — i NDARE nga legacy ──
-      # DB logjike e vecante: idata_platform (DbMigrator e krijon vete ne
-      # te njejtin sherbim Postgres); legacy 'idata' nuk preket. Zero secrets.
+      # DB logjike e vecante SINTETIKE: idata_platform_ci (DbMigrator e krijon
+      # vete); legacy 'idata' NUK preket. Zero secrets; opt-in-i destruktiv
+      # vendoset VETEM inline te komanda down-to-zero, JO job-wide.
       - name: Setup .NET (nga global.json)
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
@@ -85,13 +94,24 @@ jobs:
       - name: Platform build (warnings-as-errors; gjeneron edhe OpenAPI spec)
         run: dotnet build src/platform --no-restore
 
-      - name: Target migration cycle (fresh / no-op / down / reapply)
+      - name: Target migration cycle (assert-state per faze; DB sintetike CI)
+        env:
+          DOTNET_ENVIRONMENT: CI
+          PLATFORM_PGDATABASE: idata_platform_ci
         run: |
-          dotnet run --no-build --project src/platform/Idata.Platform.DbMigrator -- migrate
-          dotnet run --no-build --project src/platform/Idata.Platform.DbMigrator -- migrate
-          dotnet run --no-build --project src/platform/Idata.Platform.DbMigrator -- status
-          dotnet run --no-build --project src/platform/Idata.Platform.DbMigrator -- down-to-zero
-          dotnet run --no-build --project src/platform/Idata.Platform.DbMigrator -- migrate
+          M="dotnet run --no-build --project src/platform/Idata.Platform.DbMigrator --"
+          # 1. Fresh: 1 e re → applied=1, pending=0, sentinel present
+          $M migrate
+          $M assert-state 1 0 present
+          # 2. No-op: 0 të reja → applied=1, pending=0
+          $M migrate
+          $M assert-state 1 0 present
+          # 3. Guarded down-to-zero (opt-in VETEM inline) → applied=0, pending=1, sentinel absent
+          IDATA_ALLOW_DESTRUCTIVE_MIGRATION_RESET=YES_I_UNDERSTAND_DATA_WILL_BE_DELETED $M down-to-zero
+          $M assert-state 0 1 absent
+          # 4. Reapply → applied=1, pending=0, sentinel rikthehet
+          $M migrate
+          $M assert-state 1 0 present
 
       - name: Platform tests (unit + architecture + integration kunder target DB)
         run: dotnet test src/platform --no-build
