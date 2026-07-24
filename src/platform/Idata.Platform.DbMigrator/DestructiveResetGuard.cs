@@ -40,8 +40,15 @@ public static class DestructiveResetGuard
             return DestructiveResetVerdict.OptInMissing;
         }
 
+        // Sintetike = EKZAKT idata_platform_ci OSE prefiks test_ me suffix
+        // JO-bosh [a-z0-9_]+ — prefiksi i zhveshur nuk lejohet.
+        var testSuffix = targetDatabaseName.StartsWith(TestDatabasePrefix, StringComparison.Ordinal)
+            ? targetDatabaseName[TestDatabasePrefix.Length..]
+            : null;
         var synthetic = string.Equals(targetDatabaseName, CiDatabaseName, StringComparison.Ordinal)
-            || targetDatabaseName.StartsWith(TestDatabasePrefix, StringComparison.Ordinal);
+            || (testSuffix is not null
+                && testSuffix.Length > 0
+                && System.Text.RegularExpressions.Regex.IsMatch(testSuffix, @"^[a-z0-9_]+\z"));
         return synthetic
             ? DestructiveResetVerdict.Allowed
             : DestructiveResetVerdict.TargetDatabaseNotSynthetic;

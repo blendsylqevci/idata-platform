@@ -30,13 +30,28 @@ public static class MigratorApp
             return 2;
         }
 
+        // Konfigurimi I VETËM i validuar (fail-closed) — i njëjti objekt ushqen
+        // guard-in destruktiv DHE connection string-un: zero mundësi që guard-i
+        // të shohë një DB tjetër nga ajo ku lidhemi (anti connection-string
+        // injection; vlera të papranuara → exit 2 pa asnjë lidhje).
+        PlatformDatabaseSettings settings;
+        try
+        {
+            settings = PlatformDatabaseConnection.SettingsFromEnvironment();
+        }
+        catch (PlatformDatabaseConfigurationException ex)
+        {
+            Console.Error.WriteLine($"DbMigrator: konfigurim i pavlefshem i target DB-se (fusha '{ex.Field}') — refuzim fail-closed.");
+            return 2;
+        }
+
         if (command == "down-to-zero")
         {
             // GUARD-i PURE — para çdo context/connection/query.
             var verdict = DestructiveResetGuard.Evaluate(
                 Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT"),
                 Environment.GetEnvironmentVariable(DestructiveResetGuard.OptInVariable),
-                PlatformDatabaseConnection.DatabaseNameFromEnvironment());
+                settings.Database);
             if (verdict != DestructiveResetVerdict.Allowed)
             {
                 Console.Error.WriteLine(verdict switch
@@ -52,7 +67,7 @@ public static class MigratorApp
             }
         }
 
-        await using var context = PlatformDbContextFactory.Create(PlatformDatabaseConnection.FromEnvironment());
+        await using var context = PlatformDbContextFactory.Create(settings.ToConnectionString());
 
         switch (command)
         {

@@ -26,7 +26,12 @@ public sealed class PlatformTestDatabase : IAsyncDisposable
     {
         // Emër i sigurt (vetëm shkronja/numra/underscore) me prefiksin sintetik.
         var safe = new string(label.Where(char.IsLetterOrDigit).ToArray()).ToLowerInvariant();
+        // Emri i plotë duhet të kalojë validimin e Bootstrap-it (≤63 karaktere).
         var name = $"idata_platform_test_{safe}";
+        if (name.Length > 63)
+        {
+            name = name[..63];
+        }
         await using (var connection = new NpgsqlConnection(MaintenanceConnectionString()))
         {
             await connection.OpenAsync();

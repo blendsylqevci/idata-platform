@@ -130,4 +130,27 @@ public sealed class MigrationLifecycleTests
         Assert.Equal(2, await RunAsync(db.DatabaseName, "nuke-everything"));
         Assert.Equal(2, await RunAsync(db.DatabaseName, "migrate", "extra-arg"));
     }
+
+    [Fact]
+    public async Task Injection_ne_emrin_e_db_refuzohet_para_cdo_lidhjeje_dhe_nuk_e_prek_targetin()
+    {
+        // VETEM DB sintetike. Skenari i gjetjes: "alias" kalon prefix-guard-in
+        // tekstual, por celesi i dyte Database= e devijon lidhjen te nje target
+        // tjeter sintetik i migruar — down-to-zero do ta resetonte ate.
+        await using var target = await PlatformTestDatabase.CreateAsync("injtarget");
+        Assert.Equal(0, await RunAsync(target.DatabaseName, "migrate"));
+        Assert.Equal(0, await RunAsync(target.DatabaseName, "assert-state", "1", "0", "present"));
+
+        var injected = $"idata_platform_test_alias;Database={target.DatabaseName}";
+        Assert.Equal(2, await RunDestructiveAsync(injected, "down-to-zero"));
+
+        // Targeti sintetik mbetet i PAPREKUR: applied=1, pending=0, sentinel present.
+        Assert.Equal(0, await RunAsync(target.DatabaseName, "assert-state", "1", "0", "present"));
+
+        // Variantet e tjera te injection-it refuzohen PARA cdo I/O-je (host
+        // fiktiv nuk kontaktohet kurre; refuzimi eshte exit 2 i menjehershem).
+        Assert.Equal(2, await RunDestructiveAsync("idata_platform_test_alias;Host=evil.invalid", "down-to-zero"));
+        Assert.Equal(2, await RunDestructiveAsync("idata_platform_test_alias;Username=evil", "down-to-zero"));
+        Assert.Equal(2, await RunDestructiveAsync("idata_platform_test_alias;Timeout=30", "down-to-zero"));
+    }
 }
