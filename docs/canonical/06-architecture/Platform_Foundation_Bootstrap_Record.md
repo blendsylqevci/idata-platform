@@ -61,8 +61,10 @@ me VETËM tabelën teknike `migration_smoke_check`. API nuk auto-migron. Cikli i
 no-op(1/0/present) → guarded-down(0/1/absent) → reapply(1/0/present); mismatch → exit
 jo-zero (lokal me Docker + në CI). Down-to-zero është **TEST-ONLY / GUARDED**: guard PURE
 para çdo DbContext/connection/query — kërkon env {Development,CI} + opt-in ekzakt
-`IDATA_ALLOW_DESTRUCTIVE_MIGRATION_RESET` + DB sintetike (`idata_platform_ci` ose prefiks
-`idata_platform_test_`); pa njërën → exit 2, zero mutacion, zero detaje në output.
+`IDATA_ALLOW_DESTRUCTIVE_MIGRATION_RESET` + DB sintetike (`idata_platform_ci` EKZAKT ose
+`idata_platform_test_` + suffix JO-bosh `[a-z0-9_]+`); pa njërën → exit 2, zero mutacion,
+zero detaje në output. Guard-i dhe lidhja konsumojnë të NJËJTIN konfigurim të validuar
+(shih "Siguria" më poshtë).
 **Separimi:** target dev `idata_platform` / CI `idata_platform_ci` ≠ legacy `idata`;
 runner-i TS + migrimet 0001…0006 legacy të PAPREKURA (oracle); zero dual-write.
 
@@ -96,6 +98,33 @@ Identity/Tenant/RBAC production · audit/outbox/observability/recovery productio
 encryption/key custody (ADR-025) · providers (ADR-026) · POS/wrapper (ADR-027) ·
 identity provider/store (ADR-028) · module biznesi · Edge/Device Agent/mobile/KDS ·
 fiscal domain/SEF · Step B/C · preflight/Tier 2. Gates OPEN të ADR-024 të paprekura.
+
+## Siguria (correction pass i review-t të pavarur, 24.07.2026)
+
+**Connection-string injection (DbMigrator/down-to-zero) — MBYLLUR fail-closed.**
+Konfigurimi i target DB-së parsohet NJË herë në `PlatformDatabaseSettings` me validim
+allowlist fail-closed (host/port/username/database; database: nis me shkronjë,
+`[a-z0-9_]`, ≤63; regex me ankorim `\z` — jo `$`, që në .NET lejon `\n` fundor; `;`,
+`=`, whitespace, thonjëza, control chars → refuzim). I NJËJTI objekt i validuar ushqen
+guard-in destruktiv, connection-string builder-in (`NpgsqlConnectionStringBuilder`,
+zero interpolim manual) dhe DbContext factory-n — zero mundësi që guard-i të shohë DB
+tjetër nga ajo ku lidhemi. Vlerë e papranuar → exit 2 PARA çdo DbContext/connection/query,
+zero mutacion, zero echo i vlerës në output. E provuar: regression test integrimi
+(`;Database=` devijimi origjinal + variantet `;Host=`/`;Username=`/`;Timeout=`, target-i
+sintetik i paprekur 1/0/present) — RED i demonstruar mbi kodin e vjetër para fix-it —
+plus matrica unit e validimit dhe boundary test i builder-it (re-parse: saktësisht një
+çelës `Database` me vlerën e validuar).
+
+**js-yaml 4.2.0 → 4.3.0 (GHSA-52cp-r559-cp3m / CVE-2026-59869) — pin i PËRKOHSHËM.**
+Rruga transitore: `@idata/platform-api-client → openapi-typescript 7.13.0 →
+@redocly/openapi-core 1.34.17 → js-yaml 4.2.0` (tooling i gjenerimit OpenAPI — dev-time,
+jo runtime prodhimi). Remediation: pnpm override i shënjestruar
+`"@redocly/openapi-core@1.34.17>js-yaml": "4.3.0"` (patch-i i parë 4.x). Verifikuar:
+zero `js-yaml 4.2.0` në lockfile; `pnpm why -r` tregon vetëm 4.3.0 përmes rrugës redocly;
+gjenerimi i kontratës ×2 zero-diff; build/test i client-it dhe backoffice kalojnë.
+**Owner: Tech/Platform Owner. Hiqet kur** upstream (`@redocly/openapi-core` ose
+`openapi-typescript`) konsumon js-yaml të patch-uar dhe override-i bëhet i tepërt.
+Ky pin NUK është pretendim "zero HIGH në repo" — mbulon vetëm këtë advisory specifik.
 
 ## Rollback
 
