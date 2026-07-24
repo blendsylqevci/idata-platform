@@ -1,5 +1,5 @@
 using Idata.Platform.DbMigrator;
-using Idata.Platform.Modules.PlatformStatus.Infrastructure;
+using Idata.Platform.Persistence;
 using Npgsql;
 using Xunit;
 

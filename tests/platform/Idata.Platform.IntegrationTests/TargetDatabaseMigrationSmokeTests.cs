@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Idata.Platform.DbMigrator;
-using Idata.Platform.Modules.PlatformStatus.Infrastructure;
+using Idata.Platform.Persistence;
 using Idata.Platform.Modules.PlatformStatus.Presentation;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Npgsql;
