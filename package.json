@@ -17,12 +17,12 @@
     "platform:test": "dotnet test src/platform --no-build",
     "platform:migrate": "dotnet run --project src/platform/Idata.Platform.DbMigrator -- migrate",
     "platform:migrate:status": "dotnet run --project src/platform/Idata.Platform.DbMigrator -- status",
-    "platform:migrate:down": "dotnet run --project src/platform/Idata.Platform.DbMigrator -- down-to-zero",
     "contracts:generate": "dotnet build src/platform/Idata.Platform.Api && pnpm --filter @idata/platform-api-client generate",
     "contracts:drift-check": "pnpm contracts:generate && git diff --exit-code -- contracts/openapi packages/platform-api-client/src/generated",
-    "backoffice:build": "pnpm --filter @idata/backoffice build",
-    "backoffice:test": "pnpm --filter @idata/backoffice test",
-    "verify:all": "pnpm build && pnpm typecheck && pnpm test && pnpm platform:build && pnpm platform:test && pnpm contracts:drift-check"
+    "backoffice:build": "turbo run build --filter=@idata/backoffice",
+    "backoffice:test": "turbo run test --filter=@idata/backoffice",
+    "verify:all": "pnpm build && pnpm typecheck && pnpm test && pnpm platform:build && pnpm platform:test && pnpm contracts:drift-check && pnpm backoffice:build && pnpm backoffice:test",
+    "platform:migrate:reset:test-only": "dotnet run --project src/platform/Idata.Platform.DbMigrator -- down-to-zero"
   },
   "devDependencies": {
     "turbo": "^2.3.3",

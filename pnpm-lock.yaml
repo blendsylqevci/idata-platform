@@ -189,10 +189,10 @@ importers:
         specifier: 7.13.0
         version: 7.13.0(typescript@5.9.3)
       typescript:
-        specifier: ^5.7.2
+        specifier: 5.9.3
         version: 5.9.3
       vitest:
-        specifier: ^3.2.6
+        specifier: 3.2.7
         version: 3.2.7(@types/node@26.1.0)(jsdom@28.1.0)(sass@1.99.0)
 
   packages/shared-types:
