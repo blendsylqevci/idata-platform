@@ -1,6 +1,6 @@
 # Faza 0 — Data Model Draft (iData+)
 
-**Versioni:** 2.2.2 · **Data:** 12 Korrik 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.17 §13 + `03-kabi/KABI_Operational_Evidence_Update_2026-07-05.md` + `03-kabi/Accountant_Confirmation_TVSH_e_Sheshte_Fermere_KABI_2026-07-05.md`
+**Versioni:** 2.2.3 · **Data:** 24 Korrik 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.17 §13 + `03-kabi/KABI_Operational_Evidence_Update_2026-07-05.md` + `03-kabi/Accountant_Confirmation_TVSH_e_Sheshte_Fermere_KABI_2026-07-05.md`
 **Statusi:** draft i fortë (jo DDL final) — pas tri raundeve review kundërshtues të Codex (v2.1 + v2.2 + v2.2.1). Emrat/vlerat reale mbeten private-local.
 **Rishikime v2.0:** posting infra; `tax_book_entry`→header+buckets; shlyerja KABI; payroll Faza 1; lifecycle; posting hooks; matricë gjurmueshmërie.
 **Rishikime v2.1 (Codex review):** `business_id` rregull eksplicit; ndarë `farmer_settlement_line` vs `finance_settlement_line`; `farmer` = subtype i `partner` (partner_id kudo në AP/AR); autofaturë fermeri lidhet me `invoice` (jo rrugë paralele); flat-rate 8% posting = pending sign-off; shtuar `tank`/`tank_movement`/`milk_pool_contribution`, `pasteurization_log`, versionim recete, product master i plotë, van-sales i zgjeruar, returns lifecycle; sqaruar `lab_analysis` vs `production_quality_test`, `tax_code` × `tax_treatment`.
@@ -8,7 +8,7 @@
 **Rishikime v2.2.1 (Codex):** zgjeruar entitetet shorthand të financës në Section C (`bank_account`, `cash_register`, `payment_method`, `payment_terminal`, `cash_count`, `finance_settlement_line`, `supplier_payment`, `finance_day`, `float_assignment`, `pos_terminal_batch`, `finance_handover`) me `id, business_id, …` — asgjë e nënkuptuar; rule==model absolut.
 
 ## Konventa globale
-- **Multi-tenant (RREGULL):** ÇDO tabelë tenant-scoped ka `business_id` **direkt** (FK→business) — e detyrueshme për tabelat operative/financiare/offline/audit/GL-posting (`journal_line`, `tax_book_bucket`, `payment_allocation`, `stock_balance`, `recipe_line`, `invoice_line`, `order_item`, `kitchen_ticket`, `fiscal_coupon`, `fiscal_outbox`, `payslip`, çdo `*_line`). Composite-FK parent-based lejohet **vetëm si vendim eksplicit i dokumentuar**, jo i nënkuptuar. Jo në tabela globale/reference. **v2.2: të gjitha child/leaf-et e listuara e mbajnë `business_id` DIREKT (denormalizuar për RLS/offline/partitioning) → rregulli == modeli, pa përjashtime të fshehura.**
+- **Multi-tenant (RREGULL):** ÇDO tabelë tenant-scoped ka `business_id` **direkt** (FK→business) — e detyrueshme për tabelat operative/financiare/offline/audit/GL-posting (`journal_line`, `tax_book_bucket`, `payment_allocation`, `stock_balance`, `recipe_line`, `invoice_line`, `order_item`, `kitchen_ticket`, `fiscal_coupon`, `fiscal_outbox`, `payslip`, çdo `*_line`). Composite-FK parent-based lejohet **vetëm si vendim eksplicit i dokumentuar**, jo i nënkuptuar. Jo në tabela globale/reference. **v2.2: të gjitha child/leaf-et e listuara e mbajnë `business_id` DIREKT (denormalizuar për RLS/offline/partitioning) → rregulli == modeli, pa përjashtime të fshehura.** **F1.1 (ENG-003/PoC-1): composite FK `(business_id, role_id) → role(business_id, id)` te `business_membership`/`role_permission` — DB refuzon lidhje cross-tenant; production RLS NUK pretendohet.**
 - **Çelësat:** `id` = UUID (gjenerohet edhe në pajisje për offline).
 - **Para:** `numeric` për GL (precizion i lartë); **SEF money scale PER-FIELD (korrigjuar 12.07.2026 — Gate v2 §3):** `CouponItem.Price` = ×10000 (€0.0001); **`CouponItem.Total` = ×100 (cents)**; coupon `Total`/`Payment.Amount`/`TaxGroup.*`/`TotalTax`/`TotalNoTax`/`TotalDiscount` = cents (×100); golden: €1.50×3 → Price=15000, Total=450; decimal në TS; tabular-nums në UI. Kurrë float.
 - **Audit redaction:** PII + sekretet SEF + çelësat **maskohen** në `audit_log`/eksporte.
@@ -25,12 +25,13 @@
 - **business** — id, name, nui, type(KABI/PLANET/…), legal_unit, **group_id**(FK→business_group), region, settings.
 - **business_unit** — id, business_id, name (p.sh. PLANET, PLANET2 = i njëjti business, dy units), location.
 - **user** *(modeli logjik `user` → **tabela fizike `app_user`**; `user` është fjalë e rezervuar në Postgres)* — id, email, name, mfa_enabled, status.
-- **role** — id, business_id?, name (PO/GO/TA/KO/…), is_system.
+- **role** — id, business_id?, name (PO/GO/TA/KO/…), is_system. *(F1.1: rolet janë VETËM tenant-scoped — `business_id NOT NULL`; rolet globale/system-wide SHTYHEN; `is_system` = rol tenant-scoped i menaxhuar nga sistemi, JO rol global.)*
 - **permission** — id, feature_key, action(R/C/U/X/P/A).
 - **role_permission** — role_id, permission_id.
-- **membership** — user_id, business_id, role_id, scope (vetja/njësi/i tërë).
+- **business_membership** *(modeli logjik 'membership'; F1.1 tabela fizike `business_membership`)* — id, business_id, user_id, role_id, **version** (CAS optimistic concurrency), status, created_at. *(F1.1: rolet janë VETËM tenant-scoped — `business_id NOT NULL`; rolet globale/system-wide SHTYHEN; `is_system` = rol tenant-scoped i menaxhuar nga sistemi, JO rol global. Fusha `scope` (vetja/njësi/i tërë) SHTYHET për një increment të mëvonshëm — nuk është në migrimin 0002.)*
 - **breakglass_grant** — id, user_id(iCode), approved_by(Group Owner), reason, expires_at, audit_ref.
-- **audit_log** — id, business_id, user_id, entity, entity_id, action, before, after, event_at.
+- **audit_log** — id, business_id, user_id, entity, entity_id, action, before, after, **command_receipt_id** (FK→command_receipt, DB-enforced tenant-safe), **correlation_id** (server-generated), event_at. *(F1.1: append-only nën DML të zakonshëm me triggers BEFORE UPDATE/DELETE/TRUNCATE; JO tamper-proof ndaj owner/superuser — provisioning i rolit runtime production = OPEN.)*
+- **command_receipt** *(F1.1, net-new)* — id, business_id, operation_key, idempotency_key, request_fingerprint, result_status, result_payload(typed/redacted), created_at, completed_at; UNIQUE (business_id, operation_key, idempotency_key). Kurrë payload i papërpunuar/PII/sekrete.
 
 ## B. Partnerë & Master Data
 - **partner** — id, business_id, type(furnitor/blerës/agjent/**fermer**), name, nui, vat_no, credit_limit, terms. **Palë financiare bazë** — `open_item`, `partner_card_entry`, `payment`, `tax_book_entry` përdorin **`partner_id`** (jo `partner_id/farmer_id`).
