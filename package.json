@@ -30,7 +30,8 @@
   },
   "pnpm": {
     "overrides": {
-      "multer": "^2.2.0"
+      "multer": "^2.2.0",
+      "@redocly/openapi-core@1.34.17>js-yaml": "4.3.0"
     }
   }
 }
