@@ -80,3 +80,9 @@ outputs/
 *.tmp
 _tmp_*
 _rmtest*
+
+# .NET target stack (ADR-024 Bootstrap) — build artifacts (asnjë dobësim i mbrojtjeve)
+src/platform/**/bin/
+src/platform/**/obj/
+tests/platform/**/bin/
+tests/platform/**/obj/

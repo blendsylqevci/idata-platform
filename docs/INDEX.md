@@ -1,6 +1,6 @@
 # iData+ Project Documentation Index
 
-Date: 2026-07-23 (canonical split origjinal: 2026-07-02)
+Date: 2026-07-24 (canonical split origjinal: 2026-07-02)
 Status: Canonical split v0.1, prepared from `00_raw/claude` and `00_raw/codex`; mirëmbahet me docs-PR.
 
 ## Mandatory project rules
@@ -43,7 +43,7 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/00-ssot/Outstanding_Confirmations_Tracker_2026-06-29.md`
 - `docs/canonical/01-phase0/00_Phase0_Execution_Plan.md`
 - `docs/canonical/01-phase0/Repo_Assembly_Walking_Skeleton_Runbook_2026-06-30.md`
-- `docs/canonical/01-phase0/05_Decision_Gates_ADR.md` — ADR Register; ADR-024 = target stack/topology i aprovuar, jo ende i implementuar
+- `docs/canonical/01-phase0/05_Decision_Gates_ADR.md` — ADR Register (v1.4); ADR-024 = MERGED/ACCEPTED; Bootstrap pre-F1 = implemented/pending review; pjesa përtej Bootstrap-it/F1 ende jo e implementuar
 - `docs/canonical/01-phase0/07_PRODATA_Evidence_Closure_Parity_Matrix.md` — v2 Source→Target Closure (dy boshte + capability map)
 - `docs/canonical/02-accounting/Accounting_Posting_Rules_v0_2026-06-29.md`
 - `docs/canonical/02-accounting/VAT_Book_Mapping_v0_2026-06-29.md`
@@ -58,13 +58,13 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
 - `docs/canonical/08-roadmap/Cutover_Rollback_Runbook.md`
 
-## Next gate (rendi aktual — 23.07.2026, post PR #21)
+## Next gate (rendi aktual — 24.07.2026, post Bootstrap PR #24 — pending review)
 
 *(**Re-audit-i + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate). **Verdikti: regression lokale 66 PASS/1 LIVE SKIP · Tier 1 PARTIAL/REOPENED · compliance FAIL · Tier 2 NOT IMPLEMENTED/NO-GO** — Gate v2.0.)*
 
 0. **GOV-001 baseline advisory — COMPLETED me merge-in e PR #21.** `DOC-CORE` + `HISTORY-PRIV` aktive advisory; 14 profile NOT_IMPLEMENTED; `HG-LINTER-REQUIRED` mbetet OPEN.
-1. **ADR-024 — GATE AKTUAL docs-only:** kanonizo target-in .NET/Angular/POS të instalueshëm/RN/PostgreSQL dhe supersede stack-un historik; desktop wrapper/OS (`ADR-027`) dhe identity provider/store (`ADR-028`) mbeten OPEN; target ≠ implemented.
-2. **Platform Foundation Bootstrap pre-F1:** solution/CI + API/module smoke path + PostgreSQL dev migration path + OpenAPI client generation + Angular shell minimal; legacy TS ruhet si oracle.
+1. **ADR-024 — MERGED / ACCEPTED (PR #23, merge `e0d4cdc`):** target-i .NET/Angular/POS i instalueshëm/RN/PostgreSQL i kanonizuar; stack-u historik SUPERSEDED; desktop wrapper/OS (`ADR-027`) dhe identity provider/store (`ADR-028`) mbeten OPEN; **target ≠ implemented — NOT YET IMPLEMENTED përtej Bootstrap-it**.
+2. **Platform Foundation Bootstrap pre-F1 — GATE AKTUAL / ACTIVE · statusi: IMPLEMENTED / PENDING_INDEPENDENT_REVIEW (NOT YET PASSED):** solution/CI + API/module smoke path + PostgreSQL dev migration path + OpenAPI client generation + Angular shell minimal; identity/audit/outbox/observability vetëm contracts/smoke wiring; legacy TS ruhet si oracle. Evidence: `docs/canonical/06-architecture/Platform_Foundation_Bootstrap_Record.md`; PASS vetëm pas Fable→Codex→Human Gate→merge.
 3. **F1 Foundation në stack-un e ri:** Identity/Tenant/RBAC + audit + encryption/key custody + observability + recovery + i18n SQ/EN/SR.
 4. **Step B — code hardening (`ATK-012`, P0/PRE-TIER2) në Fiscal bounded context të ri:** T2-01..T2-10.
 5. **Step C — Fiscal Semantics Conformance Pack:** golden vectors zyrtarë + C#↔TypeScript offline equivalence + fake-HTTP/negative tests.

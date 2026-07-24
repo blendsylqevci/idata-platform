@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Application: varet VETËM nga Domain; orkestron use-case-in. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Domain\Idata.Platform.Modules.PlatformStatus.Domain.csproj" />
+  </ItemGroup>
+</Project>

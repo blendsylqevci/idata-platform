@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- API Host = composition root i modular monolith-it (ADR-024). -->
+  <ItemGroup>
+    <ProjectReference Include="..\Modules\PlatformStatus\Application\Idata.Platform.Modules.PlatformStatus.Application.csproj" />
+    <ProjectReference Include="..\Modules\PlatformStatus\Infrastructure\Idata.Platform.Modules.PlatformStatus.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\PlatformStatus\Presentation\Idata.Platform.Modules.PlatformStatus.Presentation.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <!-- Referencë direkte për të imponuar versionin e riparuar të varësisë
+         transitive (shih Directory.Packages.props / GHSA-v5pm-xwqc-g5wc). -->
+    <PackageReference Include="Microsoft.OpenApi" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Gjenerim ZYRTAR build-time i dokumentit OpenAPI (pa server, pa network);
+         design-time only — nuk shkon ne output-in runtime. -->
+    <PackageReference Include="Microsoft.Extensions.ApiDescription.Server">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+  <PropertyGroup>
+    <OpenApiGenerateDocuments>true</OpenApiGenerateDocuments>
+    <OpenApiDocumentsDirectory>$(BaseIntermediateOutputPath)openapi</OpenApiDocumentsDirectory>
+    <OpenApiGenerateDocumentsOptions>--file-name platform</OpenApiGenerateDocumentsOptions>
+  </PropertyGroup>
+  <Target Name="CopyPlatformOpenApiContract" AfterTargets="GenerateOpenApiDocuments" Condition="Exists('$(BaseIntermediateOutputPath)openapi/platform_platform-v1.json')">
+    <!-- Emri kanonik i kontratës së commit-uar: contracts/openapi/platform-v1.json -->
+    <Copy SourceFiles="$(BaseIntermediateOutputPath)openapi/platform_platform-v1.json"
+          DestinationFiles="$(MSBuildThisFileDirectory)../../../contracts/openapi/platform-v1.json"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>

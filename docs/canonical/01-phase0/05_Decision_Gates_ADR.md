@@ -1,6 +1,6 @@
 # Faza 0 — Decision Gates / ADR Register (iData+)
 
-**Versioni:** 1.3 · **Data:** 23 Korrik 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.27 §2, §11
+**Versioni:** 1.4 · **Data:** 24 Korrik 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.28 §2, §11
 **Format:** ADR (Architecture Decision Record). Status: **Accepted** (mbyllur) / **Open** (vendoset në gate-in e caktuar) / **Proposed** / **Superseded** (ruhet si histori, por nuk është më vendimi aktiv).
 Çdo vendim i ri → kjo skedar + një rresht te SSOT Decisions Log.
 
@@ -25,7 +25,7 @@
 | ADR-021 | **Secret management** — secrets store; asnjë sekret/SEF-ID/çelës në repo; audit redaction | 28.06 | §9 |
 | ADR-022 | **Branch protection + GitHub 2FA** (PR-based, review i detyrueshëm, pa force-push) | 28.06 | §9 |
 | ADR-023 | **Backup / PITR / restore drill** i detyrueshëm para Fazës 1 (promovon ADR-015) | 28.06 | §2 |
-| ADR-024 | **Platform Runtime & Architecture Stack Freeze** — .NET/Angular/POS i instalueshëm/RN/PostgreSQL, modular monolith, migrim inkremental | 23.07 | **TARGET I APROVUAR · NOT YET IMPLEMENTED**; wrapper/OS dhe identity provider/store = OPEN |
+| ADR-024 | **Platform Runtime & Architecture Stack Freeze** — .NET/Angular/POS i instalueshëm/RN/PostgreSQL, modular monolith, migrim inkremental | 23.07 (merge PR #23 `e0d4cdc`) | **MERGED/ACCEPTED**; **Platform Foundation Bootstrap pre-F1 = IMPLEMENTED/PENDING_INDEPENDENT_REVIEW (PR #24)**; pjesa PËRTEJ Bootstrap-it/F1 = **NOT YET IMPLEMENTED**; wrapper/OS dhe identity provider/store = OPEN |
 
 **Shënim korrigjues i datuar (12.07.2026 — full-corpus re-audit; NUK rishkruhet historia e ADR-020):** formulimi origjinal "items €0.0001/totals cents" është **i pasaktë për `CouponItem.Total`** — kontrata e saktë: **unit `Price` = ×10000; item `Total` + coupon totals/payments/tax = ×100 (cents)** (Gate v2.0 §3; T2-01). Gjithashtu **org-u zyrtar ka konflikte të regjistruara**: firma **C# P1363 vs Go ASN.1 DER** (CONF-02 — encoding = OPEN deri në server evidence); **PHP proto i vjetër inkompatibil**; **Ruby pa proto**; **Swagger v0.9 vs main pas tag-ut** (CONF-03/04) — **asnjë implementim i vetëm s'është kanonik në heshtje**; referenca e plotë = `../05-sef-atk/ATK_Source_Register.md` §4–§5.
 

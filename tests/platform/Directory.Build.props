@@ -1,0 +1,4 @@
+<Project>
+  <!-- Testet e target stack-ut trashëgojnë të njëjtin baseline të pin-uar. -->
+  <Import Project="..\..\src\platform\Directory.Build.props" />
+</Project>

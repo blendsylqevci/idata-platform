@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\platform\Modules\PlatformStatus\Application\Idata.Platform.Modules.PlatformStatus.Application.csproj" />
+    <ProjectReference Include="..\..\..\src\platform\Modules\PlatformStatus\Domain\Idata.Platform.Modules.PlatformStatus.Domain.csproj" />
+    <ProjectReference Include="..\..\..\src\platform\Modules\PlatformStatus\Presentation\Idata.Platform.Modules.PlatformStatus.Presentation.csproj" />
+    <ProjectReference Include="..\..\..\src\platform\Idata.Platform.DbMigrator\Idata.Platform.DbMigrator.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+</Project>

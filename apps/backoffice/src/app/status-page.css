@@ -1,0 +1,19 @@
+.status-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.status-grid dt {
+  font-weight: 600;
+}
+
+.status-grid dd {
+  margin: 0;
+  font-family: ui-monospace, monospace;
+}
+
+.state-error {
+  color: #8b1a1a;
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@idata/platform-api-client",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Klient TypeScript i GJENERUAR nga kontrata OpenAPI e Platform API (ADR-024) — asnjë DTO manual. Gjenerimi është lokal dhe pa network; burimi i vetëm i kontratës është ASP.NET Core API.",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "generate": "openapi-typescript ../../contracts/openapi/platform-v1.json -o src/generated/platform-v1.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "openapi-fetch": "0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  }
+}
