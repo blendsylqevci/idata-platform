@@ -1,7 +1,7 @@
 # Platform Foundation Bootstrap — Implementation Record (pre-F1)
 
 **Statusi:** **IMPLEMENTED / PENDING_INDEPENDENT_REVIEW** — PASS vetëm pas Fable delta-review → Codex review (PM_REVIEW_PROTOCOL) → Human Gate i Pronarit → merge i aprovuar.
-**Autoriteti:** ADR-024 (MERGED / ACCEPTED, PR #23, merge `e0d4cdc`) · **Data:** 24.07.2026 · **Increment:** Bootstrap pre-F1 — JO F1, JO migrim big-bang, JO module biznesi.
+**Autoriteti:** ADR-024 (MERGED / ACCEPTED, PR #23, merge `e0d4cdc`) · **Data:** 24.07.2026 (v2 — post correction pass i review-t të pavarur) · **Increment:** Bootstrap pre-F1 — JO F1, JO migrim big-bang, JO module biznesi.
 
 ## Struktura reale
 
@@ -13,7 +13,7 @@ src/platform/
   Directory.Build.props          # nullable, implicit usings, warnings-as-errors, deterministic, lockfiles
   Directory.Packages.props       # Central Package Management — pins ekzakte, zero wildcard
   Idata.Platform.Api/            # host = composition root; OpenAPI build-time export
-  Idata.Platform.DbMigrator/     # i vetmi aplikues i migrimeve (migrate/status/down-to-zero)
+  Idata.Platform.DbMigrator/     # aplikuesi i vetëm i migrimeve; migrate/status/applied-ids/assert-state + down-to-zero (test-only, guarded)
   Modules/PlatformStatus/        # modul TEKNIK (jo biznesi)
     Domain/ Application/ Infrastructure/ Presentation/
 tests/platform/                  # UnitTests · IntegrationTests · ArchitectureTests
@@ -36,10 +36,12 @@ query/handler i thjeshtë (pa CQRS ceremonial).
 | `pnpm platform:restore` | `dotnet restore src/platform --locked-mode` |
 | `pnpm platform:build` | build me warnings-as-errors (+ gjeneron spec-in OpenAPI) |
 | `pnpm platform:test` | unit + architecture + integration (kërkon target DB) |
-| `pnpm platform:migrate` / `:status` / `:down` | DbMigrator migrate / status / down-to-zero |
+| `pnpm platform:migrate` / `:status` | DbMigrator migrate / status |
+| `pnpm platform:migrate:reset:test-only` | down-to-zero **TEST-ONLY / GUARDED** — fail-closed pa env {Development,CI} + opt-in ekzakt + DB sintetike; skripti NUK e fsheh opt-in-in |
+| `pnpm platform:assert-state` (përmes DbMigrator `assert-state`) | verifikim machine-checkable i applied/pending/sentinel |
 | `pnpm contracts:generate` | spec build-time + klient TS i gjeneruar |
 | `pnpm contracts:drift-check` | rigjenerim + `git diff --exit-code` |
-| `pnpm backoffice:build` / `:test` | Angular shell |
+| `pnpm backoffice:build` / `:test` | Angular shell **përmes Turbo** (`--filter=@idata/backoffice`) — ndërton `@idata/platform-api-client` para app-it (fresh-checkout-safe) |
 | `pnpm verify:all` | legacy + target + contracts bashkë |
 
 ## API smoke path
@@ -47,18 +49,22 @@ query/handler i thjeshtë (pa CQRS ceremonial).
 `Angular shell → @idata/platform-api-client (i gjeneruar) → GET /api/platform/status
 (operationId GetPlatformStatus) → GetPlatformStatusHandler (Application) →
 NpgsqlDatabaseReadinessProbe (Infrastructure, fail-safe) → PostgreSQL idata_platform`.
-Përgjigje e tipizuar pa timestamps/paths/sekrete; DB e paarritshme → `DEGRADED/UNAVAILABLE`
-e kontrolluar. Identity/audit/outbox/observability raportohen EKSPLICIT
-`NOT_CONFIGURED_F1_PENDING` — asnjë no-op që maskohet si enforcement; zero rrugë biznesi/fiskale (e testuar).
+Përgjigje e tipizuar pa timestamps/paths/sekrete; `READY` kthehet VETËM kur serveri është i arritshëm DHE i gjithë seti i migrimeve i aplikuar (pending=0) DHE tabela sentinel `platform.migration_smoke_check` ekziston; DB e arritshme por e pamigruar, sentinel i hequr ose e paarritshme → `DEGRADED/UNAVAILABLE` (pa false-positive; probe READ-ONLY, pa auto-migrim, pa detaje lidhjeje). Identity/audit/outbox/observability raportohen EKSPLICIT `NOT_CONFIGURED_F1_PENDING` — asnjë no-op që maskohet si enforcement; zero rrugë biznesi/fiskale (e testuar).
 
 ## Database
 
 EF Core = migration owner i vetëm; schema module-owned `platform` me historinë
 (`__ef_migrations_history`) brenda boundary; migrimi i vetëm `0001_InitialPlatformSchema`
 me VETËM tabelën teknike `migration_smoke_check`. API nuk auto-migron. Cikli i provuar
-mekanikisht: fresh apply → no-op → down-to-zero → reapply (lokal me Docker + në CI).
-**Separimi:** target `idata_platform` ≠ legacy `idata`; runner-i TS + migrimet 0001…0006
-legacy të PAPREKURA (oracle); zero dual-write.
+**machine-checkable** me verifikuesin `assert-state <applied> <pending> <present|absent>`
+(krahasim PURE kundër setit të assembly-t, jo grep mbi tekst): fresh(1/0/present) →
+no-op(1/0/present) → guarded-down(0/1/absent) → reapply(1/0/present); mismatch → exit
+jo-zero (lokal me Docker + në CI). Down-to-zero është **TEST-ONLY / GUARDED**: guard PURE
+para çdo DbContext/connection/query — kërkon env {Development,CI} + opt-in ekzakt
+`IDATA_ALLOW_DESTRUCTIVE_MIGRATION_RESET` + DB sintetike (`idata_platform_ci` ose prefiks
+`idata_platform_test_`); pa njërën → exit 2, zero mutacion, zero detaje në output.
+**Separimi:** target dev `idata_platform` / CI `idata_platform_ci` ≠ legacy `idata`;
+runner-i TS + migrimet 0001…0006 legacy të PAPREKURA (oracle); zero dual-write.
 
 ## Contracts
 
@@ -71,8 +77,11 @@ asnjë DTO manual dhe asnjë client fetch i dorës.
 ## Angular shell + i18n scaffold
 
 Angular 22.0.8 project-local (zgjedhje tooling e pin-uar, jo vendim i ri ADR); layout
-minimal accessible; status page loading/success/error + retry; dev proxy `/api`;
-vitest 4.1.10 (runner-i zyrtar i builder-it). i18n MINIMAL: resource keys neutrale me
+minimal accessible; status page loading/success/error + retry (loading dhe retry të
+testuara realisht me deferred promise + klik); dev proxy `/api`; vitest 4.1.10 (runner-i
+zyrtar i builder-it). Klienti i ri `@idata/platform-api-client` është pin-uar ekzakt
+(typescript 5.9.3, vitest 3.2.7); root scripts `backoffice:*` përdorin Turbo që ndërtojnë
+klientin para app-it (fresh-checkout-safe). i18n MINIMAL: resource keys neutrale me
 paritet sq (default) / en / sr — **JO** U11/full-i18n; pa përkthime ligjore/fiskale.
 
 ## Çfarë ËSHTË implementuar (vetëm kjo)

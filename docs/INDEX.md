@@ -1,6 +1,6 @@
 # iData+ Project Documentation Index
 
-Date: 2026-07-23 (canonical split origjinal: 2026-07-02)
+Date: 2026-07-24 (canonical split origjinal: 2026-07-02)
 Status: Canonical split v0.1, prepared from `00_raw/claude` and `00_raw/codex`; mirëmbahet me docs-PR.
 
 ## Mandatory project rules
@@ -43,7 +43,7 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/00-ssot/Outstanding_Confirmations_Tracker_2026-06-29.md`
 - `docs/canonical/01-phase0/00_Phase0_Execution_Plan.md`
 - `docs/canonical/01-phase0/Repo_Assembly_Walking_Skeleton_Runbook_2026-06-30.md`
-- `docs/canonical/01-phase0/05_Decision_Gates_ADR.md` — ADR Register; ADR-024 = target stack/topology i aprovuar, jo ende i implementuar
+- `docs/canonical/01-phase0/05_Decision_Gates_ADR.md` — ADR Register (v1.4); ADR-024 = MERGED/ACCEPTED; Bootstrap pre-F1 = implemented/pending review; pjesa përtej Bootstrap-it/F1 ende jo e implementuar
 - `docs/canonical/01-phase0/07_PRODATA_Evidence_Closure_Parity_Matrix.md` — v2 Source→Target Closure (dy boshte + capability map)
 - `docs/canonical/02-accounting/Accounting_Posting_Rules_v0_2026-06-29.md`
 - `docs/canonical/02-accounting/VAT_Book_Mapping_v0_2026-06-29.md`
@@ -58,7 +58,7 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
 - `docs/canonical/08-roadmap/Cutover_Rollback_Runbook.md`
 
-## Next gate (rendi aktual — 23.07.2026, post-merge i ADR-024 / PR #23)
+## Next gate (rendi aktual — 24.07.2026, post Bootstrap PR #24 — pending review)
 
 *(**Re-audit-i + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate). **Verdikti: regression lokale 66 PASS/1 LIVE SKIP · Tier 1 PARTIAL/REOPENED · compliance FAIL · Tier 2 NOT IMPLEMENTED/NO-GO** — Gate v2.0.)*
 
