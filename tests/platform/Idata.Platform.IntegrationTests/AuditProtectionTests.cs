@@ -47,14 +47,21 @@ public sealed class AuditProtectionTests
     /// <para><b>Kufizim i PostgreSQL-it i zbuluar nga authority-lock protocol-i:</b>
     /// `SELECT ... FOR SHARE` NUK mjaftohet me privilegjin `SELECT` — kërkon
     /// privilegj të klasës UPDATE (`DELETE` nuk mjafton; verifikuar empirikisht).
-    /// Prandaj roli merr grant-e UPDATE **të kufizuara në një kolonë të vetme**
-    /// për çdo tabelë autoriteti: kolona `created_at` (inerte për vendimet e
-    /// autorizimit) për `business`/`app_user`/`role`/`permission`, dhe
-    /// `business_id` (e kufizuar nga composite FK) për `role_permission`.
-    /// Ky është grant-i më i ngushtë që PostgreSQL e pranon për row share locks.
-    /// <b>Risku i mbetur</b> (aftësia për të shkruar pikërisht ato kolona)
-    /// dokumentohet dhe është INPUT eksplicit për ADR-026 — provisioning-u i
-    /// rolit të aplikacionit në production mbetet OPEN.</para>
+    /// Prandaj roli merr grant-e UPDATE **column-scoped**: `created_at`
+    /// (inerte për vendimet e autorizimit) për `business`/`app_user`/`role`/
+    /// `permission`; `business_id` (e kufizuar nga composite FK) për
+    /// `role_permission`; dhe **VETËM `(role_id, version)`** për
+    /// `business_membership` — kolonat që mutacioni legjitim realisht i
+    /// shkruan (zero UPDATE mbi `status`/`user_id`/`business_id`/`created_at`).
+    /// SELECT mbi `business_membership` mbetet mbi TË GJITHA kolonat e
+    /// mapuara: `EfAccessControlStore.GetGrantsAsync` materializon entitetin e
+    /// plotë me EF (`AsNoTracking`+`SingleOrDefaultAsync`), ndaj ngushtimi i
+    /// SELECT-it pa e kaluar query-n në projection do ta prishte rrugën reale
+    /// — kufi i implementimit aktual, rivlerësohet nëse kalohet në projection.
+    /// <b>Risku i mbetur</b>: credential-i runtime mund të shkruajë direkt
+    /// `role_id`/`version` (dhe kolonat inerte më lart) jashtë
+    /// endpoint-it — INPUT eksplicit për ADR-026; production DB-role
+    /// provisioning, row-scope/RLS dhe direct-write hardening mbeten OPEN.</para>
     /// </summary>
     private static async Task CreateRuntimeRoleAsync(NpgsqlConnection adminConnection, string roleName)
     {
@@ -70,7 +77,9 @@ public sealed class AuditProtectionTests
             GRANT UPDATE (created_at) ON platform.role TO "{roleName}";
             GRANT UPDATE (created_at) ON platform.permission TO "{roleName}";
             GRANT UPDATE (business_id) ON platform.role_permission TO "{roleName}";
-            GRANT SELECT, UPDATE ON platform.business_membership TO "{roleName}";
+            GRANT SELECT ON platform.business_membership TO "{roleName}";
+            -- VETEM kolonat qe mutacioni legjitim i shkruan (least privilege).
+            GRANT UPDATE (role_id, version) ON platform.business_membership TO "{roleName}";
             GRANT SELECT, INSERT ON platform.audit_log TO "{roleName}";
             GRANT SELECT, INSERT ON platform.command_receipt TO "{roleName}";
             """);
@@ -151,6 +160,17 @@ public sealed class AuditProtectionTests
                     "UPDATE platform.permission SET action = 'X'",
                     "DELETE FROM platform.role_permission",
                     "UPDATE platform.role_permission SET permission_id = permission_id",
+                    // business_membership: grant-i UPDATE eshte VETEM (role_id,
+                    // version) — cdo kolone tjeter dhe cdo DML tjeter refuzohet.
+                    "UPDATE platform.business_membership SET status = 'disabled'",
+                    "UPDATE platform.business_membership SET user_id = user_id",
+                    "UPDATE platform.business_membership SET business_id = business_id",
+                    "UPDATE platform.business_membership SET created_at = created_at",
+                    "INSERT INTO platform.business_membership (id, business_id, user_id, role_id, version, status, created_at) "
+                        + "SELECT gen_random_uuid(), business_id, user_id, role_id, 0, status, created_at "
+                        + "FROM platform.business_membership LIMIT 1",
+                    "DELETE FROM platform.business_membership",
+                    "TRUNCATE platform.business_membership",
                 ])
                 {
                     var denied = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(runtime, forbidden));
