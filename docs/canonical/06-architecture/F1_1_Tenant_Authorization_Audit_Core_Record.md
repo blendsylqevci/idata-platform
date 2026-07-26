@@ -1,7 +1,7 @@
 # F1.1 — Tenant Authorization & Business-Scoped Audit Core (Implementation Record)
 
 **Statusi:** **IMPLEMENTED / PENDING_INDEPENDENT_REVIEW** — PASS vetëm pas Fable delta-review → Codex review (PM_REVIEW_PROTOCOL) → Human Gate i Pronarit → merge i aprovuar.
-**Autoriteti:** ADR-024 (MERGED / ACCEPTED, PR #23, merge `e0d4cdc`) + Platform Foundation Bootstrap (COMPLETED, PR #24 merged, squash `0f12488c`). **Data:** 24.07.2026 (v2 — post correction pass i review-t të pavarur). **Increment:** F1.1 — vertical slice i kufizuar i F1, JO gjithë F1.
+**Autoriteti:** ADR-024 (MERGED / ACCEPTED, PR #23, merge `e0d4cdc`) + Platform Foundation Bootstrap (COMPLETED, PR #24 merged, squash `0f12488c`). **Data:** 24.07.2026 (v3 — post correction pass final: autoritet atomik, politika self/IsSystem, waiver REL-08). **Increment:** F1.1 — vertical slice i kufizuar i F1, JO gjithë F1.
 
 ## Çfarë ËSHTË implementuar (vetëm kjo)
 
@@ -27,6 +27,44 @@ Modul **AccessControl** (module-first Clean/Onion: Domain/Application/Infrastruc
 
 **Kontratë e PËRKOHSHME provider-neutral e F1.1:** principal mungon/invalid, user/business/membership disabled ose permission mungon → **403 uniform `ACCESS_DENIED` PARA target lookup-it**. **Ndarja 401/403 vendoset në ADR-028/F1 Identity — JO kontratë finale OIDC.** Identity provider/store = ADR-028 OPEN; `app_user` = projection provider-neutral (email/name/mfa_enabled të target-it canonical shtyhen; Identity NUK deklarohet READY). **`roleCode`/role name/hierarchy = deferred/out-of-scope** (access-context kthen vetëm userId/businessId/permissions/identityStatus).
 
+## Politika e aprovuar e F1.1 (self-role · IsSystem · provisioning)
+
+**Aktori NUK ndryshon dot rolin e vet** — krahasimi bëhet me **USER ID**
+(`actorUserId <> target.user_id`), jo me membership id; deny stabil, zero efekt.
+**Rol me `IsSystem = true` NUK caktohet** përmes endpoint-it F1.1; përgjigjja
+publike është e njëjtë me rol inekzistent (parity — nuk zbulohet se roli është
+system-managed). Të dy predikatët jetojnë VETËM në linearization point-in atomik
+— asnjë bypass përmes endpoint-it, handler-it apo adapterit tjetër.
+
+**Provisioning note (i detyrueshëm):** F1.1 **NUK** e përdor endpoint-in e
+role-change për bootstrap-in e rolit të parë të tenant-it. Sot rolet fillestare
+vijnë vetëm nga **seed/migration i kontrolluar**. **Production provisioning
+mbetet OPEN.**
+
+**Të pa-implementuara qëllimisht (OPEN, jo "implemented"):** role hierarchy ·
+permission dominance / delegation ceiling · last-admin protection · role
+globale/system-wide provisioning · break-glass. Hierarkia NUK nxirret nga emrat
+e roleve.
+
+## Autoriteti atomik i mutacionit (§1)
+
+Rruga `PUT /api/platform/memberships/{membershipId}/role` ka **NJË linearization
+point DB-backed**: një `UPDATE ... WHERE <të gjithë predikatët>` i vetëm, brenda
+një transaction-i eksplicit, që merr **row lock** mbi target membership-in dhe
+rivlerëson NË ATË MOMENT: business active · actor user active · actor membership
+active · permission-i AKTUAL `platform.users_roles:U` i aktorit · target
+membership active · target user active · self-role (USER ID) · roli i kërkuar i
+të njëjtit business me `is_system = false` · `version = expectedVersion` ·
+`status = 'active'`. Pre-check-u i handler-it shërben VETËM për deny-uniform dhe
+formësim 403/404 — nuk është autoritet dhe nuk mund të divergjojë, sepse çdo
+predikat i tij ri-provohet në DB para mutacionit.
+
+**Semantika lineare:** disable/revokim i commit-uar PARA këtij pike e refuzon
+mutacionin; nëse mutacioni linearizohet i pari, disable-i i mëpasëm vazhdon; dy
+komanda me të njëjtin version → saktësisht një fiton. **Mutation + version++ +
+audit + receipt commit-ohen BASHKË**; çdo predikat i dështuar ose konflikt →
+zero mutation, zero version++, zero audit, zero receipt.
+
 ## Optimistic concurrency (CAS) (§5)
 
 `business_membership.version` (bigint NOT NULL, nis 0) = EF concurrency token DB-backed. PUT kërkon `expectedVersion` të tipizuar (në command/fingerprint/OpenAPI/klient/response). Konflikti CAS → **HTTP 409 `CONCURRENCY_CONFLICT`** (i dalluar nga `IDEMPOTENCY_CONFLICT`), zero mutation/audit/receipt nga humbësi. Dy kërkesa paralele me key të ndryshëm + të njëjtin `expectedVersion` + role të ndryshme → saktësisht një 200 + një 409 CONCURRENCY_CONFLICT; final role/version = fituesi; saktësisht një audit + një receipt (i provuar).
@@ -47,7 +85,7 @@ Rollback 0002→0001 (helper TEST-ONLY, JO production CLI): guard tripalësh (en
 
 ## Reliability Gate — Failure matrix (moduli AccessControl/Audit, kritik)
 
-Të 8 skenarët standardë. **5 dhe 7 = TESTUAR REALISHT; 6 = fixture i kufizuar (host recreation/restart), JO crash-proof universal; 8 = PARTIAL/OPEN për disk/queue-full** (vetëm audit/receipt-write denial + transaction rollback janë testuar realisht, JO disk full). Skenarët 1–4 (Internet/SEF/Printer/Device) = N/A me justifikim §5.1 (mbulohen nga shtresa sync/POS/fiscal e F2+; asnjë rrugë fiskale/offline/periferike në këtë modul) — **pending PM acceptance**.
+Të 8 skenarët standardë. **5 dhe 7 = TESTUAR REALISHT; 6 = fixture i kufizuar (host recreation/restart), JO crash-proof universal; 8 = PARTIAL/OPEN me waiver `HG-F1.1-REL-08`** (vetëm audit/receipt-write denial + transaction rollback janë testuar realisht, JO disk/queue-full real, alerting apo recovery). Skenarët 1–4 (Internet/SEF/Printer/Device) = N/A me justifikim §5.1 (mbulohen nga shtresa sync/POS/fiscal e F2+; asnjë rrugë fiskale/offline/periferike në këtë modul; handoff konkret te F2+/sync/POS/SEF) — **pranuar nga PM vetëm për këtë modul; NUK kthehen në PASS**. **Waiver ≠ PASS:** skenari 8 mbetet PARTIAL/OPEN.
 
 | Failure scenario | Expected behavior | Data safety | User-visible | Recovery | Test | Evidence |
 |---|---|---|---|---|---|---|
@@ -58,11 +96,11 @@ Të 8 skenarët standardë. **5 dhe 7 = TESTUAR REALISHT; 6 = fixture i kufizuar
 | 5. Retry / idempotency | Replay kthen rezultatin e ruajtur; key i njëjtë me kërkesë tjetër → 409 | Zero mutation/audit i dyfishtë (UNIQUE + fingerprint) | I njëjti 200 (replay) ose 409 uniform | Deterministik; riprovim i sigurt | `IdempotencyEndpointTests`, `AccessControlHandlerTests` | Test output (TESTUAR) |
 | 6. Server / host restart | Riprovim me të njëjtin key pas host-recreation → rezultat i njëjtë | Idempotency-Key + receipt; zero efekt i dytë | Klienti merr të njëjtin 200 | Idempotency bën riprovimin të sigurt | `IdempotencyEndpointTests.Host_recreation_replay_*` (host i ri mbi të njëjtën DB) — **fixture i kufizuar, JO crash-proof universal** | Test output |
 | 7. DB unavailable | 503 PLATFORM_UNAVAILABLE, zero detaje | Asnjë mutation; probe/handler fail-safe | 503 ProblemDetails stabil | Auto-recover kur DB kthehet | `ApiSurfaceTests.DB_e_paarritshme_*` | Test output (TESTUAR) |
-| 8. Disk / queue full | **PARTIAL/OPEN** — vetëm write-denial + rollback i provuar (JO disk-full real) | Atomiciteti i transaction-it (audit/receipt-write failure → rollback) | 503 i kontrolluar | Riprovim pas lirimit; idempotency parandalon dublim | `AuditProtectionTests` (write-denial + rollback) | Test output. **OPEN:** disk/queue capacity failure real — Owner: Tech/Platform Owner; gate: F1 observability/reliability hardening; JO i simuluar këtu |
+| 8. Disk / queue full | **PARTIAL — waiver `HG-F1.1-REL-08` (24.07.2026), APROVUAR nga Pronari.** F1.1 provon rollback atomik + HTTP 503 gjatë write-denial, por JO disk/queue-full real, alerting ose recovery. Risku mbetet OPEN. Owner: Tech/Platform Owner. Mbyllet para F1 COMPLETE dhe para çdo production Go. NUK pretendohet production readiness. | Atomiciteti i transaction-it (audit/receipt-write failure → rollback i plotë) | 503 i kontrolluar | Riprovim pas lirimit; idempotency parandalon dublim | `AuditProtectionTests` (write-denial + rollback) — JO disk-full real | Test output + waiver `HG-F1.1-REL-08` (risk + afat + owner të loguar në Tracker) |
 
 ## Test counts
 
-Architecture 10 · Unit 80 · Integration 51 (kundër PostgreSQL real sintetik): **141 target-tests** (build 0 warnings, zero skip). Client 2/2 · Backoffice 6/6 · Legacy turbo 8/8 build + 12/12 test. OpenAPI/client generate ×2 zero-diff.
+Architecture 10 · Unit 87 · Integration 68 (kundër PostgreSQL real sintetik, DB unik per test): **165 target-tests** (build 0 warnings, zero skip). Client 2/2 · Backoffice 6/6 · Legacy turbo 8/8 build + 12/12 test. OpenAPI/client generate ×2 zero-diff.
 
 ## Historia dhe gitleaks
 
@@ -70,7 +108,7 @@ Historia aktive e degës u rindërtua nga `origin/main` që fixtures sintetike (
 
 ## Gates OPEN të paprekura
 
-ADR-014 (pooling) · ADR-025 (encryption/key custody) · ADR-026 (hosting/secrets/providers + production credential/DB-role model) · ADR-028 (identity provider/store; ndarja 401/403) · ENG-004 (group-level audit — fallback business-scoped-only AKTIV, OPEN) · production RLS · role globale/system-wide (deferred) · break-glass · payroll · `roleCode`/hierarchy. **Step B/C, PREFLIGHT, Tier 2 = NO-GO; RECERT = JO.**
+ADR-014 (pooling) · ADR-025 (encryption/key custody) · ADR-026 (hosting/secrets/providers + production credential/DB-role model) · ADR-028 (identity provider/store; ndarja 401/403) · ENG-004 (group-level audit — fallback business-scoped-only AKTIV, OPEN) · production RLS · **role hierarchy** · **permission dominance / delegation ceiling** · **last-admin protection** · role globale/system-wide (deferred) · **production role provisioning** (F1.1 = vetëm seed/migration) · break-glass · payroll · `roleCode`/hierarchy · **reliability skenari 8 (disk/queue-full) — waiver `HG-F1.1-REL-08`, PARTIAL/OPEN**. **Step B/C, PREFLIGHT, Tier 2 = NO-GO; RECERT = JO.**
 
 ## Rollback
 
