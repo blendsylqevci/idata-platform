@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using Idata.Platform.Modules.AccessControl.Application;
 using Idata.Platform.Modules.AccessControl.Presentation;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Xunit;
@@ -275,17 +276,27 @@ public sealed class AtomicAuthorizationTests
                 AccessControlSeed.MembershipC, AccessControlSeed.RoleA2, ExpectedVersion: 0);
             var mutationB = mutationA with { RoleId = AccessControlSeed.RoleA };
 
-            // A hyn i pari në linearization point → merr row lock-un.
+            // A hyn i pari në protokollin e lock-eve → mban lock-et e autoritetit
+            // dhe FOR UPDATE mbi target.
             var resultA = await uowA.TryMutateRoleAsync(mutationA, TestContext.Current.CancellationToken);
             Assert.True(resultA.Applied);
             Assert.Equal(1L, resultA.NewVersion);
             Assert.Equal(AccessControlSeed.RoleA, resultA.PreviousRoleId); // paraardhësi REAL
 
-            // B niset ndërsa A s'ka commit-uar ende: bllokohet mbi row lock-un
-            // dhe rivlerëson VETËM pasi A commit-on → `version = 0` s'vlen më.
+            // B niset ndërsa A s'ka commit-uar: bllokohet mbi lock-et e A-së.
+            // Bllokimi PROVOHET nga vetë PostgreSQL (`pg_blocking_pids`), JO me
+            // Task.Delay — B rivlerëson vetëm pasi A commit-on, kur `version=0`
+            // s'vlen më.
+            await contextB.Database.OpenConnectionAsync(TestContext.Current.CancellationToken);
+            var pidB = await PostgresLockObserver.BackendPidAsync(
+                (NpgsqlConnection)contextB.Database.GetDbConnection());
             var taskB = Task.Run(() => uowB.TryMutateRoleAsync(mutationB, CancellationToken.None));
-            await Task.Delay(200, TestContext.Current.CancellationToken);
-            Assert.False(taskB.IsCompleted); // provë e bllokimit real mbi lock
+            await using (var observer = new NpgsqlConnection(connectionString))
+            {
+                await observer.OpenAsync(TestContext.Current.CancellationToken);
+                await SyntheticDatabaseSafety.AssertSyntheticTargetAsync(observer, databaseName);
+                await PostgresLockObserver.WaitUntilBlockedAsync(observer, pidB);
+            }
 
             AddCommandRecords(uowA, AccessControlSeed.MembershipC, AccessControlSeed.RoleA2, resultA.NewVersion);
             Assert.Equal(CommandSaveOutcome.Saved, await uowA.SaveAsync(TestContext.Current.CancellationToken));

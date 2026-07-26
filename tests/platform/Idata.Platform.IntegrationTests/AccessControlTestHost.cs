@@ -77,6 +77,12 @@ public static class AccessControlSeed
     public static readonly Guid UserInDisabledBiz = Guid.Parse("ceeeeeee-cafe-4afe-8afe-ceeeeeeeeeee");
     public static readonly Guid UserTargetDisabled = Guid.Parse("cfffffff-cafe-4afe-8afe-cfffffffffff");
     public static readonly Guid UserForDisabledMembership = Guid.Parse("cabcabca-cafe-4afe-8afe-cabcabcabcab");
+    /// <summary>
+    /// User i ÇAKTIVIZUAR PA membership në asnjë business — lejon të provohet
+    /// ripikëzimi i `business_membership.user_id` te një user jo-aktiv pa
+    /// shkelur unique index-in `(business_id, user_id)`.
+    /// </summary>
+    public static readonly Guid UserDisabledUnattached = Guid.Parse("cbadcbad-cafe-4afe-8afe-cbadcbadcbad");
 
     public static readonly Guid RoleA = Guid.Parse("daaaaaaa-fade-4ade-8ade-daaaaaaaaaaa");
     public static readonly Guid RoleA2 = Guid.Parse("dddddaaa-fade-4ade-8ade-dddddaaaaaaa");
@@ -130,7 +136,8 @@ public static class AccessControlSeed
             new AppUserRecord { Id = UserActorDisabled, Status = RecordStatus.Disabled, CreatedAt = now },
             new AppUserRecord { Id = UserInDisabledBiz, Status = RecordStatus.Active, CreatedAt = now },
             new AppUserRecord { Id = UserTargetDisabled, Status = RecordStatus.Disabled, CreatedAt = now },
-            new AppUserRecord { Id = UserForDisabledMembership, Status = RecordStatus.Active, CreatedAt = now });
+            new AppUserRecord { Id = UserForDisabledMembership, Status = RecordStatus.Active, CreatedAt = now },
+            new AppUserRecord { Id = UserDisabledUnattached, Status = RecordStatus.Disabled, CreatedAt = now });
         context.Permissions.AddRange(
             new PermissionRecord { Id = PermissionRead, FeatureKey = "platform.users_roles", Action = "R", CreatedAt = now },
             new PermissionRecord { Id = PermissionUpdate, FeatureKey = "platform.users_roles", Action = "U", CreatedAt = now });

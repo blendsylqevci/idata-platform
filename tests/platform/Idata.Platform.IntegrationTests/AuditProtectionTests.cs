@@ -40,6 +40,22 @@ public sealed class AuditProtectionTests
             username,
             databaseName).ToConnectionString();
 
+    /// <summary>
+    /// Roli RUNTIME i aplikacionit — jo-owner, jo-superuser, pa CREATE/ALTER/
+    /// DROP dhe pa të drejtë disable-trigger.
+    ///
+    /// <para><b>Kufizim i PostgreSQL-it i zbuluar nga authority-lock protocol-i:</b>
+    /// `SELECT ... FOR SHARE` NUK mjaftohet me privilegjin `SELECT` — kërkon
+    /// privilegj të klasës UPDATE (`DELETE` nuk mjafton; verifikuar empirikisht).
+    /// Prandaj roli merr grant-e UPDATE **të kufizuara në një kolonë të vetme**
+    /// për çdo tabelë autoriteti: kolona `created_at` (inerte për vendimet e
+    /// autorizimit) për `business`/`app_user`/`role`/`permission`, dhe
+    /// `business_id` (e kufizuar nga composite FK) për `role_permission`.
+    /// Ky është grant-i më i ngushtë që PostgreSQL e pranon për row share locks.
+    /// <b>Risku i mbetur</b> (aftësia për të shkruar pikërisht ato kolona)
+    /// dokumentohet dhe është INPUT eksplicit për ADR-026 — provisioning-u i
+    /// rolit të aplikacionit në production mbetet OPEN.</para>
+    /// </summary>
     private static async Task CreateRuntimeRoleAsync(NpgsqlConnection adminConnection, string roleName)
     {
         await ExecuteAsync(adminConnection, $"""
@@ -48,6 +64,12 @@ public sealed class AuditProtectionTests
             GRANT USAGE ON SCHEMA platform TO "{roleName}";
             GRANT SELECT ON platform.business, platform.app_user, platform.role,
                 platform.permission, platform.role_permission TO "{roleName}";
+            -- Minimumi qe PostgreSQL kerkon per `FOR SHARE` (column-scoped).
+            GRANT UPDATE (created_at) ON platform.business TO "{roleName}";
+            GRANT UPDATE (created_at) ON platform.app_user TO "{roleName}";
+            GRANT UPDATE (created_at) ON platform.role TO "{roleName}";
+            GRANT UPDATE (created_at) ON platform.permission TO "{roleName}";
+            GRANT UPDATE (business_id) ON platform.role_permission TO "{roleName}";
             GRANT SELECT, UPDATE ON platform.business_membership TO "{roleName}";
             GRANT SELECT, INSERT ON platform.audit_log TO "{roleName}";
             GRANT SELECT, INSERT ON platform.command_receipt TO "{roleName}";
@@ -118,6 +140,22 @@ public sealed class AuditProtectionTests
                 var disableDenied = await Assert.ThrowsAsync<PostgresException>(() =>
                     ExecuteAsync(runtime, "ALTER TABLE platform.audit_log DISABLE TRIGGER trg_audit_log_no_update"));
                 Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, disableDenied.SqlState);
+
+                // Grant-et column-scoped (te nevojshme VETEM per FOR SHARE) NUK
+                // i japin rolit fuqi shkrimi mbi faktet e autorizimit.
+                foreach (var forbidden in (string[])
+                [
+                    "UPDATE platform.business SET status = 'disabled'",
+                    "UPDATE platform.app_user SET status = 'disabled'",
+                    "UPDATE platform.role SET is_system = true",
+                    "UPDATE platform.permission SET action = 'X'",
+                    "DELETE FROM platform.role_permission",
+                    "UPDATE platform.role_permission SET permission_id = permission_id",
+                ])
+                {
+                    var denied = await Assert.ThrowsAsync<PostgresException>(() => ExecuteAsync(runtime, forbidden));
+                    Assert.Equal(PostgresErrorCodes.InsufficientPrivilege, denied.SqlState);
+                }
 
                 // Komanda REALE me rolin runtime → sukses.
                 await RunCommandAsync(roleName, previousUser, "key-runtime-role", AccessControlSeed.RoleA2,
