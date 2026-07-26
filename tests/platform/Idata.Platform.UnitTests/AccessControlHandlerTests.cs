@@ -25,7 +25,7 @@ internal sealed class FakeMembershipRoleUow : IMembershipRoleUnitOfWork
 {
     public CommandReceipt? Receipt;
     public CommandReceipt? ReceiptAfterConflict;
-    /// <summary>Rezultati i simuluar i LINEARIZATION POINT-it.</summary>
+    /// <summary>Rezultati i simuluar i fazës authority-lock/validation/mutation.</summary>
     public AtomicRoleMutationResult MutationResult =
         new(Applied: true, NewVersion: 1, PreviousRoleId: Guid.Empty, Denial: RoleMutationDenial.None);
     public CommandSaveOutcome SaveOutcome = CommandSaveOutcome.Saved;
@@ -85,14 +85,14 @@ public sealed class AccessControlHandlerTests
     private static ActorGrants GrantsWithUpdate => new(
         MembershipId, OldRoleId, ["platform.users_roles:R", "platform.users_roles:U"]);
 
-    /// <summary>UoW me linearization point qe LEJON mutacionin (version 0→1).</summary>
+    /// <summary>UoW me faze mutacioni qe LEJON mutacionin (version 0→1).</summary>
     private static FakeMembershipRoleUow UowApplying(long newVersion = 1) => new()
     {
         MutationResult = new(Applied: true, NewVersion: newVersion, PreviousRoleId: OldRoleId,
             Denial: RoleMutationDenial.None),
     };
 
-    /// <summary>UoW me linearization point qe REFUZON me arsyen e dhene.</summary>
+    /// <summary>UoW me faze mutacioni qe REFUZON me arsyen e dhene.</summary>
     private static FakeMembershipRoleUow UowDenying(RoleMutationDenial denial) => new()
     {
         MutationResult = new(Applied: false, NewVersion: 0, PreviousRoleId: Guid.Empty, Denial: denial),
@@ -239,7 +239,7 @@ public sealed class AccessControlHandlerTests
     [InlineData(RoleMutationDenial.SelfRoleChange, UpdateMembershipRoleOutcome.AccessDenied)]
     [InlineData(RoleMutationDenial.TargetNotAssignable, UpdateMembershipRoleOutcome.TargetNotFound)]
     [InlineData(RoleMutationDenial.VersionConflict, UpdateMembershipRoleOutcome.ConcurrencyConflict)]
-    public async Task Cdo_denial_i_linearization_point_it_jep_zero_efekt(
+    public async Task Cdo_denial_i_fazes_se_mutacionit_jep_zero_efekt(
         RoleMutationDenial denial, UpdateMembershipRoleOutcome expected)
     {
         var uow = UowDenying(denial);
@@ -384,5 +384,73 @@ public sealed class AccessControlHandlerTests
         Assert.Equal(UpdateMembershipRoleOutcome.Updated, result.Outcome);
         Assert.Equal(NewRoleId, result.RoleId);
         Assert.Equal(2, uow.ReceiptLookups); // para + pas garës
+    }
+
+    // ── Recovery pas humbjes së garës same-key NË FAZËN E MUTACIONIT ──
+    // Humbësi që pret target row-lock merr VersionConflict pasi fituesi
+    // commit-oi; kontrata kërkon NJË rilexim deterministik të receipt-it.
+
+    [Fact]
+    public async Task VersionConflict_me_receipt_te_fituesit_kthen_rezultatin_e_ruajtur()
+    {
+        var fingerprint = RequestFingerprint.ForMembershipRoleUpdate(BusinessId, UserId, MembershipId, NewRoleId, 0);
+        var uow = UowDenying(RoleMutationDenial.VersionConflict);
+        uow.ReceiptAfterConflict = StoredReceipt(fingerprint); // i dukshëm VETËM pas garës
+
+        var result = await Handler(new FakeAccessControlStore(GrantsWithUpdate), uow).HandleAsync(
+            Command(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(UpdateMembershipRoleOutcome.Updated, result.Outcome);
+        Assert.Equal(NewRoleId, result.RoleId);
+        Assert.Equal(1L, result.Version);
+        Assert.Equal(2, uow.ReceiptLookups); // fillestar + rileximi i recovery-t
+        Assert.Equal(1, uow.Discards);       // rollback PARA rileximit
+        Assert.Equal(0, uow.Saves);          // zero efekt nga humbësi
+    }
+
+    [Fact]
+    public async Task VersionConflict_me_fingerprint_tjeter_eshte_konflikt_idempotence_jo_CAS()
+    {
+        var otherFingerprint = RequestFingerprint.ForMembershipRoleUpdate(BusinessId, UserId, MembershipId, OldRoleId, 0);
+        var uow = UowDenying(RoleMutationDenial.VersionConflict);
+        uow.ReceiptAfterConflict = StoredReceipt(otherFingerprint);
+
+        var result = await Handler(new FakeAccessControlStore(GrantsWithUpdate), uow).HandleAsync(
+            Command(), TestContext.Current.CancellationToken);
+
+        // KURRË ConcurrencyConflict për same-key me kërkesë tjetër.
+        Assert.Equal(UpdateMembershipRoleOutcome.IdempotencyConflict, result.Outcome);
+        Assert.Equal(0, uow.Saves);
+    }
+
+    [Fact]
+    public async Task VersionConflict_pa_receipt_mbetet_CAS_i_vertete()
+    {
+        var uow = UowDenying(RoleMutationDenial.VersionConflict); // ReceiptAfterConflict = null
+
+        var result = await Handler(new FakeAccessControlStore(GrantsWithUpdate), uow).HandleAsync(
+            Command(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(UpdateMembershipRoleOutcome.ConcurrencyConflict, result.Outcome);
+        Assert.Equal(2, uow.ReceiptLookups); // rileximi u bë dhe s'gjeti asgjë
+        Assert.Equal(0, uow.Saves);
+    }
+
+    // ── Contention/transient ≠ CAS ──
+
+    [Fact]
+    public async Task TransientFailure_kthen_PlatformUnavailable_pa_rilexim_dhe_pa_efekt()
+    {
+        var uow = UowDenying(RoleMutationDenial.TransientFailure);
+
+        var result = await Handler(new FakeAccessControlStore(GrantsWithUpdate), uow).HandleAsync(
+            Command(), TestContext.Current.CancellationToken);
+
+        Assert.Equal(UpdateMembershipRoleOutcome.PlatformUnavailable, result.Outcome);
+        Assert.Equal(1, uow.ReceiptLookups); // VETËM lookup-i fillestar — zero polling
+        Assert.Equal(1, uow.Discards);
+        Assert.Equal(0, uow.Saves);
+        Assert.Null(uow.AddedAudit);
+        Assert.Null(uow.AddedReceipt);
     }
 }

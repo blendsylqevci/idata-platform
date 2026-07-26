@@ -37,13 +37,43 @@ namespace Idata.Platform.Modules.AccessControl.Infrastructure;
 /// <c>FOR SHARE</c> — JO <c>FOR KEY SHARE</c> — sepse `status`, `is_system`,
 /// `feature_key`/`action` janë non-key updates dhe vetëm FOR SHARE i bllokon.</para>
 ///
-/// <para><b>Kufiri i garancisë:</b> serializimi vlen për faktet e lock-uara më
-/// lart. Deadlock/lock-timeout/gabim DB → rollback i plotë dhe përgjigje
-/// fail-closed; ZERO retry i heshtur (retry do të kërkonte ADR të veçantë).</para>
+/// <para><b>Kufiri i garancisë:</b> serializimi vlen VETËM për faktet e
+/// listuara e të lock-uara më lart; një fakt i ri autorizimi duhet shtuar në
+/// lock protocol + lock order + regression matrix. Deadlock / lock timeout /
+/// serialization / statement timeout → rollback i plotë dhe 503 stabil
+/// (<see cref="RoleMutationDenial.TransientFailure"/>), JO CAS; ZERO retry i
+/// heshtur (retry do të kërkonte ADR të veçantë). Rezultati bëhet i
+/// dukshëm/durable vetëm në commit (<see cref="SaveAsync"/>).</para>
+///
+/// <para><b>Serializim PER-AKTOR:</b> hapi 2 merr `FOR UPDATE` edhe mbi
+/// membership-in e AKTORIT, prandaj për komandat që përdorin këtë protokoll
+/// mutacionet konkurrente të të njëjtit aktor serializohen edhe kur
+/// target-et ndryshojnë (head-of-line blocking i mundshëm — për t'u vlerësuar
+/// para production-it). Kjo NUK është garanci globale për writer-a që nuk e
+/// përdorin këtë protokoll.</para>
+///
+/// <para><b>Kufi:</b> rreshti `role` i rolit AKTUAL të aktorit NUK lock-ohet —
+/// `role` sot nuk ka status/atribut që merr pjesë në vendimin e autorizimit
+/// të aktorit (lock-ohen membership-i i aktorit, permission-i dhe grant-i
+/// ekzakt). Nëse `role` fiton më vonë atribut authorization-relevant, ai
+/// duhet shtuar në lock protocol + order + tests.</para>
+///
+/// <para><b>Residual OPEN:</b> rendi kanonik provohet me teste vetëm për
+/// KËTË writer; nuk enforce-ohet mekanikisht mbi writer-a të ardhshëm — një
+/// lifecycle writer i ri mbi këto tabela kërkon cross-writer lock-order
+/// review + test matrix para merge-it.</para>
 /// </summary>
 public sealed class EfMembershipRoleUnitOfWork(PlatformDbContext context) : IMembershipRoleUnitOfWork
 {
     private IDbContextTransaction? transaction;
+
+    /// <summary>
+    /// Pritje e KUFIZUAR për çdo lock të protokollit — fail-closed 503 në
+    /// vend të pritjes së pakufizuar. Vendoset me `SET LOCAL lock_timeout`
+    /// brenda transaction-it (vlen vetëm për të). Testet e kontestimit e
+    /// ngushtojnë; default-i mbetet i gjerë ndaj testeve të bllokimit real.
+    /// </summary>
+    public TimeSpan LockTimeout { get; set; } = TimeSpan.FromSeconds(5);
 
     // ── Hapi 1 i rendit kanonik: business (FOR SHARE). ──
     private const string LockBusinessSql = """
@@ -118,11 +148,21 @@ public sealed class EfMembershipRoleUnitOfWork(PlatformDbContext context) : IMem
     public async Task<AtomicRoleMutationResult> TryMutateRoleAsync(
         AtomicRoleMutation mutation, CancellationToken cancellationToken)
     {
+        var firstTransaction = transaction is null;
         transaction ??= await context.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var connection = (NpgsqlConnection)context.Database.GetDbConnection();
 
         try
         {
+            if (firstTransaction)
+            {
+                // Vlera është int i formatuar lokalisht (jo input i jashtëm).
+                var timeoutMs = (int)Math.Clamp(LockTimeout.TotalMilliseconds, 1, 60_000);
+                await using var setTimeout = CreateCommand(
+                    connection, $"SET LOCAL lock_timeout = {timeoutMs}");
+                await setTimeout.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
             // ═══ (1) LOCK-ET, sipas rendit kanonik ═══
 
             // business
@@ -229,16 +269,25 @@ public sealed class EfMembershipRoleUnitOfWork(PlatformDbContext context) : IMem
                 ? new AtomicRoleMutationResult(true, version, targetMembership.RoleId, RoleMutationDenial.None)
                 : Denied(RoleMutationDenial.VersionConflict);
         }
-        catch (PostgresException ex) when (IsLockOrSerializationFailure(ex))
+        catch (PostgresException ex) when (IsTransientContention(ex))
         {
-            // Deadlock / lock timeout / serialization → rollback i plotë,
-            // përgjigje fail-closed; ZERO retry i heshtur.
+            // Contention/transient ≠ CAS: rollback i plotë → 503 stabil,
+            // ZERO retry i heshtur, ZERO SQLSTATE/detaj DB drejt klientit.
             await DiscardAsync(cancellationToken).ConfigureAwait(false);
-            return Denied(RoleMutationDenial.VersionConflict);
+            return Denied(RoleMutationDenial.TransientFailure);
         }
     }
 
-    private static bool IsLockOrSerializationFailure(PostgresException ex)
+    /// <summary>
+    /// Klasifikon dështimet TRANSIENT të kontestimit të DB-së — ato NUK janë
+    /// CAS/version mismatch dhe hartëzohen në 503 PLATFORM_UNAVAILABLE:
+    /// 40P01 deadlock · 40001 serialization failure · 55P03 lock not
+    /// available/lock timeout · 57014 statement timeout SERVER-SIDE.
+    /// KUJDES: cancellation e kërkuar nga klienti NUK kalon këtu — Npgsql e
+    /// ngre si <see cref="OperationCanceledException"/>, e cila propagohet e
+    /// paprekur si cancellation path.
+    /// </summary>
+    public static bool IsTransientContention(PostgresException ex)
         => ex.SqlState is PostgresErrorCodes.DeadlockDetected
             or PostgresErrorCodes.SerializationFailure
             or PostgresErrorCodes.LockNotAvailable

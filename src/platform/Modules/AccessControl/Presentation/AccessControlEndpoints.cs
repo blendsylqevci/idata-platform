@@ -36,7 +36,9 @@ public sealed record MembershipRoleResponse(Guid MembershipId, Guid RoleId, long
 /// Identity, JO kontratë finale OIDC) · 404 RESOURCE_NOT_FOUND (identik për
 /// cross-tenant/disabled/inekzistent — anti existence-oracle) · 409
 /// IDEMPOTENCY_CONFLICT ose CONCURRENCY_CONFLICT · 400
-/// INVALID_IDEMPOTENCY_KEY · 503 PLATFORM_UNAVAILABLE (DB e paarritshme).
+/// INVALID_IDEMPOTENCY_KEY · 503 PLATFORM_UNAVAILABLE (DB e paarritshme OSE
+/// contention/dështim transient: deadlock, lock/statement timeout,
+/// serialization — pa retry automatik dhe pa detaje DB në përgjigje).
 /// </summary>
 public static class AccessControlEndpoints
 {
@@ -115,6 +117,9 @@ public static class AccessControlEndpoints
                 UpdateMembershipRoleOutcome.ConcurrencyConflict => Problem(
                     StatusCodes.Status409Conflict, "concurrency-conflict",
                     "Version-i i pritur nuk perputhet me gjendjen aktuale.", "CONCURRENCY_CONFLICT"),
+                // DB contention/transient (deadlock, lock/statement timeout,
+                // serialization) → 503 stabil; ZERO SQLSTATE/query/identifier.
+                UpdateMembershipRoleOutcome.PlatformUnavailable => PlatformUnavailable(),
                 _ => PlatformUnavailable(),
             };
         }

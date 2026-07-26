@@ -15,6 +15,12 @@ public enum UpdateMembershipRoleOutcome
     IdempotencyConflict,
     /// <summary>expectedVersion ≠ version aktual (CAS) → 409; zero mutation.</summary>
     ConcurrencyConflict,
+    /// <summary>
+    /// Contention/dështim transient i DB-së (deadlock, lock/statement
+    /// timeout, serialization) → 503 PLATFORM_UNAVAILABLE stabil; zero
+    /// mutation; zero retry automatik. NUK është CAS dhe nuk raportohet 409.
+    /// </summary>
+    PlatformUnavailable,
     /// <summary>Sukses ose replay idempotent — i njëjti rezultat publik.</summary>
     Updated,
 }
@@ -35,16 +41,25 @@ public sealed record UpdateMembershipRoleResult(
 /// <summary>
 /// COMMAND `PUT /api/platform/memberships/{membershipId}/role`.
 ///
-/// <para><b>Autoriteti i vetëm</b> është
-/// <see cref="IMembershipRoleUnitOfWork.TryMutateRoleAsync"/>, i cili zbaton një
-/// <b>authority-lock protocol</b> brenda një transaction-i: (1) lock eksplicit
-/// i ÇDO fakti mutable të autorizimit sipas rendit kanonik (business →
-/// memberships → users → role → permission → role_permission); (2) rivlerësim
-/// PËRFUNDIMTAR fail-closed mbi vlerat e lexuara NËN LOCK; (3) `UPDATE` i
-/// guarduar që përsërit `status='active'` + `version = expectedVersion`.
-/// NUK pretendohet se një statement i vetëm rivlerëson atomikisht çdo autoritet
-/// — nën READ COMMITTED sub-query-t `EXISTS` mund të mbeten në snapshot-in e
-/// statement-it, prandaj lock-et janë eksplicite.</para>
+/// <para><b>Autoriteti FINAL</b> është faza transaksionale
+/// <b>authority-lock / validation / mutation</b> e
+/// <see cref="IMembershipRoleUnitOfWork.TryMutateRoleAsync"/>: (1) lock
+/// eksplicit i fakteve mutable të autorizimit TË LISTUARA në protokoll, sipas
+/// rendit kanonik (business → memberships → users → role → permission →
+/// role_permission); (2) rivlerësim PËRFUNDIMTAR fail-closed mbi vlerat e
+/// lexuara NËN LOCK; (3) `UPDATE` i guarduar që përsërit `status='active'` +
+/// `version = expectedVersion`. Garancia mbulon VETËM faktet e listuara e të
+/// lock-uara; rezultati bëhet i dukshëm/durable vetëm në commit, pasi
+/// mutation + audit + receipt janë ruajtur bashkë.</para>
+///
+/// <para><b>Idempotencë konkurrente:</b> dy kërkesa me të njëjtin
+/// Idempotency-Key mund ta kalojnë TË DYJA lookup-in fillestar të receipt-it
+/// para commit-it të fituesit. Humbësi merr `VersionConflict` nga faza e
+/// mutacionit; pas rollback-ut bëhet NJË rilexim deterministik i receipt-it
+/// (pa polling, pa retry të mutacionit): receipt me të njëjtin fingerprint →
+/// rezultati i ruajtur i fituesit (përgjigje publike identike); fingerprint
+/// tjetër → 409 IDEMPOTENCY_CONFLICT; receipt realisht mungon → 409
+/// CONCURRENCY_CONFLICT i vërtetë.</para>
 ///
 /// <para>Hapat 1–3 më poshtë (key, aktor-prezent, grants) janë VETËM
 /// pre-check për deny-uniform dhe për të mos hapur transaction pa nevojë —
@@ -96,7 +111,7 @@ public sealed class UpdateMembershipRoleHandler(
             return FromReceipt(existing, fingerprint);
         }
 
-        // ── LINEARIZATION POINT: autoriteti i vetëm dhe përfundimtar. ──
+        // ── Faza transaksionale authority-lock / validation / mutation. ──
         var mutation = await unitOfWork.TryMutateRoleAsync(
             new AtomicRoleMutation(
                 businessId, actorUserId, command.MembershipId, command.RoleId, command.ExpectedVersion),
@@ -105,13 +120,34 @@ public sealed class UpdateMembershipRoleHandler(
         if (!mutation.Applied)
         {
             await unitOfWork.DiscardAsync(cancellationToken).ConfigureAwait(false);
-            return new(mutation.Denial switch
+            switch (mutation.Denial)
             {
-                RoleMutationDenial.TargetNotAssignable => UpdateMembershipRoleOutcome.TargetNotFound,
-                RoleMutationDenial.VersionConflict => UpdateMembershipRoleOutcome.ConcurrencyConflict,
-                // ActorNotAuthorized + SelfRoleChange → deny stabil 403 uniform.
-                _ => UpdateMembershipRoleOutcome.AccessDenied,
-            });
+                case RoleMutationDenial.TransientFailure:
+                    // DB contention (deadlock/lock timeout/serialization/
+                    // statement timeout) NUK është CAS → 503 stabil, zero retry.
+                    return new(UpdateMembershipRoleOutcome.PlatformUnavailable);
+
+                case RoleMutationDenial.VersionConflict:
+                    // Humbësi i mundshëm i garës same-Idempotency-Key: NJË
+                    // rilexim deterministik i receipt-it pas rollback-ut (lexim
+                    // i freskët jashtë transaction-it të rrëzuar; pa polling,
+                    // pa retry të mutacionit). FromReceipt vendos: fingerprint
+                    // identik → rezultati i fituesit; ndryshe → 409 idempotency.
+                    var recovered = await unitOfWork
+                        .FindReceiptAsync(
+                            businessId, CommandOperations.MembershipRoleUpdate, idempotencyKey, cancellationToken)
+                        .ConfigureAwait(false);
+                    return recovered is null
+                        ? new(UpdateMembershipRoleOutcome.ConcurrencyConflict)
+                        : FromReceipt(recovered, fingerprint);
+
+                case RoleMutationDenial.TargetNotAssignable:
+                    return new(UpdateMembershipRoleOutcome.TargetNotFound);
+
+                default:
+                    // ActorNotAuthorized + SelfRoleChange → deny stabil 403 uniform.
+                    return new(UpdateMembershipRoleOutcome.AccessDenied);
+            }
         }
 
         var now = clock.GetUtcNow();
