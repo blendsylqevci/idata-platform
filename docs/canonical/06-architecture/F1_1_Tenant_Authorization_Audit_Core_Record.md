@@ -1,7 +1,7 @@
 # F1.1 — Tenant Authorization & Business-Scoped Audit Core (Implementation Record)
 
 **Statusi:** **IMPLEMENTED / PENDING_INDEPENDENT_REVIEW** — PASS vetëm pas Fable delta-review → Codex review (PM_REVIEW_PROTOCOL) → Human Gate i Pronarit → merge i aprovuar.
-**Autoriteti:** ADR-024 (MERGED / ACCEPTED, PR #23, merge `e0d4cdc`) + Platform Foundation Bootstrap (COMPLETED, PR #24 merged, squash `0f12488c`). **Data:** 24.07.2026 (v3 — post correction pass final: autoritet atomik, politika self/IsSystem, waiver REL-08). **Increment:** F1.1 — vertical slice i kufizuar i F1, JO gjithë F1.
+**Autoriteti:** ADR-024 (MERGED / ACCEPTED, PR #23, merge `e0d4cdc`) + Platform Foundation Bootstrap (COMPLETED, PR #24 merged, squash `0f12488c`). **Data:** 26.07.2026 (v4 — post correction pass: stale-snapshot authorization race e mbyllur me authority-lock protocol; v3 24.07.2026). **Increment:** F1.1 — vertical slice i kufizuar i F1, JO gjithë F1.
 
 ## Çfarë ËSHTË implementuar (vetëm kjo)
 
@@ -33,7 +33,7 @@ Modul **AccessControl** (module-first Clean/Onion: Domain/Application/Infrastruc
 (`actorUserId <> target.user_id`), jo me membership id; deny stabil, zero efekt.
 **Rol me `IsSystem = true` NUK caktohet** përmes endpoint-it F1.1; përgjigjja
 publike është e njëjtë me rol inekzistent (parity — nuk zbulohet se roli është
-system-managed). Të dy predikatët jetojnë VETËM në linearization point-in atomik
+system-managed). Të dy predikatët jetojnë VETËM në rivlerësimin përfundimtar nën lock
 — asnjë bypass përmes endpoint-it, handler-it apo adapterit tjetër.
 
 **Provisioning note (i detyrueshëm):** F1.1 **NUK** e përdor endpoint-in e
@@ -46,26 +46,65 @@ permission dominance / delegation ceiling · last-admin protection · role
 globale/system-wide provisioning · break-glass. Hierarkia NUK nxirret nga emrat
 e roleve.
 
-## Autoriteti atomik i mutacionit (§1)
+## Autoriteti i mutacionit — AUTHORITY-LOCK PROTOCOL (§1)
 
-Rruga `PUT /api/platform/memberships/{membershipId}/role` ka **NJË linearization
-point DB-backed**: një `UPDATE ... WHERE <të gjithë predikatët>` i vetëm, brenda
-një transaction-i eksplicit, që merr **row lock** mbi target membership-in dhe
-rivlerëson NË ATË MOMENT: business active · actor user active · actor membership
-active · permission-i AKTUAL `platform.users_roles:U` i aktorit · target
-membership active · target user active · self-role (USER ID) · roli i kërkuar i
-të njëjtit business me `is_system = false` · `version = expectedVersion` ·
-`status = 'active'`. Pre-check-u i handler-it shërben VETËM për deny-uniform dhe
-formësim 403/404 — nuk është autoritet dhe nuk mund të divergjojë, sepse çdo
-predikat i tij ri-provohet në DB para mutacionit.
+### Gjetja e mbyllur: stale READ COMMITTED authorization snapshot
 
-**Semantika lineare:** disable/revokim i commit-uar PARA këtij pike e refuzon
-mutacionin; nëse mutacioni linearizohet i pari, disable-i i mëpasëm vazhdon; dy
-komanda me të njëjtin version → saktësisht një fiton. **Mutation + version++ +
-audit + receipt commit-ohen BASHKË**; çdo predikat i dështuar ose konflikt →
+Versioni i mëparshëm mbështetej te një `UPDATE ... WHERE EXISTS(...)` i vetëm
+dhe e përshkruante atë si "një statement që rivlerëson atomikisht çdo
+autoritet". **Ai pretendim ishte i gabuar dhe është hequr.** Nën READ
+COMMITTED, ai statement merr row lock VETËM mbi target membership-in; nëse
+bllokohet duke pritur atë lock, sub-query-t `EXISTS` mbi rreshtat e tjerë
+(business, app_user, membership i aktorit, role, permission, role_permission)
+mund të mbeten të vlerësuara mbi snapshot-in e statement-it. Pra një revokim
+që commit-on NDËRKOHË mund të mos shihet dhe mutacioni të kalonte me autoritet
+të vjetruar.
+
+### Protokolli i zbatuar (i njëjti transaction, isolation e paprekur)
+
+1. **Lock eksplicit i ÇDO fakti autorizimi të ndryshueshëm**, sipas rendit
+   kanonik më poshtë (`FOR SHARE` — **jo** `FOR KEY SHARE**, sepse `status`,
+   `is_system`, `feature_key`/`action` janë non-key updates dhe vetëm
+   `FOR SHARE` i bllokon; memberships merren `FOR UPDATE`).
+2. **Rivlerësim PËRFUNDIMTAR fail-closed** i të gjitha predikateve mbi vlerat
+   e lexuara **nën lock**.
+3. **`UPDATE` i guarduar** i target-it që përsërit `status='active'` dhe
+   `version = expectedVersion` si defense-in-depth.
+4. **Mutation + audit + command receipt commit-ohen bashkë.**
+
+### LOCK ORDER KANONIK — kontratë për çdo writer të ardhshëm
+
+```
+business → business_membership (ORDER BY id) → app_user (ORDER BY id)
+        → role → permission → role_permission
+```
+
+Rreshtat e dublikuar deduplikohen (aktori dhe targeti mund të jenë i njëjti
+rresht). Ky rend është i njëjtë për çdo mutacion, ndaj dy mutacione
+konkurrente nuk mund t'i marrin lock-et në rend të kundërt — i provuar me test
+që nuk prodhon deadlock.
+
+### Kufiri i garancisë
+
+Serializimi vlen për faktet e lock-uara më sipër. Nëse një rresht mungon,
+është disabled, është ndryshuar ose grant-i është hequr → **fail closed**:
 zero mutation, zero version++, zero audit, zero receipt.
+**Deadlock / lock timeout / gabim DB → rollback i plotë dhe përgjigje
+fail-closed; ZERO retry i heshtur** (retry do të kërkonte ADR të veçantë).
 
-## Optimistic concurrency (CAS) (§5)
+### Kufizim i PostgreSQL-it me pasojë për provisioning-un
+
+`SELECT ... FOR SHARE` **nuk mjaftohet me privilegjin `SELECT`** — kërkon
+privilegj të klasës `UPDATE` (`DELETE` nuk mjafton; verifikuar empirikisht).
+Roli runtime i testeve merr për këtë arsye grant-e `UPDATE` **të kufizuara në
+një kolonë të vetme** (`created_at` për business/app_user/role/permission;
+`business_id` për role_permission) — grant-i më i ngushtë që PostgreSQL e
+pranon për row share locks. Testet provojnë se ky grant NUK i jep rolit fuqi
+shkrimi mbi faktet e autorizimit (status/is_system/action/grant-delete mbeten
+të refuzuara). **Risku i mbetur dhe modeli i rolit në production janë INPUT
+eksplicit për ADR-026 — provisioning-u i rolit të aplikacionit mbetet OPEN.**
+
+## Optimistic concurrency (CAS) (§5)## Optimistic concurrency (CAS) (§5)
 
 `business_membership.version` (bigint NOT NULL, nis 0) = EF concurrency token DB-backed. PUT kërkon `expectedVersion` të tipizuar (në command/fingerprint/OpenAPI/klient/response). Konflikti CAS → **HTTP 409 `CONCURRENCY_CONFLICT`** (i dalluar nga `IDEMPOTENCY_CONFLICT`), zero mutation/audit/receipt nga humbësi. Dy kërkesa paralele me key të ndryshëm + të njëjtin `expectedVersion` + role të ndryshme → saktësisht një 200 + një 409 CONCURRENCY_CONFLICT; final role/version = fituesi; saktësisht një audit + një receipt (i provuar).
 
@@ -85,14 +124,14 @@ Rollback 0002→0001 (helper TEST-ONLY, JO production CLI): guard tripalësh (en
 
 ## Reliability Gate — Failure matrix (moduli AccessControl/Audit, kritik)
 
-Të 8 skenarët standardë. **5 dhe 7 = TESTUAR REALISHT; 6 = fixture i kufizuar (host recreation/restart), JO crash-proof universal; 8 = PARTIAL/OPEN me waiver `HG-F1.1-REL-08`** (vetëm audit/receipt-write denial + transaction rollback janë testuar realisht, JO disk/queue-full real, alerting apo recovery). Skenarët 1–4 (Internet/SEF/Printer/Device) = N/A me justifikim §5.1 (mbulohen nga shtresa sync/POS/fiscal e F2+; asnjë rrugë fiskale/offline/periferike në këtë modul; handoff konkret te F2+/sync/POS/SEF) — **pranuar nga PM vetëm për këtë modul; NUK kthehen në PASS**. **Waiver ≠ PASS:** skenari 8 mbetet PARTIAL/OPEN.
+Të 8 skenarët standardë. **5 dhe 7 = TESTUAR REALISHT; 6 = fixture i kufizuar (host recreation/restart), JO crash-proof universal; 8 = PARTIAL/OPEN me waiver `HG-F1.1-REL-08`** (vetëm audit/receipt-write denial + transaction rollback janë testuar realisht, JO disk/queue-full real, alerting apo recovery). Skenarët 1–4 (Internet/SEF/Printer/Device) = N/A me justifikim §5.1 (mbulohen nga shtresa sync/POS/fiscal e F2+; asnjë rrugë fiskale/offline/periferike në këtë modul; handoff konkret te F2+/sync/POS/SEF) — **PENDING PM acceptance** (Pronari nuk i ka aprovuar ende); NUK kthehen në PASS. **Waiver ≠ PASS:** skenari 8 mbetet PARTIAL/OPEN.
 
 | Failure scenario | Expected behavior | Data safety | User-visible | Recovery | Test | Evidence |
 |---|---|---|---|---|---|---|
-| 1. Internet down | N/A | — | — | — | N/A — shtresa sync/outbox (PoC-3/F2) | §5.1; pending PM |
-| 2. SEF/ATK down | N/A | — | — | — | N/A — asnjë rrugë fiskale (Step B/C NO-GO) | §5.1; pending PM |
-| 3. Printer/peripheral down | N/A | — | — | — | N/A — asnjë periferik | §5.1; pending PM |
-| 4. Device crash/offline | N/A | — | — | — | N/A — device/sync layer F2+ | §5.1; pending PM |
+| 1. Internet down | N/A | — | — | — | N/A — shtresa sync/outbox (PoC-3/F2) | §5.1; PENDING PM |
+| 2. SEF/ATK down | N/A | — | — | — | N/A — asnjë rrugë fiskale (Step B/C NO-GO) | §5.1; PENDING PM |
+| 3. Printer/peripheral down | N/A | — | — | — | N/A — asnjë periferik | §5.1; PENDING PM |
+| 4. Device crash/offline | N/A | — | — | — | N/A — device/sync layer F2+ | §5.1; PENDING PM |
 | 5. Retry / idempotency | Replay kthen rezultatin e ruajtur; key i njëjtë me kërkesë tjetër → 409 | Zero mutation/audit i dyfishtë (UNIQUE + fingerprint) | I njëjti 200 (replay) ose 409 uniform | Deterministik; riprovim i sigurt | `IdempotencyEndpointTests`, `AccessControlHandlerTests` | Test output (TESTUAR) |
 | 6. Server / host restart | Riprovim me të njëjtin key pas host-recreation → rezultat i njëjtë | Idempotency-Key + receipt; zero efekt i dytë | Klienti merr të njëjtin 200 | Idempotency bën riprovimin të sigurt | `IdempotencyEndpointTests.Host_recreation_replay_*` (host i ri mbi të njëjtën DB) — **fixture i kufizuar, JO crash-proof universal** | Test output |
 | 7. DB unavailable | 503 PLATFORM_UNAVAILABLE, zero detaje | Asnjë mutation; probe/handler fail-safe | 503 ProblemDetails stabil | Auto-recover kur DB kthehet | `ApiSurfaceTests.DB_e_paarritshme_*` | Test output (TESTUAR) |
@@ -100,7 +139,7 @@ Të 8 skenarët standardë. **5 dhe 7 = TESTUAR REALISHT; 6 = fixture i kufizuar
 
 ## Test counts
 
-Architecture 10 · Unit 87 · Integration 68 (kundër PostgreSQL real sintetik, DB unik per test): **165 target-tests** (build 0 warnings, zero skip). Client 2/2 · Backoffice 6/6 · Legacy turbo 8/8 build + 12/12 test. OpenAPI/client generate ×2 zero-diff.
+Architecture 10 · Unit 86 · Integration 89 (kundër PostgreSQL real sintetik, DB unik per test): **185 target-tests** (build 0 warnings, zero skip). Client 2/2 · Backoffice 6/6 · Legacy turbo 8/8 build + 12/12 test. OpenAPI/client generate ×2 zero-diff.
 
 ## Historia dhe gitleaks
 
