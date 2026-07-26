@@ -268,18 +268,6 @@ public sealed class AccessControlHandlerTests
         Assert.Equal(7L, sent.ExpectedVersion);
     }
 
-    [Fact]
-    public async Task Save_ConcurrencyConflict_perkthehet_ne_ConcurrencyConflict_pa_efekt()
-    {
-        var uow = UowApplying();
-        uow.SaveOutcome = CommandSaveOutcome.ConcurrencyConflict;
-        var result = await Handler(new FakeAccessControlStore(GrantsWithUpdate), uow).HandleAsync(
-            Command(), TestContext.Current.CancellationToken);
-        Assert.Equal(UpdateMembershipRoleOutcome.ConcurrencyConflict, result.Outcome);
-        Assert.Equal(1, uow.Saves);
-        Assert.Equal(1, uow.ReceiptLookups); // pa lexim të dytë të receipt-it
-    }
-
     // ── Replay / konflikt idempotence ──
 
     private static CommandReceipt StoredReceipt(string fingerprint) => new()
@@ -366,21 +354,20 @@ public sealed class AccessControlHandlerTests
     }
 
     [Fact]
-    public async Task Target_inekzistent_ose_cross_tenant_kthen_te_njejtin_TargetNotFound()
+    public async Task Denial_TargetNotAssignable_nuk_prodhon_kurre_efekt()
     {
-        // Cross-tenant, inekzistent, disabled DHE IsSystem japin TË NJËJTIN
-        // denial nga linearization point-i → i njëjti 404 publik (parity).
-        var crossTenantUow = UowDenying(RoleMutationDenial.TargetNotAssignable);
-        var crossTenant = await Handler(new FakeAccessControlStore(GrantsWithUpdate), crossTenantUow).HandleAsync(
+        // Adapteri e kthen NJË denial të vetëm `TargetNotAssignable` për
+        // cross-tenant, inekzistent, disabled DHE IsSystem — pra kontrata
+        // publike nuk mund t'i dallojë. Parity-n REALE mbi DB e provon
+        // `AtomicAuthorizationTests` (integration); këtu provohet vetëm se
+        // ky denial nuk prodhon kurrë efekt.
+        var uow = UowDenying(RoleMutationDenial.TargetNotAssignable);
+        var result = await Handler(new FakeAccessControlStore(GrantsWithUpdate), uow).HandleAsync(
             Command(), TestContext.Current.CancellationToken);
-        Assert.Equal(UpdateMembershipRoleOutcome.TargetNotFound, crossTenant.Outcome);
-
-        var systemRoleUow = UowDenying(RoleMutationDenial.TargetNotAssignable);
-        var systemRole = await Handler(new FakeAccessControlStore(GrantsWithUpdate), systemRoleUow).HandleAsync(
-            Command(), TestContext.Current.CancellationToken);
-        Assert.Equal(UpdateMembershipRoleOutcome.TargetNotFound, systemRole.Outcome);
-
-        Assert.Equal(0, crossTenantUow.Saves + systemRoleUow.Saves);
+        Assert.Equal(UpdateMembershipRoleOutcome.TargetNotFound, result.Outcome);
+        Assert.Equal(0, uow.Saves);
+        Assert.Null(uow.AddedAudit);
+        Assert.Null(uow.AddedReceipt);
     }
 
     [Fact]

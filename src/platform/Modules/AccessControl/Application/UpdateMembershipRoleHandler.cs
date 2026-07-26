@@ -35,13 +35,16 @@ public sealed record UpdateMembershipRoleResult(
 /// <summary>
 /// COMMAND `PUT /api/platform/memberships/{membershipId}/role`.
 ///
-/// <para><b>Autoriteti i vetëm</b> është linearization point-i DB-backed i
-/// <see cref="IMembershipRoleUnitOfWork.TryMutateRoleAsync"/>: aty rivlerësohen
-/// ATOMIKISHT, nën row lock dhe në të njëjtin transaction, lifecycle-i i
-/// business/actor-user/actor-membership, permission-i AKTUAL i aktorit,
-/// lifecycle-i i target membership/user, ndalimi self-role (me USER ID),
-/// përkatësia + `IsSystem=false` e rolit të kërkuar dhe CAS-i
-/// (`version` + `status='active'`).</para>
+/// <para><b>Autoriteti i vetëm</b> është
+/// <see cref="IMembershipRoleUnitOfWork.TryMutateRoleAsync"/>, i cili zbaton një
+/// <b>authority-lock protocol</b> brenda një transaction-i: (1) lock eksplicit
+/// i ÇDO fakti mutable të autorizimit sipas rendit kanonik (business →
+/// memberships → users → role → permission → role_permission); (2) rivlerësim
+/// PËRFUNDIMTAR fail-closed mbi vlerat e lexuara NËN LOCK; (3) `UPDATE` i
+/// guarduar që përsërit `status='active'` + `version = expectedVersion`.
+/// NUK pretendohet se një statement i vetëm rivlerëson atomikisht çdo autoritet
+/// — nën READ COMMITTED sub-query-t `EXISTS` mund të mbeten në snapshot-in e
+/// statement-it, prandaj lock-et janë eksplicite.</para>
 ///
 /// <para>Hapat 1–3 më poshtë (key, aktor-prezent, grants) janë VETËM
 /// pre-check për deny-uniform dhe për të mos hapur transaction pa nevojë —
@@ -152,9 +155,6 @@ public sealed class UpdateMembershipRoleHandler(
             case CommandSaveOutcome.Saved:
                 return new(
                     UpdateMembershipRoleOutcome.Updated, command.MembershipId, command.RoleId, mutation.NewVersion);
-
-            case CommandSaveOutcome.ConcurrencyConflict:
-                return new(UpdateMembershipRoleOutcome.ConcurrencyConflict);
 
             default:
                 // Gara e idempotencës: transaction-i u rrëzua i tëri (zero efekt);

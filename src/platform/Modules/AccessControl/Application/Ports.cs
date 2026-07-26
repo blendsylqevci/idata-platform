@@ -18,10 +18,13 @@ public interface IAccessControlStore
 public enum CommandSaveOutcome
 {
     Saved,
-    /// <summary>Unique violation në receipt — një kërkesë konkurruese fitoi garën e idempotencës.</summary>
+    /// <summary>
+    /// Unique violation në receipt — një kërkesë konkurruese fitoi garën e
+    /// idempotencës. I VETMI konflikt i arritshëm në save: mutacioni i
+    /// membership-it bëhet me SQL të guarduar nën lock (jo me EF change
+    /// tracking), ndaj `DbUpdateConcurrencyException` nuk ndodh këtu.
+    /// </summary>
     ReceiptConflict,
-    /// <summary>Gjendja lëvizi mes linearization point-it dhe commit-it (mbrojtje e dyfishtë).</summary>
-    ConcurrencyConflict,
 }
 
 /// <summary>
