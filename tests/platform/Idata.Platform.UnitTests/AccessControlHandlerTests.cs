@@ -25,16 +25,16 @@ internal sealed class FakeMembershipRoleUow : IMembershipRoleUnitOfWork
 {
     public CommandReceipt? Receipt;
     public CommandReceipt? ReceiptAfterConflict;
-    public BusinessMembership? Membership;
-    public Role? Role;
+    /// <summary>Rezultati i simuluar i LINEARIZATION POINT-it.</summary>
+    public AtomicRoleMutationResult MutationResult =
+        new(Applied: true, NewVersion: 1, PreviousRoleId: Guid.Empty, Denial: RoleMutationDenial.None);
     public CommandSaveOutcome SaveOutcome = CommandSaveOutcome.Saved;
 
     public int ReceiptLookups;
-    public int MembershipLookups;
-    public int RoleLookups;
+    public int MutationAttempts;
     public int Saves;
-    public Guid? AppliedRoleId;
-    public long? AppliedVersion;
+    public int Discards;
+    public AtomicRoleMutation? LastMutation;
     public AuditLogEntry? AddedAudit;
     public CommandReceipt? AddedReceipt;
 
@@ -45,27 +45,12 @@ internal sealed class FakeMembershipRoleUow : IMembershipRoleUnitOfWork
         return Task.FromResult(ReceiptLookups == 1 ? Receipt : ReceiptAfterConflict);
     }
 
-    public Task<BusinessMembership?> FindActiveMembershipAsync(
-        Guid businessId, Guid membershipId, CancellationToken cancellationToken)
+    public Task<AtomicRoleMutationResult> TryMutateRoleAsync(
+        AtomicRoleMutation mutation, CancellationToken cancellationToken)
     {
-        MembershipLookups++;
-        return Task.FromResult(Membership is { } found && found.BusinessId == businessId && found.Id == membershipId
-            ? found
-            : null);
-    }
-
-    public Task<Role?> FindRoleAsync(Guid businessId, Guid roleId, CancellationToken cancellationToken)
-    {
-        RoleLookups++;
-        return Task.FromResult(Role is { } found && found.BusinessId == businessId && found.Id == roleId
-            ? found
-            : null);
-    }
-
-    public void ApplyRoleChange(Guid newRoleId, long newVersion)
-    {
-        AppliedRoleId = newRoleId;
-        AppliedVersion = newVersion;
+        MutationAttempts++;
+        LastMutation = mutation;
+        return Task.FromResult(MutationResult);
     }
 
     public void AddAudit(AuditLogEntry entry) => AddedAudit = entry;
@@ -76,6 +61,12 @@ internal sealed class FakeMembershipRoleUow : IMembershipRoleUnitOfWork
     {
         Saves++;
         return Task.FromResult(SaveOutcome);
+    }
+
+    public Task DiscardAsync(CancellationToken cancellationToken)
+    {
+        Discards++;
+        return Task.CompletedTask;
     }
 }
 
@@ -94,18 +85,17 @@ public sealed class AccessControlHandlerTests
     private static ActorGrants GrantsWithUpdate => new(
         MembershipId, OldRoleId, ["platform.users_roles:R", "platform.users_roles:U"]);
 
-    private static FakeMembershipRoleUow UowWithTargets(long version = 0) => new()
+    /// <summary>UoW me linearization point qe LEJON mutacionin (version 0→1).</summary>
+    private static FakeMembershipRoleUow UowApplying(long newVersion = 1) => new()
     {
-        Membership = new BusinessMembership
-        {
-            Id = MembershipId, BusinessId = BusinessId, UserId = UserId, RoleId = OldRoleId,
-            Version = version, Status = EntityStatus.Active, CreatedAt = DateTimeOffset.UnixEpoch,
-        },
-        Role = new Role
-        {
-            Id = NewRoleId, BusinessId = BusinessId, Name = "rol-i-ri", IsSystem = false,
-            CreatedAt = DateTimeOffset.UnixEpoch,
-        },
+        MutationResult = new(Applied: true, NewVersion: newVersion, PreviousRoleId: OldRoleId,
+            Denial: RoleMutationDenial.None),
+    };
+
+    /// <summary>UoW me linearization point qe REFUZON me arsyen e dhene.</summary>
+    private static FakeMembershipRoleUow UowDenying(RoleMutationDenial denial) => new()
+    {
+        MutationResult = new(Applied: false, NewVersion: 0, PreviousRoleId: Guid.Empty, Denial: denial),
     };
 
     private static UpdateMembershipRoleHandler Handler(IAccessControlStore store, IMembershipRoleUnitOfWork uow)
@@ -194,12 +184,12 @@ public sealed class AccessControlHandlerTests
     public async Task Key_i_pavlefshem_kthehet_para_cdo_pune()
     {
         var store = new FakeAccessControlStore(GrantsWithUpdate);
-        var uow = UowWithTargets();
+        var uow = UowApplying();
         var result = await Handler(store, uow).HandleAsync(
             Command(key: "me;injektim"), TestContext.Current.CancellationToken);
         Assert.Equal(UpdateMembershipRoleOutcome.InvalidIdempotencyKey, result.Outcome);
         Assert.Equal(0, store.Calls);
-        Assert.Equal(0, uow.ReceiptLookups + uow.MembershipLookups + uow.RoleLookups + uow.Saves);
+        Assert.Equal(0, uow.ReceiptLookups + uow.MutationAttempts + uow.Saves);
     }
 
     [Fact]
@@ -207,44 +197,81 @@ public sealed class AccessControlHandlerTests
     {
         foreach (var actor in (ActorContext[])[ActorContext.Anonymous, new(UserId, null, null), new(null, BusinessId, null)])
         {
-            var uow = UowWithTargets();
+            var uow = UowApplying();
             var result = await Handler(new FakeAccessControlStore(GrantsWithUpdate), uow).HandleAsync(
                 Command(actor: actor), TestContext.Current.CancellationToken);
             Assert.Equal(UpdateMembershipRoleOutcome.AccessDenied, result.Outcome);
-            Assert.Equal(0, uow.MembershipLookups + uow.RoleLookups);
+            Assert.Equal(0, uow.MutationAttempts);
         }
 
-        var noGrantsUow = UowWithTargets();
+        var noGrantsUow = UowApplying();
         var noGrants = await Handler(new FakeAccessControlStore(null), noGrantsUow).HandleAsync(
             Command(), TestContext.Current.CancellationToken);
         Assert.Equal(UpdateMembershipRoleOutcome.AccessDenied, noGrants.Outcome);
-        Assert.Equal(0, noGrantsUow.MembershipLookups + noGrantsUow.RoleLookups);
+        Assert.Equal(0, noGrantsUow.MutationAttempts);
 
         var readOnly = new ActorGrants(MembershipId, OldRoleId, ["platform.users_roles:R"]);
-        var readOnlyUow = UowWithTargets();
+        var readOnlyUow = UowApplying();
         var denied = await Handler(new FakeAccessControlStore(readOnly), readOnlyUow).HandleAsync(
             Command(), TestContext.Current.CancellationToken);
         Assert.Equal(UpdateMembershipRoleOutcome.AccessDenied, denied.Outcome);
-        Assert.Equal(0, readOnlyUow.MembershipLookups + readOnlyUow.RoleLookups);
+        Assert.Equal(0, readOnlyUow.MutationAttempts);
     }
 
     // ── CAS: expectedVersion ──
 
     [Fact]
-    public async Task ExpectedVersion_i_gabuar_kthen_ConcurrencyConflict_pa_mutation()
+    public async Task Denial_VersionConflict_kthen_ConcurrencyConflict_pa_save()
     {
-        var uow = UowWithTargets(version: 3);
+        var uow = UowDenying(RoleMutationDenial.VersionConflict);
         var result = await Handler(new FakeAccessControlStore(GrantsWithUpdate), uow).HandleAsync(
             Command(expectedVersion: 2), TestContext.Current.CancellationToken);
         Assert.Equal(UpdateMembershipRoleOutcome.ConcurrencyConflict, result.Outcome);
-        Assert.Null(uow.AppliedRoleId);
         Assert.Equal(0, uow.Saves);
+        Assert.Equal(1, uow.Discards); // transaction-i rrezohet
+        Assert.Null(uow.AddedAudit);
+        Assert.Null(uow.AddedReceipt);
+    }
+
+    /// <summary>Mapping-u i ÇDO arsyeje refuzimi te kontrata publike (parity).</summary>
+    [Theory]
+    [InlineData(RoleMutationDenial.ActorNotAuthorized, UpdateMembershipRoleOutcome.AccessDenied)]
+    [InlineData(RoleMutationDenial.SelfRoleChange, UpdateMembershipRoleOutcome.AccessDenied)]
+    [InlineData(RoleMutationDenial.TargetNotAssignable, UpdateMembershipRoleOutcome.TargetNotFound)]
+    [InlineData(RoleMutationDenial.VersionConflict, UpdateMembershipRoleOutcome.ConcurrencyConflict)]
+    public async Task Cdo_denial_i_linearization_point_it_jep_zero_efekt(
+        RoleMutationDenial denial, UpdateMembershipRoleOutcome expected)
+    {
+        var uow = UowDenying(denial);
+        var result = await Handler(new FakeAccessControlStore(GrantsWithUpdate), uow).HandleAsync(
+            Command(), TestContext.Current.CancellationToken);
+        Assert.Equal(expected, result.Outcome);
+        Assert.Equal(1, uow.MutationAttempts);
+        Assert.Equal(0, uow.Saves);
+        Assert.Equal(1, uow.Discards);
+        Assert.Null(uow.AddedAudit);
+        Assert.Null(uow.AddedReceipt);
+        Assert.Null(result.Version);
+    }
+
+    [Fact]
+    public async Task Mutacioni_dergohet_me_ACTOR_USER_ID_dhe_expectedVersion_te_kerkesa()
+    {
+        var uow = UowApplying();
+        _ = await Handler(new FakeAccessControlStore(GrantsWithUpdate), uow)
+            .HandleAsync(Command(expectedVersion: 7), TestContext.Current.CancellationToken);
+        var sent = uow.LastMutation!;
+        Assert.Equal(BusinessId, sent.BusinessId);
+        Assert.Equal(UserId, sent.ActorUserId); // USER ID, jo membership id
+        Assert.Equal(MembershipId, sent.MembershipId);
+        Assert.Equal(NewRoleId, sent.RoleId);
+        Assert.Equal(7L, sent.ExpectedVersion);
     }
 
     [Fact]
     public async Task Save_ConcurrencyConflict_perkthehet_ne_ConcurrencyConflict_pa_efekt()
     {
-        var uow = UowWithTargets();
+        var uow = UowApplying();
         uow.SaveOutcome = CommandSaveOutcome.ConcurrencyConflict;
         var result = await Handler(new FakeAccessControlStore(GrantsWithUpdate), uow).HandleAsync(
             Command(), TestContext.Current.CancellationToken);
@@ -272,7 +299,7 @@ public sealed class AccessControlHandlerTests
     public async Task Replay_i_njejte_kthen_rezultatin_e_ruajtur_pa_mutation_te_dyte()
     {
         var fingerprint = RequestFingerprint.ForMembershipRoleUpdate(BusinessId, UserId, MembershipId, NewRoleId, 0);
-        var uow = UowWithTargets();
+        var uow = UowApplying();
         uow.Receipt = StoredReceipt(fingerprint);
 
         var result = await Handler(new FakeAccessControlStore(GrantsWithUpdate), uow).HandleAsync(
@@ -282,21 +309,21 @@ public sealed class AccessControlHandlerTests
         Assert.Equal(MembershipId, result.MembershipId);
         Assert.Equal(NewRoleId, result.RoleId);
         Assert.Equal(1L, result.Version);
-        Assert.Equal(0, uow.MembershipLookups + uow.RoleLookups + uow.Saves);
+        Assert.Equal(0, uow.MutationAttempts + uow.Saves);
     }
 
     [Fact]
     public async Task I_njejti_key_me_kerkese_tjeter_konflikt_pa_mutation()
     {
         var otherFingerprint = RequestFingerprint.ForMembershipRoleUpdate(BusinessId, UserId, MembershipId, OldRoleId, 0);
-        var uow = UowWithTargets();
+        var uow = UowApplying();
         uow.Receipt = StoredReceipt(otherFingerprint);
 
         var result = await Handler(new FakeAccessControlStore(GrantsWithUpdate), uow).HandleAsync(
             Command(), TestContext.Current.CancellationToken);
 
         Assert.Equal(UpdateMembershipRoleOutcome.IdempotencyConflict, result.Outcome);
-        Assert.Equal(0, uow.MembershipLookups + uow.RoleLookups + uow.Saves);
+        Assert.Equal(0, uow.MutationAttempts + uow.Saves);
     }
 
     // ── Sukses: mutation + audit i redaktuar/i lidhur + receipt ──
@@ -304,14 +331,14 @@ public sealed class AccessControlHandlerTests
     [Fact]
     public async Task Sukses_mutation_audit_i_lidhur_dhe_receipt_ne_nje_save()
     {
-        var uow = UowWithTargets();
+        var uow = UowApplying();
         var result = await Handler(new FakeAccessControlStore(GrantsWithUpdate), uow).HandleAsync(
             Command(), TestContext.Current.CancellationToken);
 
         Assert.Equal(UpdateMembershipRoleOutcome.Updated, result.Outcome);
-        Assert.Equal(NewRoleId, uow.AppliedRoleId);
-        Assert.Equal(1L, uow.AppliedVersion);
+        Assert.Equal(NewRoleId, result.RoleId);
         Assert.Equal(1L, result.Version);
+        Assert.Equal(1, uow.MutationAttempts);
         Assert.Equal(1, uow.Saves);
 
         var audit = uow.AddedAudit!;
@@ -341,26 +368,26 @@ public sealed class AccessControlHandlerTests
     [Fact]
     public async Task Target_inekzistent_ose_cross_tenant_kthen_te_njejtin_TargetNotFound()
     {
-        var crossTenantUow = UowWithTargets();
-        crossTenantUow.Membership!.BusinessId = Guid.Parse("bbbbbbbb-face-4ace-8ace-bbbbbbbbbbbb");
+        // Cross-tenant, inekzistent, disabled DHE IsSystem japin TË NJËJTIN
+        // denial nga linearization point-i → i njëjti 404 publik (parity).
+        var crossTenantUow = UowDenying(RoleMutationDenial.TargetNotAssignable);
         var crossTenant = await Handler(new FakeAccessControlStore(GrantsWithUpdate), crossTenantUow).HandleAsync(
             Command(), TestContext.Current.CancellationToken);
         Assert.Equal(UpdateMembershipRoleOutcome.TargetNotFound, crossTenant.Outcome);
 
-        var missingRoleUow = UowWithTargets();
-        missingRoleUow.Role = null;
-        var missingRole = await Handler(new FakeAccessControlStore(GrantsWithUpdate), missingRoleUow).HandleAsync(
+        var systemRoleUow = UowDenying(RoleMutationDenial.TargetNotAssignable);
+        var systemRole = await Handler(new FakeAccessControlStore(GrantsWithUpdate), systemRoleUow).HandleAsync(
             Command(), TestContext.Current.CancellationToken);
-        Assert.Equal(UpdateMembershipRoleOutcome.TargetNotFound, missingRole.Outcome);
+        Assert.Equal(UpdateMembershipRoleOutcome.TargetNotFound, systemRole.Outcome);
 
-        Assert.Equal(0, crossTenantUow.Saves + missingRoleUow.Saves);
+        Assert.Equal(0, crossTenantUow.Saves + systemRoleUow.Saves);
     }
 
     [Fact]
     public async Task Humbesi_i_gares_se_idempotences_merr_rezultatin_e_fituesit()
     {
         var fingerprint = RequestFingerprint.ForMembershipRoleUpdate(BusinessId, UserId, MembershipId, NewRoleId, 0);
-        var uow = UowWithTargets();
+        var uow = UowApplying();
         uow.SaveOutcome = CommandSaveOutcome.ReceiptConflict;
         uow.ReceiptAfterConflict = StoredReceipt(fingerprint);
 

@@ -3,10 +3,12 @@ namespace Idata.Platform.Modules.AccessControl.Domain;
 /// <summary>
 /// Entitetet minimale të F1.1 (skema `platform`, vetëm vlera sintetike).
 /// GLOBAL/reference: <see cref="AppUser"/> + <see cref="Permission"/>.
+/// TENANT ROOT: `business` (nuk mban vetë `business_id`).
 /// TENANT-SCOPED (`business_id NOT NULL` DIREKT — rregulli i Data Model §
-/// "Multi-tenant"): business, role, business_membership, role_permission,
-/// audit_log, command_receipt. Composite FK cross-tenant = vendim eksplicit
-/// sipas ENG-003/PoC-1: fëmija lidhet me prindin përmes çelësit të përbërë
+/// "Multi-tenant") — EKZAKT 5 child tables: role, business_membership,
+/// role_permission, audit_log, command_receipt.
+/// Composite FK cross-tenant = vendim eksplicit sipas ENG-003/PoC-1:
+/// fëmija lidhet me prindin përmes çelësit të përbërë
 /// `(business_id, id)` — DB refuzon lidhje cross-tenant NË NIVEL constraint-i.
 /// Rolet në F1.1 janë VETËM tenant-scoped (rolet globale = deferred);
 /// `is_system` = rol tenant-scoped i menaxhuar nga sistemi, JO rol global.
