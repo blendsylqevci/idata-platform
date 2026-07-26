@@ -17,7 +17,7 @@ namespace Idata.Platform.IntegrationTests;
 /// ClaimsIdentity PA authenticationType (IsAuthenticated=false) me claims të
 /// vlefshme — për të provuar që claims të pa-autentikuara refuzohen.
 /// </summary>
-public sealed class AccessControlApiFactory : WebApplicationFactory<Program>
+public class AccessControlApiFactory : WebApplicationFactory<Program>
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
         => builder.ConfigureServices(services => services.AddSingleton<IStartupFilter>(new TestActorStartupFilter()));
@@ -82,6 +82,8 @@ public static class AccessControlSeed
     public static readonly Guid RoleA2 = Guid.Parse("dddddaaa-fade-4ade-8ade-dddddaaaaaaa");
     public static readonly Guid RoleB = Guid.Parse("dbbbbbbb-fade-4ade-8ade-dbbbbbbbbbbb");
     public static readonly Guid RoleDisabledBiz = Guid.Parse("deeeeeee-fade-4ade-8ade-deeeeeeeeeee");
+    /// <summary>Rol i business-it A me IsSystem=true — NUK caktohet nga endpoint-i F1.1.</summary>
+    public static readonly Guid RoleSystemA = Guid.Parse("dcdcdcdc-fade-4ade-8ade-dcdcdcdcdcdc");
 
     public static readonly Guid PermissionRead = Guid.Parse("faaaaaaa-feed-4eed-8eed-faaaaaaaaaaa");
     public static readonly Guid PermissionUpdate = Guid.Parse("fbbbbbbb-feed-4eed-8eed-fbbbbbbbbbbb");
@@ -93,6 +95,12 @@ public static class AccessControlSeed
     public static readonly Guid MembershipTargetDisabled = Guid.Parse("eeeeeeee-bead-4ead-8ead-eeeeeeeeeeee");
     public static readonly Guid MembershipTargetUserDisabled = Guid.Parse("efffffff-bead-4ead-8ead-efffffffffff");
     public static readonly Guid MembershipInDisabledBiz = Guid.Parse("faffffff-bead-4ead-8ead-faffffffffff");
+    /// <summary>
+    /// FIXTURE DISKRIMINUESE (§3.A): membership AKTIV në business AKTIV me rol
+    /// që KA `users_roles:U` — i vetmi ndryshim është `app_user.status =
+    /// disabled`. Pa guard-in e user-status-it ky aktor do të autorizohej.
+    /// </summary>
+    public static readonly Guid MembershipDisabledUserActor = Guid.Parse("fbeefbee-bead-4ead-8ead-fbeefbeefbee");
 
     /// <summary>GUID target deterministik që NUK ekziston në seed (për 404).</summary>
     public static readonly Guid NonexistentId = Guid.Parse("deaddead-dead-4dea-8dea-deaddeaddead");
@@ -130,7 +138,9 @@ public static class AccessControlSeed
             new RoleRecord { Id = RoleA, BusinessId = BusinessA, Name = "rol-sintetik-a", IsSystem = false, CreatedAt = now },
             new RoleRecord { Id = RoleA2, BusinessId = BusinessA, Name = "rol-sintetik-a-dy", IsSystem = false, CreatedAt = now },
             new RoleRecord { Id = RoleB, BusinessId = BusinessB, Name = "rol-sintetik-b", IsSystem = false, CreatedAt = now },
-            new RoleRecord { Id = RoleDisabledBiz, BusinessId = BusinessDisabled, Name = "rol-sintetik-x", IsSystem = false, CreatedAt = now });
+            new RoleRecord { Id = RoleDisabledBiz, BusinessId = BusinessDisabled, Name = "rol-sintetik-x", IsSystem = false, CreatedAt = now },
+            // Rol SYSTEM-managed i business-it A: valid në çdo aspekt tjetër.
+            new RoleRecord { Id = RoleSystemA, BusinessId = BusinessA, Name = "rol-sintetik-sistem", IsSystem = true, CreatedAt = now });
         // Vetëm RoleA ka permission-e (R+U); rolet e tjera janë pa-permission.
         context.RolePermissions.AddRange(
             new RolePermissionRecord { BusinessId = BusinessA, RoleId = RoleA, PermissionId = PermissionRead },
@@ -146,7 +156,9 @@ public static class AccessControlSeed
             // Target me membership active por user të çaktivizuar.
             new BusinessMembershipRecord { Id = MembershipTargetUserDisabled, BusinessId = BusinessA, UserId = UserTargetDisabled, RoleId = RoleA, Version = 0, Status = RecordStatus.Active, CreatedAt = now },
             // Aktori me user active + rol me U, por business i çaktivizuar.
-            new BusinessMembershipRecord { Id = MembershipInDisabledBiz, BusinessId = BusinessDisabled, UserId = UserInDisabledBiz, RoleId = RoleDisabledBiz, Version = 0, Status = RecordStatus.Active, CreatedAt = now });
+            new BusinessMembershipRecord { Id = MembershipInDisabledBiz, BusinessId = BusinessDisabled, UserId = UserInDisabledBiz, RoleId = RoleDisabledBiz, Version = 0, Status = RecordStatus.Active, CreatedAt = now },
+            // §3.A: gjithçka aktive PËRVEÇ app_user.status të aktorit.
+            new BusinessMembershipRecord { Id = MembershipDisabledUserActor, BusinessId = BusinessA, UserId = UserActorDisabled, RoleId = RoleA, Version = 0, Status = RecordStatus.Active, CreatedAt = now });
         // Rol-i i business-it të çaktivizuar merr R+U që deny të vijë NGA business-status, jo nga permission.
         context.RolePermissions.AddRange(
             new RolePermissionRecord { BusinessId = BusinessDisabled, RoleId = RoleDisabledBiz, PermissionId = PermissionRead },

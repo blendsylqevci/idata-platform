@@ -128,6 +128,8 @@ public sealed class AuditProtectionTests
                     SELECT json_build_object(
                         'business_id', business_id, 'user_id', user_id, 'entity', entity,
                         'action', action, 'before_state', before_state,
+                        'entity_id', entity_id, 'after_state', after_state,
+                        'event_at_present', event_at IS NOT NULL,
                         'command_receipt_id', command_receipt_id,
                         'correlation_null', correlation_id IS NULL,
                         'receipt_exists', EXISTS(SELECT 1 FROM platform.command_receipt r WHERE r.id = audit_log.command_receipt_id AND r.business_id = audit_log.business_id)
@@ -142,8 +144,17 @@ public sealed class AuditProtectionTests
                     Assert.Equal("U", audit.RootElement.GetProperty("action").GetString());
                     Assert.False(audit.RootElement.GetProperty("correlation_null").GetBoolean());
                     Assert.True(audit.RootElement.GetProperty("receipt_exists").GetBoolean());
+                    // Prova DB-backed e fushave (jo vetem unit): entity_id, after_state, event_at.
+                    Assert.Equal(
+                        AccessControlSeed.MembershipC.ToString("D"),
+                        audit.RootElement.GetProperty("entity_id").GetString());
+                    Assert.True(audit.RootElement.GetProperty("event_at_present").GetBoolean());
                     var before = audit.RootElement.GetProperty("before_state");
                     Assert.Equal(["RoleId"], before.EnumerateObject().Select(p => p.Name).ToArray());
+                    Assert.Equal(AccessControlSeed.RoleA, before.GetProperty("RoleId").GetGuid());
+                    var after = audit.RootElement.GetProperty("after_state");
+                    Assert.Equal(["RoleId"], after.EnumerateObject().Select(p => p.Name).ToArray());
+                    Assert.Equal(AccessControlSeed.RoleA2, after.GetProperty("RoleId").GetGuid());
                 }
 
                 // Append-only nën rolin runtime.

@@ -52,16 +52,69 @@ public sealed class TargetDatabaseMigrationSmokeTests
         }
     }
 
+    /// <summary>
+    /// DDL DESTRUKTIV mbi target-in — FAIL-CLOSED (§4/§6A): emri validohet me
+    /// snapshot-in kanonik `PlatformDatabaseSettings`
+    /// (NpgsqlConnectionStringBuilder; ZERO interpolim raw), pastaj kërkohet
+    /// allowlist-i sintetik DHE barazia `current_database()` = emri i pritur —
+    /// TË GJITHA PARA çdo query/DDL. Çdo devijim → përjashtim para DROP-it.
+    /// </summary>
     private static async Task DropSentinelAsync(string db)
     {
-        var host = Environment.GetEnvironmentVariable("PGHOST") ?? "localhost";
-        var port = Environment.GetEnvironmentVariable("PGPORT") ?? "5432";
-        var user = Environment.GetEnvironmentVariable("PGUSER") ?? "idata";
-        await using var connection = new NpgsqlConnection($"Host={host};Port={port};Username={user};Database={db};Timeout=5");
+        // 1. Validim PARA lidhjes: konfigurim i tipizuar + allowlist sintetik.
+        var settings = PlatformDatabaseConnection.Parse(
+            Environment.GetEnvironmentVariable("PGHOST") ?? "localhost",
+            Environment.GetEnvironmentVariable("PGPORT") ?? "5432",
+            Environment.GetEnvironmentVariable("PGUSER") ?? "idata",
+            db);
+        if (!SyntheticDatabaseSafety.IsSynthetic(settings.Database))
+        {
+            throw new InvalidOperationException(
+                "Refuzim fail-closed: DDL destruktiv lejohet vetem mbi DB sintetike.");
+        }
+
+        await using var connection = new NpgsqlConnection(settings.ToConnectionString());
         await connection.OpenAsync(TestContext.Current.CancellationToken);
+        // 2. Verifikim PAS hapjes, PARA DDL-se: DB efektive = ajo e validuar.
+        await SyntheticDatabaseSafety.AssertSyntheticTargetAsync(connection, settings.Database);
+
         await using var command = connection.CreateCommand();
         command.CommandText = "DROP TABLE platform.migration_smoke_check";
         await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// Fixtures NEGATIVE të DDL-së destruktive: injection përmes emrit të DB-së
+    /// (`;Database=`, `;Host=`, `;Username=`), target real jo-sintetik dhe
+    /// prefiks pa suffix → refuzim PARA çdo lidhjeje/DDL-je; DB-ja sintetike
+    /// kandidate mbetet e paprekur (sentineli i saj ende ekziston).
+    /// </summary>
+    [Theory]
+    [InlineData("idata_platform_test_alias;Database=idata_platform")]
+    [InlineData("idata_platform_test_alias;Host=evil.invalid")]
+    [InlineData("idata_platform_test_alias;Username=evil")]
+    [InlineData("idata_platform")]
+    [InlineData("idata")]
+    [InlineData("idata_platform_test_")]
+    public async Task DDL_destruktiv_refuzohet_para_lidhjes_per_target_jo_sintetik(string target)
+    {
+        await using var db = await PlatformTestDatabase.CreateAsync("ddlsafety");
+        await MigrateAsync(db.DatabaseName);
+
+        await Assert.ThrowsAnyAsync<Exception>(() => DropSentinelAsync(target));
+
+        // Zero DDL: sentineli i DB-së sintetike kandidate mbetet i paprekur.
+        await using var connection = new NpgsqlConnection(
+            PlatformDatabaseConnection.Parse(
+                Environment.GetEnvironmentVariable("PGHOST") ?? "localhost",
+                Environment.GetEnvironmentVariable("PGPORT") ?? "5432",
+                Environment.GetEnvironmentVariable("PGUSER") ?? "idata",
+                db.DatabaseName).ToConnectionString());
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await SyntheticDatabaseSafety.AssertSyntheticTargetAsync(connection, db.DatabaseName);
+        await using var check = connection.CreateCommand();
+        check.CommandText = "SELECT to_regclass('platform.migration_smoke_check') IS NOT NULL";
+        Assert.Equal(true, await check.ExecuteScalarAsync(TestContext.Current.CancellationToken));
     }
 
     [Fact]

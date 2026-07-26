@@ -15,7 +15,9 @@ namespace Idata.Platform.IntegrationTests;
 /// (MigrationId, ProductVersion) i pandryshuar; sentinel/data e 0001 e
 /// ruajtur; objektet e 0002 ekzistojnë; no-op i qëndrueshëm. Rollback
 /// 0002→0001 VETËM me helper test-only të guard-uar (guard tripalësh PARA
-/// çdo DbContext/connection/query) përmes IMigrator.MigrateAsync("0001_...").
+/// çdo DbContext/connection/query): DownOperations e 0002 →
+/// IMigrationsSqlGenerator → NJË transaction PostgreSQL (DDL + heqja e
+/// row-it të historisë), JO `IMigrator` me target migration.
 /// </summary>
 [Collection(nameof(MigratorEnvCollection))]
 public sealed class MigrationUpgradePathTests
@@ -377,7 +379,7 @@ public sealed class MigrationUpgradePathTests
                 SyntheticDatabaseSafety.AssertMaintenanceAsync(wrongMaintenance));
         }
 
-        // Të dyja DB-të kandidate të pandryshuara: gjendja e migruar intakte.
+        // DB-ja sintetike kandidate mbetet e pandryshuar: gjendja e migruar intakte.
         Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "2", "0", "present"));
     }
 }
