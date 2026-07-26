@@ -260,11 +260,20 @@ public sealed class AuthorityLockOrderingTests
     // ═════════════════ LOCK ORDER — pa deadlock ═════════════════
 
     /// <summary>
-    /// Dy mutacione konkurrente mbi target-e TË NDRYSHME brenda të njëjtit
-    /// business marrin lock-et në TË NJËJTIN rend kanonik (business →
-    /// memberships → users → role → permission → role_permission). Prandaj
-    /// nuk mund të ndërthuren në rend të kundërt: njëri përfundon, tjetri
-    /// pret dhe pastaj vazhdon — ZERO deadlock (asnjë 40P01).
+    /// Dy mutacione konkurrente TË KËTIJ writer-i mbi target-e të ndryshme
+    /// brenda të njëjtit business marrin lock-et në TË NJËJTIN rend kanonik
+    /// (business → memberships → users → role → permission → role_permission),
+    /// prandaj nuk ndërthuren në rend të kundërt: njëri përfundon, tjetri pret
+    /// dhe vazhdon — pa 40P01 NË KËTË skedul. KUJDES: kjo NUK është provë
+    /// universale "deadlock-free" — rendi provohet vetëm për writer-in aktual;
+    /// një lifecycle writer i ardhshëm me rend tjetër mund të krijojë deadlock
+    /// (residual OPEN; kërkon cross-writer review para merge-it).
+    ///
+    /// Ky test është njëkohësisht characterization test i SERIALIZIMIT
+    /// PER-AKTOR: A dhe B kanë të njëjtin aktor dhe target TË NDRYSHËM, dhe
+    /// B pret derisa A të commit-ojë — sepse hapi 2 i protokollit merr
+    /// FOR UPDATE edhe mbi membership-in e aktorit (head-of-line blocking
+    /// i mundshëm; për t'u vlerësuar para production-it).
     /// </summary>
     [Fact]
     public async Task Lock_order_kanonik_nuk_prodhon_deadlock_mes_dy_mutacioneve()
@@ -312,5 +321,99 @@ public sealed class AuthorityLockOrderingTests
             Assert.Equal(1L, after.Version);
             Assert.Equal(1L, after.Audits);
             Assert.Equal(1L, after.Receipts);
+        });
+
+    // ═════════════ PROVË DISKRIMINUESE: TARGET PRE-LOCK ═════════════
+
+    /// <summary>
+    /// Provon se target membership-i lock-ohet nga FAZA E LOCK-EVE
+    /// (LockMembershipsSql, hapi 2) dhe JO thjesht nga UPDATE-i i guarduar:
+    ///
+    /// <para>(1) një holder mban FOR UPDATE mbi rreshtin e ROLIT të kërkuar —
+    /// fakt MË I VONSHËM në rendin kanonik (hapi 4); (2) mutacioni niset dhe
+    /// serveri konfirmon se po pret — pra hapat 1–3 kanë përfunduar dhe
+    /// GuardedUpdateSql NUK ka nisur ende (protokolli është sekuencial);
+    /// (3) një writer konkurrent provon UPDATE mbi target membership-in dhe
+    /// serveri konfirmon se BLLOKOHET, me <c>pg_blocking_pids</c> që përmban
+    /// PIKËRISHT pid-in e mutacionit — lock-u mund të vijë vetëm nga
+    /// FOR UPDATE i fazës së lock-eve.</para>
+    ///
+    /// Heqja e target-it nga LockMembershipsSql (RED e demonstruar) e lë
+    /// writer-in të lirë → testi dështon te barriera e bllokimit.
+    /// </summary>
+    [Fact]
+    public async Task Target_membership_lock_ohet_nga_faza_e_lock_eve_para_guarded_update()
+        => await WithSeedAsync(async databaseName =>
+        {
+            // (1) Holder-i mban FOR UPDATE mbi rolin e kërkuar (hapi 4 i rendit).
+            await using var holder = await OpenAsync(databaseName);
+            await using var holderTx = await holder.BeginTransactionAsync();
+            await using (var hold = holder.CreateCommand())
+            {
+                hold.Transaction = holderTx;
+                hold.CommandText =
+                    $"SELECT 1 FROM platform.role WHERE id = '{AccessControlSeed.RoleA2:D}' FOR UPDATE";
+                await hold.ExecuteScalarAsync();
+            }
+
+            // (2) Mutacioni niset; serveri konfirmon se pret (te roli).
+            await using var context = PlatformDbContextFactory.Create(
+                TenantIsolationEndpointTests.ConnectionStringFor(databaseName));
+            await context.Database.OpenConnectionAsync(TestContext.Current.CancellationToken);
+            var mutationPid = await PostgresLockObserver.BackendPidAsync(
+                (NpgsqlConnection)context.Database.GetDbConnection());
+            // Kufi i gjerë që asertet të mos garojnë me lock_timeout-in.
+            var uow = new EfMembershipRoleUnitOfWork(context) { LockTimeout = TimeSpan.FromSeconds(30) };
+            var mutationTask = Task.Run(() => uow.TryMutateRoleAsync(Mutation(), CancellationToken.None));
+
+            await using var observer = await OpenAsync(databaseName);
+            await PostgresLockObserver.WaitUntilBlockedAsync(observer, mutationPid);
+
+            // (3) Writer-i konkurrent mbi TARGET membership-in bllokohet
+            //     PIKËRISHT nga pid-i i mutacionit (jo nga holder-i, jo nga
+            //     GuardedUpdate-i që s'ka nisur ende).
+            await using var writer = await OpenAsync(databaseName);
+            var writerPid = await PostgresLockObserver.BackendPidAsync(writer);
+            var writerTask = Task.Run(async () =>
+            {
+                await using var writerTx = await writer.BeginTransactionAsync();
+                await using var update = writer.CreateCommand();
+                update.Transaction = writerTx;
+                update.CommandText =
+                    $"UPDATE platform.business_membership SET status = 'disabled' WHERE id = '{AccessControlSeed.MembershipC:D}'";
+                await update.ExecuteNonQueryAsync();
+                await writerTx.RollbackAsync(); // gjendja mbetet e paprekur
+            });
+
+            // try/finally: edhe në assert-dështim, holder-i lirohet dhe task-et
+            // përfundojnë të kufizuara — testi dështon i raportuar, s'varet.
+            try
+            {
+                await PostgresLockObserver.WaitUntilBlockedAsync(observer, writerPid);
+                await using var who = observer.CreateCommand();
+                who.CommandText = "SELECT pg_blocking_pids(@pid)";
+                who.Parameters.AddWithValue("pid", writerPid);
+                var blockers = (int[])(await who.ExecuteScalarAsync(TestContext.Current.CancellationToken))!;
+                Assert.Contains(mutationPid, blockers); // DISKRIMINUESI
+            }
+            finally
+            {
+                // Lirimi i rolit → mutacioni përfundon; rollback-u i tij liron
+                // target-in → writer-i vazhdon. Të gjitha të kufizuara.
+                await holderTx.RollbackAsync();
+                await mutationTask.WaitAsync(TimeSpan.FromSeconds(20));
+                await uow.DiscardAsync(CancellationToken.None);
+                await writerTask.WaitAsync(TimeSpan.FromSeconds(20));
+            }
+
+            var result = await mutationTask;
+            Assert.True(result.Applied); // holder-i s'kishte ndryshuar gjë
+
+            // Zero efekt i mbetur nga të tre aktorët.
+            var after = await StateAsync(databaseName);
+            Assert.Equal(AccessControlSeed.RoleA, after.Role);
+            Assert.Equal(0L, after.Version);
+            Assert.Equal(0L, after.Audits);
+            Assert.Equal(0L, after.Receipts);
         });
 }

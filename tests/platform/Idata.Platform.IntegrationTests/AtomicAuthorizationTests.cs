@@ -12,7 +12,7 @@ using Xunit;
 namespace Idata.Platform.IntegrationTests;
 
 /// <summary>
-/// Provat e LINEARIZATION POINT-it atomik (§1–§3): fixtures DISKRIMINUESE
+/// Provat e fazës authority-lock/validation/mutation (§1–§3): fixtures DISKRIMINUESE
 /// (ndryshon VETËM predikati nën provë), race-t lifecycle/permission TOCTOU
 /// me barrierë deterministike, dhe CAS-i real me dy unit-of-work mbi lidhje
 /// të ndara. Çdo refuzim provohet me ZERO efekt (rol/version të pandryshuara,
@@ -22,8 +22,8 @@ namespace Idata.Platform.IntegrationTests;
 public sealed class AtomicAuthorizationTests
 {
     // ── Barriera TOCTOU: dekorator test-only i store-it që ekzekuton një
-    //    mutacion konkurrues PAS leximit fillestar (pre-check) dhe PARA
-    //    linearization point-it. Jetёn e ka VETËM në test assembly. ──
+    //    mutacion konkurrues PAS leximit fillestar (pre-check) dhe PARA fazës
+    //    së mutacionit. Jetёn e ka VETËM në test assembly. ──
     private sealed class BarrierStore(IAccessControlStore inner, Func<Task> afterRead) : IAccessControlStore
     {
         public async Task<ActorGrants?> GetGrantsAsync(Guid businessId, Guid userId, CancellationToken ct)
@@ -233,7 +233,7 @@ public sealed class AtomicAuthorizationTests
             var fired = 0;
             await using var factory = new BarrierFactory(async () =>
             {
-                // Vetëm një herë, PAS pre-check-ut dhe PARA linearization point-it.
+                // Vetëm një herë, PAS pre-check-ut dhe PARA fazës së mutacionit.
                 if (Interlocked.Increment(ref fired) == 1)
                 {
                     await ExecuteAsync(databaseName, sql);
