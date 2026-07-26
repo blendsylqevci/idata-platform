@@ -1,7 +1,7 @@
 # F1.1 — Tenant Authorization & Business-Scoped Audit Core (Implementation Record)
 
 **Statusi:** **IMPLEMENTED / PENDING_INDEPENDENT_REVIEW** — PASS vetëm pas Fable delta-review → Codex review (PM_REVIEW_PROTOCOL) → Human Gate i Pronarit → merge i aprovuar.
-**Autoriteti:** ADR-024 (MERGED / ACCEPTED, PR #23, merge `e0d4cdc`) + Platform Foundation Bootstrap (COMPLETED, PR #24 merged, squash `0f12488c`). **Data:** 26.07.2026 (v4 — post correction pass: stale-snapshot authorization race e mbyllur me authority-lock protocol; v3 24.07.2026). **Increment:** F1.1 — vertical slice i kufizuar i F1, JO gjithë F1.
+**Autoriteti:** ADR-024 (MERGED / ACCEPTED, PR #23, merge `e0d4cdc`) + Platform Foundation Bootstrap (COMPLETED, PR #24 merged, squash `0f12488c`). **Data:** 26.07.2026 (v5 — correction pass i kufizuar: concurrent same-key idempotency, 409-vs-503, target pre-lock proof, least-privilege i ndershëm; v4 26.07.2026; v3 24.07.2026). **Increment:** F1.1 — vertical slice i kufizuar i F1, JO gjithë F1.
 
 ## Çfarë ËSHTË implementuar (vetëm kjo)
 
@@ -63,7 +63,7 @@ të vjetruar.
 ### Protokolli i zbatuar (i njëjti transaction, isolation e paprekur)
 
 1. **Lock eksplicit i ÇDO fakti autorizimi të ndryshueshëm**, sipas rendit
-   kanonik më poshtë (`FOR SHARE` — **jo** `FOR KEY SHARE**, sepse `status`,
+   kanonik më poshtë (`FOR SHARE` — **jo** `FOR KEY SHARE` — sepse `status`,
    `is_system`, `feature_key`/`action` janë non-key updates dhe vetëm
    `FOR SHARE` i bllokon; memberships merren `FOR UPDATE`).
 2. **Rivlerësim PËRFUNDIMTAR fail-closed** i të gjitha predikateve mbi vlerat
@@ -80,33 +80,105 @@ business → business_membership (ORDER BY id) → app_user (ORDER BY id)
 ```
 
 Rreshtat e dublikuar deduplikohen (aktori dhe targeti mund të jenë i njëjti
-rresht). Ky rend është i njëjtë për çdo mutacion, ndaj dy mutacione
-konkurrente nuk mund t'i marrin lock-et në rend të kundërt — i provuar me test
-që nuk prodhon deadlock.
+rresht). Rendi provohet me teste **VETËM për writer-in aktual** (dy mutacione
+të KËTIJ writer-i s'ndërthuren në rend të kundërt — test pa 40P01 në atë
+skedul). **KJO NUK ËSHTË provë universale "deadlock-free":** rendi nuk
+enforce-ohet mekanikisht mbi writer-a të ardhshëm — një lifecycle writer i ri
+mbi business/app_user/membership/role/permission/role_permission kërkon
+**cross-writer lock-order review + test matrix PARA merge-it** (residual risk
+OPEN; pa analyzer të ri dhe pa ADR të ri në këtë pass).
+
+**Serializim PER-AKTOR (kufi operacional):** hapi 2 merr `FOR UPDATE` edhe mbi
+membership-in e AKTORIT, ndaj për komandat që përdorin KËTË protokoll
+mutacionet konkurrente të të njëjtit aktor serializohen edhe kur target-et
+ndryshojnë (head-of-line blocking i mundshëm — për t'u vlerësuar para
+production-it; characterization test:
+`Lock_order_kanonik_nuk_prodhon_deadlock_mes_dy_mutacioneve`). Nuk pretendohet
+throughput i matur production.
+
+**Kufi:** rreshti `role` i rolit AKTUAL të aktorit NUK lock-ohet — lock-ohen
+membership-i i aktorit, permission-i dhe grant-i ekzakt; `role` sot nuk ka
+status/atribut që merr pjesë në vendimin e autorizimit të aktorit. Garancia
+vlen VETËM për faktet e listuara; nëse `role` fiton atribut
+authorization-relevant, ai duhet shtuar në lock protocol + order + tests.
+
+**Target pre-lock i provuar diskriminueshëm:** target membership-i lock-ohet
+nga FAZA E LOCK-EVE (jo thjesht nga UPDATE-i i guarduar) — provuar me bllokim
+te një fakt më i vonshëm i rendit (roli) dhe writer konkurrent të bllokuar nga
+`pg_blocking_pids` = pid-i i mutacionit
+(`Target_membership_lock_ohet_nga_faza_e_lock_eve_para_guarded_update`);
+heqja e target-it nga lock query e skuq testin (RED e demonstruar).
 
 ### Kufiri i garancisë
 
 Serializimi vlen për faktet e lock-uara më sipër. Nëse një rresht mungon,
 është disabled, është ndryshuar ose grant-i është hequr → **fail closed**:
 zero mutation, zero version++, zero audit, zero receipt.
-**Deadlock / lock timeout / gabim DB → rollback i plotë dhe përgjigje
-fail-closed; ZERO retry i heshtur** (retry do të kërkonte ADR të veçantë).
+**DB CONTENTION ≠ CAS:** deadlock (40P01), serialization failure (40001),
+lock timeout (55P03) dhe statement timeout server-side (57014) → rollback i
+plotë + **503 `PLATFORM_UNAVAILABLE`** stabil (zero mutation/audit/receipt,
+ZERO retry automatik, ZERO SQLSTATE/query/identifikues DB në përgjigje) — JO
+409 dhe JO "expectedVersion mismatch". Pritja për çdo lock është e KUFIZUAR
+(`SET LOCAL lock_timeout`, default 5s në command path). Cancellation e
+klientit mbetet cancellation path (propagohet, s'relabelohet). **409
+`CONCURRENCY_CONFLICT` vetëm për mismatch REAL të versionit.** Teste:
+`DbContentionTests` (55P03 real në HTTP → 503 → pas lirimit kërkesa e re
+kalon; klasifikimi i drejtpërdrejtë i 40P01/40001/55P03/57014 + kodet
+jo-transient). Retry automatik do të kërkonte ADR të veçantë.
+
+### Idempotencë konkurrente same-key (kontrata e rikthyer)
+
+Dy kërkesa me të njëjtin Idempotency-Key mund ta kalojnë TË DYJA lookup-in
+fillestar të receipt-it para commit-it të fituesit; humbësi merr
+`VersionConflict` në fazën e mutacionit. Kontrata: pas rollback-ut bëhet **NJË
+rilexim deterministik i receipt-it** (lexim i freskët, pa polling, pa retry të
+mutacionit) — **fingerprint identik → rezultati i ruajtur i fituesit (200 +
+200, përgjigje publike IDENTIKE, saktësisht 1 mutation/audit/receipt)**;
+**fingerprint tjetër → 409 `IDEMPOTENCY_CONFLICT`** (kurrë i raportuar si
+CAS); **receipt që mungon realisht → 409 `CONCURRENCY_CONFLICT` i vërtetë**.
+TESTED me overlap real të provuar strukturalisht (barrierë count-down pas
+lookup-it; zero Task.Delay): `ConcurrentIdempotencyTests` A/B/C + 4 unit
+tests të kontratës. Unique violation i receipt-it mbetet mbrojtje sekondare,
+jo mekanizëm primar.
 
 ### Kufizim i PostgreSQL-it me pasojë për provisioning-un
 
 `SELECT ... FOR SHARE` **nuk mjaftohet me privilegjin `SELECT`** — kërkon
 privilegj të klasës `UPDATE` (`DELETE` nuk mjafton; verifikuar empirikisht).
-Roli runtime i testeve merr për këtë arsye grant-e `UPDATE` **të kufizuara në
-një kolonë të vetme** (`created_at` për business/app_user/role/permission;
-`business_id` për role_permission) — grant-i më i ngushtë që PostgreSQL e
-pranon për row share locks. Testet provojnë se ky grant NUK i jep rolit fuqi
-shkrimi mbi faktet e autorizimit (status/is_system/action/grant-delete mbeten
-të refuzuara). **Risku i mbetur dhe modeli i rolit në production janë INPUT
-eksplicit për ADR-026 — provisioning-u i rolit të aplikacionit mbetet OPEN.**
 
-## Optimistic concurrency (CAS) (§5)## Optimistic concurrency (CAS) (§5)
+**Matrica reale e privilegjeve të rolit runtime (testuar në
+`AuditProtectionTests`):**
 
-`business_membership.version` (bigint NOT NULL, nis 0) = EF concurrency token DB-backed. PUT kërkon `expectedVersion` të tipizuar (në command/fingerprint/OpenAPI/klient/response). Konflikti CAS → **HTTP 409 `CONCURRENCY_CONFLICT`** (i dalluar nga `IDEMPOTENCY_CONFLICT`), zero mutation/audit/receipt nga humbësi. Dy kërkesa paralele me key të ndryshëm + të njëjtin `expectedVersion` + role të ndryshme → saktësisht një 200 + një 409 CONCURRENCY_CONFLICT; final role/version = fituesi; saktësisht një audit + një receipt (i provuar).
+| Tabela | SELECT | UPDATE | Tjetër |
+|---|---|---|---|
+| `business`, `app_user`, `role`, `permission` | të gjitha kolonat | VETËM `(created_at)` (minimumi për `FOR SHARE`) | zero |
+| `role_permission` | të gjitha | VETËM `(business_id)` | zero (DELETE mohohet) |
+| `business_membership` | **të gjitha kolonat e mapuara** (shih më poshtë) | **VETËM `(role_id, version)`** | INSERT/DELETE/TRUNCATE mohohen |
+| `audit_log`, `command_receipt` | po | jo (triggers append-only) | INSERT po |
+
+Mohimet e provuara me `42501 insufficient_privilege`: UPDATE mbi
+`business_membership.status/user_id/business_id/created_at`, INSERT/DELETE/
+TRUNCATE mbi `business_membership`, UPDATE mbi `business.status`,
+`app_user.status`, `role.is_system`, `permission.action`, DELETE/UPDATE mbi
+`role_permission`. Komanda legjitime nën rolin runtime KALON (materializimi EF
+funksionon).
+
+**Kufi real i SELECT-it (EF Core):** `EfAccessControlStore.GetGrantsAsync`
+materializon entitetin e plotë (`AsNoTracking` + `SingleOrDefaultAsync`), ndaj
+SELECT mbi `business_membership` duhet të mbulojë të gjitha kolonat e mapuara
+— ngushtimi pa e kaluar query-n në projection do ta prishte rrugën reale me
+insufficient privilege. Ky është kufi i implementimit aktual, jo politikë e
+përhershme; rivlerësohet nëse kalohet në projection.
+
+**Residual risk i deklaruar:** edhe `UPDATE (role_id, version)` i lejon
+credential-it runtime të shkruajë DIREKT ato kolona jashtë endpoint-it. NUK
+pretendohet "production least privilege complete". Production DB-role
+provisioning = OPEN; row-scope/RLS = OPEN (ADR-026); direct-write hardening =
+OPEN. Pa SECURITY DEFINER dhe pa RLS në këtë pass.
+
+## Optimistic concurrency (CAS) (§5)
+
+`business_membership.version` (bigint NOT NULL, nis 0) = EF concurrency token DB-backed. PUT kërkon `expectedVersion` të tipizuar (në command/fingerprint/OpenAPI/klient/response). Konflikti CAS → **HTTP 409 `CONCURRENCY_CONFLICT`** (i dalluar nga `IDEMPOTENCY_CONFLICT`), zero mutation/audit/receipt nga humbësi; humbësi i një gare SAME-key rikuperohet përmes rileximit të receipt-it (shih "Idempotencë konkurrente same-key"), dhe DB contention/transient → 503, JO 409. Dy kërkesa paralele me key të ndryshëm + të njëjtin `expectedVersion` + role të ndryshme → saktësisht një 200 + një 409 CONCURRENCY_CONFLICT; final role/version = fituesi; saktësisht një audit + një receipt (i provuar).
 
 ## Audit ↔ command / correlation DB-enforced (§6)
 
@@ -139,7 +211,7 @@ Të 8 skenarët standardë. **5 dhe 7 = TESTUAR REALISHT; 6 = fixture i kufizuar
 
 ## Test counts
 
-Architecture 10 · Unit 86 · Integration 89 (kundër PostgreSQL real sintetik, DB unik per test): **185 target-tests** (build 0 warnings, zero skip). Client 2/2 · Backoffice 6/6 · Legacy turbo 8/8 build + 12/12 test. OpenAPI/client generate ×2 zero-diff.
+Architecture 10 · Unit 90 · Integration 100 (kundër PostgreSQL real sintetik, DB unik per test): **200 target-tests** (build 0 warnings, zero skip). Client 2/2 · Backoffice 6/6 · Legacy turbo 8/8 build + 12/12 test. OpenAPI/client generate ×2 zero-diff.
 
 ## Historia dhe gitleaks
 
