@@ -3,7 +3,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace Idata.Platform.Modules.PlatformStatus.Infrastructure.Migrations
+namespace Idata.Platform.Persistence.Migrations
 {
     /// <inheritdoc />
     public partial class InitialPlatformSchema : Migration

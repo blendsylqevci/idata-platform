@@ -243,7 +243,23 @@
       "idata.platform.dbmigrator": {
         "type": "Project",
         "dependencies": {
-          "Idata.Platform.Modules.PlatformStatus.Infrastructure": "[1.0.0, )"
+          "Idata.Platform.Persistence": "[1.0.0, )"
+        }
+      },
+      "idata.platform.modules.accesscontrol.application": {
+        "type": "Project",
+        "dependencies": {
+          "Idata.Platform.Modules.AccessControl.Domain": "[1.0.0, )"
+        }
+      },
+      "idata.platform.modules.accesscontrol.domain": {
+        "type": "Project"
+      },
+      "idata.platform.modules.accesscontrol.presentation": {
+        "type": "Project",
+        "dependencies": {
+          "Idata.Platform.Modules.AccessControl.Application": "[1.0.0, )",
+          "Idata.Platform.Modules.AccessControl.Domain": "[1.0.0, )"
         }
       },
       "idata.platform.modules.platformstatus.application": {
@@ -255,21 +271,20 @@
       "idata.platform.modules.platformstatus.domain": {
         "type": "Project"
       },
-      "idata.platform.modules.platformstatus.infrastructure": {
-        "type": "Project",
-        "dependencies": {
-          "Idata.Platform.Modules.PlatformStatus.Application": "[1.0.0, )",
-          "Idata.Platform.Modules.PlatformStatus.Domain": "[1.0.0, )",
-          "Microsoft.EntityFrameworkCore": "[10.0.10, )",
-          "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
-          "Npgsql": "[10.0.3, )",
-          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
-        }
-      },
       "idata.platform.modules.platformstatus.presentation": {
         "type": "Project",
         "dependencies": {
           "Idata.Platform.Modules.PlatformStatus.Application": "[1.0.0, )"
+        }
+      },
+      "idata.platform.persistence": {
+        "type": "Project",
+        "dependencies": {
+          "Idata.Platform.Modules.AccessControl.Domain": "[1.0.0, )",
+          "Microsoft.EntityFrameworkCore": "[10.0.10, )",
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
+          "Npgsql": "[10.0.3, )",
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
         }
       },
       "Microsoft.EntityFrameworkCore": {

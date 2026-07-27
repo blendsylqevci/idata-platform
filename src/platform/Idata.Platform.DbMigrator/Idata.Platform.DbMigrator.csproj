@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- DbMigrator: i vetmi vend ku aplikohen migrimet e target DB-së → Infrastructure. -->
+  <!-- DbMigrator: i vetmi vend ku aplikohen migrimet e target DB-së → Persistence (migration owner). -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Modules\PlatformStatus\Infrastructure\Idata.Platform.Modules.PlatformStatus.Infrastructure.csproj" />
+    <ProjectReference Include="..\Idata.Platform.Persistence\Idata.Platform.Persistence.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">

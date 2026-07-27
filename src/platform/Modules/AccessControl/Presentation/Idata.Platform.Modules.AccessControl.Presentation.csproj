@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Presentation: endpoint-et HTTP → varet vetëm nga Application (+Domain). -->
+  <ItemGroup>
+    <ProjectReference Include="..\Application\Idata.Platform.Modules.AccessControl.Application.csproj" />
+    <ProjectReference Include="..\Domain\Idata.Platform.Modules.AccessControl.Domain.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+</Project>

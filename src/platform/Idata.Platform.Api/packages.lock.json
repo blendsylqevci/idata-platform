@@ -33,6 +33,33 @@
         "resolved": "10.0.10",
         "contentHash": "2gLDordUCGf3aNOOuqtTbP5mxhiP9nk6TnvGiE3RnqT891O+Zf/qKu1PIREubs1M16A0SImr4vULBfU5BTDs1Q=="
       },
+      "idata.platform.modules.accesscontrol.application": {
+        "type": "Project",
+        "dependencies": {
+          "Idata.Platform.Modules.AccessControl.Domain": "[1.0.0, )"
+        }
+      },
+      "idata.platform.modules.accesscontrol.domain": {
+        "type": "Project"
+      },
+      "idata.platform.modules.accesscontrol.infrastructure": {
+        "type": "Project",
+        "dependencies": {
+          "Idata.Platform.Modules.AccessControl.Application": "[1.0.0, )",
+          "Idata.Platform.Modules.AccessControl.Domain": "[1.0.0, )",
+          "Idata.Platform.Persistence": "[1.0.0, )",
+          "Microsoft.EntityFrameworkCore": "[10.0.10, )",
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
+          "Npgsql": "[10.0.3, )"
+        }
+      },
+      "idata.platform.modules.accesscontrol.presentation": {
+        "type": "Project",
+        "dependencies": {
+          "Idata.Platform.Modules.AccessControl.Application": "[1.0.0, )",
+          "Idata.Platform.Modules.AccessControl.Domain": "[1.0.0, )"
+        }
+      },
       "idata.platform.modules.platformstatus.application": {
         "type": "Project",
         "dependencies": {
@@ -47,6 +74,7 @@
         "dependencies": {
           "Idata.Platform.Modules.PlatformStatus.Application": "[1.0.0, )",
           "Idata.Platform.Modules.PlatformStatus.Domain": "[1.0.0, )",
+          "Idata.Platform.Persistence": "[1.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.10, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
           "Npgsql": "[10.0.3, )",
@@ -57,6 +85,16 @@
         "type": "Project",
         "dependencies": {
           "Idata.Platform.Modules.PlatformStatus.Application": "[1.0.0, )"
+        }
+      },
+      "idata.platform.persistence": {
+        "type": "Project",
+        "dependencies": {
+          "Idata.Platform.Modules.AccessControl.Domain": "[1.0.0, )",
+          "Microsoft.EntityFrameworkCore": "[10.0.10, )",
+          "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
+          "Npgsql": "[10.0.3, )",
+          "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
         }
       },
       "Microsoft.EntityFrameworkCore": {

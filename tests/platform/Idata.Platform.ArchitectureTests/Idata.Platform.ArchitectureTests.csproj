@@ -6,6 +6,9 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\src\platform\Idata.Platform.Api\Idata.Platform.Api.csproj" />
     <ProjectReference Include="..\..\..\src\platform\Idata.Platform.DbMigrator\Idata.Platform.DbMigrator.csproj" />
+    <ProjectReference Include="..\..\..\src\platform\Idata.Platform.Persistence\Idata.Platform.Persistence.csproj" />
+    <ProjectReference Include="..\..\..\src\platform\Modules\AccessControl\Infrastructure\Idata.Platform.Modules.AccessControl.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\src\platform\Modules\AccessControl\Presentation\Idata.Platform.Modules.AccessControl.Presentation.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />

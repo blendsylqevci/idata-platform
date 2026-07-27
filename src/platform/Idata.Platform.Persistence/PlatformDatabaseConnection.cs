@@ -1,6 +1,6 @@
 using Npgsql;
 
-namespace Idata.Platform.Modules.PlatformStatus.Infrastructure;
+namespace Idata.Platform.Persistence;
 
 /// <summary>
 /// Konfigurimi I VETËM i validuar i target PostgreSQL-it (dev/CI trust,

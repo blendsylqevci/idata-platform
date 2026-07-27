@@ -48,21 +48,21 @@ public sealed class MigrationLifecycleTests
     {
         await using var db = await PlatformTestDatabase.CreateAsync(nameof(Fresh_noop_down_reapply_kalojne_assertions_per_faze));
 
-        // 1. Fresh migrate → exactly 1 e re; applied=1, pending=0, sentinel present.
+        // 1. Fresh migrate → 0001+0002; applied=2, pending=0, sentinel present.
         Assert.Equal(0, await RunAsync(db.DatabaseName, "migrate"));
-        Assert.Equal(0, await RunAsync(db.DatabaseName, "assert-state", "1", "0", "present"));
+        Assert.Equal(0, await RunAsync(db.DatabaseName, "assert-state", "2", "0", "present"));
 
-        // 2. No-op migrate → applied set i pandryshuar; applied=1, pending=0.
+        // 2. No-op migrate → applied set i pandryshuar; applied=2, pending=0.
         Assert.Equal(0, await RunAsync(db.DatabaseName, "migrate"));
-        Assert.Equal(0, await RunAsync(db.DatabaseName, "assert-state", "1", "0", "present"));
+        Assert.Equal(0, await RunAsync(db.DatabaseName, "assert-state", "2", "0", "present"));
 
-        // 3. Guarded down-to-zero → applied=0, pending=1, sentinel absent.
+        // 3. Guarded down-to-zero → applied=0, pending=2, sentinel absent.
         Assert.Equal(0, await RunDestructiveAsync(db.DatabaseName, "down-to-zero"));
-        Assert.Equal(0, await RunAsync(db.DatabaseName, "assert-state", "0", "1", "absent"));
+        Assert.Equal(0, await RunAsync(db.DatabaseName, "assert-state", "0", "2", "absent"));
 
-        // 4. Reapply → applied=1, pending=0, sentinel rikthehet.
+        // 4. Reapply → applied=2, pending=0, sentinel rikthehet.
         Assert.Equal(0, await RunAsync(db.DatabaseName, "migrate"));
-        Assert.Equal(0, await RunAsync(db.DatabaseName, "assert-state", "1", "0", "present"));
+        Assert.Equal(0, await RunAsync(db.DatabaseName, "assert-state", "2", "0", "present"));
     }
 
     [Fact]
@@ -72,8 +72,8 @@ public sealed class MigrationLifecycleTests
         Assert.Equal(0, await RunAsync(db.DatabaseName, "migrate"));
 
         // Pritje e gabuar e count-it dhe e sentinelit → exit 3 (mismatch).
-        Assert.Equal(3, await RunAsync(db.DatabaseName, "assert-state", "2", "0", "present"));
-        Assert.Equal(3, await RunAsync(db.DatabaseName, "assert-state", "1", "0", "absent"));
+        Assert.Equal(3, await RunAsync(db.DatabaseName, "assert-state", "3", "0", "present"));
+        Assert.Equal(3, await RunAsync(db.DatabaseName, "assert-state", "2", "0", "absent"));
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public sealed class MigrationLifecycleTests
             Environment.SetEnvironmentVariable(DestructiveResetGuard.OptInVariable, previousOptIn);
         }
 
-        Assert.Equal(0, await RunAsync(db.DatabaseName, "assert-state", "1", "0", "present"));
+        Assert.Equal(0, await RunAsync(db.DatabaseName, "assert-state", "2", "0", "present"));
     }
 
     [Fact]
@@ -139,13 +139,13 @@ public sealed class MigrationLifecycleTests
         // tjeter sintetik i migruar — down-to-zero do ta resetonte ate.
         await using var target = await PlatformTestDatabase.CreateAsync("injtarget");
         Assert.Equal(0, await RunAsync(target.DatabaseName, "migrate"));
-        Assert.Equal(0, await RunAsync(target.DatabaseName, "assert-state", "1", "0", "present"));
+        Assert.Equal(0, await RunAsync(target.DatabaseName, "assert-state", "2", "0", "present"));
 
         var injected = $"idata_platform_test_alias;Database={target.DatabaseName}";
         Assert.Equal(2, await RunDestructiveAsync(injected, "down-to-zero"));
 
-        // Targeti sintetik mbetet i PAPREKUR: applied=1, pending=0, sentinel present.
-        Assert.Equal(0, await RunAsync(target.DatabaseName, "assert-state", "1", "0", "present"));
+        // Targeti sintetik mbetet i PAPREKUR: applied=2, pending=0, sentinel present.
+        Assert.Equal(0, await RunAsync(target.DatabaseName, "assert-state", "2", "0", "present"));
 
         // Variantet e tjera te injection-it refuzohen PARA cdo I/O-je (host
         // fiktiv nuk kontaktohet kurre; refuzimi eshte exit 2 i menjehershem).

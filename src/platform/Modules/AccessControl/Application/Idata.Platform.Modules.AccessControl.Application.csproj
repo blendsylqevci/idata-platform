@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Application: use-cases + porte — varet VETËM nga Domain. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Domain\Idata.Platform.Modules.AccessControl.Domain.csproj" />
+  </ItemGroup>
+</Project>

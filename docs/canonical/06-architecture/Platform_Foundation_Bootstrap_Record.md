@@ -1,7 +1,7 @@
 # Platform Foundation Bootstrap — Implementation Record (pre-F1)
 
-**Statusi:** **IMPLEMENTED / PENDING_INDEPENDENT_REVIEW** — PASS vetëm pas Fable delta-review → Codex review (PM_REVIEW_PROTOCOL) → Human Gate i Pronarit → merge i aprovuar.
-**Autoriteti:** ADR-024 (MERGED / ACCEPTED, PR #23, merge `e0d4cdc`) · **Data:** 24.07.2026 (v2 — post correction pass i review-t të pavarur) · **Increment:** Bootstrap pre-F1 — JO F1, JO migrim big-bang, JO module biznesi.
+**Statusi:** **COMPLETED / MERGED** — kaloi Fable delta-review → Codex review (PM_REVIEW_PROTOCOL) → Human Gate të Pronarit; PR #24 merged në `main` (squash `0f12488cdd776a9d51b841cc25a0ac2766ff0bab`, 24.07.2026).
+**Autoriteti:** ADR-024 (MERGED / ACCEPTED, PR #23, merge `e0d4cdc`) · **Data:** 24.07.2026 (v3 — post merge i PR #24) · **Increment:** Bootstrap pre-F1 — JO F1, JO migrim big-bang, JO module biznesi.
 
 ## Struktura reale
 
