@@ -1,7 +1,7 @@
 # F1.1 — Tenant Authorization & Business-Scoped Audit Core (Implementation Record)
 
 **Statusi:** **IMPLEMENTED / PENDING_INDEPENDENT_REVIEW** — PASS vetëm pas Fable delta-review → Codex review (PM_REVIEW_PROTOCOL) → Human Gate i Pronarit → merge i aprovuar.
-**Autoriteti:** ADR-024 (MERGED / ACCEPTED, PR #23, merge `e0d4cdc`) + Platform Foundation Bootstrap (COMPLETED, PR #24 merged, squash `0f12488c`). **Data:** 26.07.2026 (v5 — correction pass i kufizuar: concurrent same-key idempotency, 409-vs-503, target pre-lock proof, least-privilege i ndershëm; v4 26.07.2026; v3 24.07.2026). **Increment:** F1.1 — vertical slice i kufizuar i F1, JO gjithë F1.
+**Autoriteti:** ADR-024 (MERGED / ACCEPTED, PR #23, merge `e0d4cdc`) + Platform Foundation Bootstrap (COMPLETED, PR #24 merged, squash `0f12488c`). **Data:** 27.07.2026 (v6 — docs/governance reconciliation: gate `ENG-005` cross-writer lock-order i regjistruar në Tracker + Gates OPEN; kushtëzimi i receipt re-read i saktësuar — rilexim VETËM në rrugët VersionConflict/receipt-conflict, kurrë pas 503 transient; parakushti real PostgreSQL i testeve i dokumentuar; v5 26.07.2026; v4 26.07.2026; v3 24.07.2026). **Increment:** F1.1 — vertical slice i kufizuar i F1, JO gjithë F1.
 
 ## Çfarë ËSHTË implementuar (vetëm kjo)
 
@@ -119,7 +119,7 @@ lock timeout (55P03) dhe statement timeout server-side (57014) → rollback i
 plotë + **503 `PLATFORM_UNAVAILABLE`** stabil (zero mutation/audit/receipt,
 ZERO retry automatik, ZERO SQLSTATE/query/identifikues DB në përgjigje) — JO
 409 dhe JO "expectedVersion mismatch". Pritja për çdo lock është e KUFIZUAR
-(`SET LOCAL lock_timeout`, default 5s në command path). Cancellation e
+(`SET LOCAL lock_timeout`; default-i production = **5 sekonda**, i mbivendosshëm në runtime mbi objektin/testet, por ENDE i palidhur me application configuration — operational tuning/config binding = **OPEN follow-up**, pa ndryshim kodi në këtë pass). Cancellation e
 klientit mbetet cancellation path (propagohet, s'relabelohet). **409
 `CONCURRENCY_CONFLICT` vetëm për mismatch REAL të versionit.** Teste:
 `DbContentionTests` (55P03 real në HTTP → 503 → pas lirimit kërkesa e re
@@ -140,6 +140,16 @@ TESTED me overlap real të provuar strukturalisht (barrierë count-down pas
 lookup-it; zero Task.Delay): `ConcurrentIdempotencyTests` A/B/C + 4 unit
 tests të kontratës. Unique violation i receipt-it mbetet mbrojtje sekondare,
 jo mekanizëm primar.
+
+**KUFIRI KUSHTOR i rileximit (JO universal):** rileximi deterministik i
+receipt-it bëhet VETËM kur (a) humbësi arrin `VersionConflict` pas
+rollback-ut, ose (b) arrihet rruga e receipt unique-conflict pas `SaveAsync`.
+Nëse protokolli i lock-eve përfundon MË HERËT me 40P01 / 40001 / 55P03 /
+57014, transaction-i rollback-ohet, përgjigjja është **503 retryable**, efekti
+është zero dhe **receipt-i NUK rilexohet në atë tentativë** — klienti mund ta
+riprovojë të njëjtin Idempotency-Key. NUK pretendohet "200 replay në çdo
+contention schedule", rilexim i pakushtëzuar, polling apo retry automatik i
+mutacionit.
 
 ### Kufizim i PostgreSQL-it me pasojë për provisioning-un
 
@@ -209,6 +219,15 @@ Të 8 skenarët standardë. **5 dhe 7 = TESTUAR REALISHT; 6 = fixture i kufizuar
 | 7. DB unavailable | 503 PLATFORM_UNAVAILABLE, zero detaje | Asnjë mutation; probe/handler fail-safe | 503 ProblemDetails stabil | Auto-recover kur DB kthehet | `ApiSurfaceTests.DB_e_paarritshme_*` | Test output (TESTUAR) |
 | 8. Disk / queue full | **PARTIAL — waiver `HG-F1.1-REL-08` (24.07.2026), APROVUAR nga Pronari.** F1.1 provon rollback atomik + HTTP 503 gjatë write-denial, por JO disk/queue-full real, alerting ose recovery. Risku mbetet OPEN. Owner: Tech/Platform Owner. Mbyllet para F1 COMPLETE dhe para çdo production Go. NUK pretendohet production readiness. | Atomiciteti i transaction-it (audit/receipt-write failure → rollback i plotë) | 503 i kontrolluar | Riprovim pas lirimit; idempotency parandalon dublim | `AuditProtectionTests` (write-denial + rollback) — JO disk-full real | Test output + waiver `HG-F1.1-REL-08` (risk + afat + owner të loguar në Tracker) |
 
+## Parakushti i testeve të integrimit (PostgreSQL)
+
+Suita e integrimit kërkon një **PostgreSQL test/disposable të arritshëm**;
+konfigurimi merret nga `PGHOST` / `PGPORT` / `PGUSER` (default-et e kodit:
+`localhost` / `5432` / `idata`). CI përdor PostgreSQL service-in e vet.
+Gjatë review-t lokal u verifikua me një instancë sintetike në `PGPORT=5455` —
+**vetëm shembull lokal i verifikuar**, jo portë e detyrueshme dhe jo kontratë
+e repo-s; çdo zhvillues mund të përdorë instancën/portën e vet sintetike.
+
 ## Test counts
 
 Architecture 10 · Unit 90 · Integration 100 (kundër PostgreSQL real sintetik, DB unik per test): **200 target-tests** (build 0 warnings, zero skip). Client 2/2 · Backoffice 6/6 · Legacy turbo 8/8 build + 12/12 test. OpenAPI/client generate ×2 zero-diff.
@@ -219,7 +238,7 @@ Historia aktive e degës u rindërtua nga `origin/main` që fixtures sintetike (
 
 ## Gates OPEN të paprekura
 
-ADR-014 (pooling) · ADR-025 (encryption/key custody) · ADR-026 (hosting/secrets/providers + production credential/DB-role model) · ADR-028 (identity provider/store; ndarja 401/403) · ENG-004 (group-level audit — fallback business-scoped-only AKTIV, OPEN) · production RLS · **role hierarchy** · **permission dominance / delegation ceiling** · **last-admin protection** · role globale/system-wide (deferred) · **production role provisioning** (F1.1 = vetëm seed/migration) · break-glass · payroll · `roleCode`/hierarchy · **reliability skenari 8 (disk/queue-full) — waiver `HG-F1.1-REL-08`, PARTIAL/OPEN**. **Step B/C, PREFLIGHT, Tier 2 = NO-GO; RECERT = JO.**
+ADR-014 (pooling) · ADR-025 (encryption/key custody) · ADR-026 (hosting/secrets/providers + production credential/DB-role model) · ADR-028 (identity provider/store; ndarja 401/403) · ENG-004 (group-level audit — fallback business-scoped-only AKTIV, OPEN) · production RLS · **role hierarchy** · **permission dominance / delegation ceiling** · **last-admin protection** · role globale/system-wide (deferred) · **production role provisioning** (F1.1 = vetëm seed/migration) · break-glass · payroll · `roleCode`/hierarchy · **cross-writer authority lock-order enforcement (`ENG-005`) — OPEN** · **reliability skenari 8 (disk/queue-full) — waiver `HG-F1.1-REL-08`, PARTIAL/OPEN**. **Step B/C, PREFLIGHT, Tier 2 = NO-GO; RECERT = JO.**
 
 ## Rollback
 
