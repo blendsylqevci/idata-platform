@@ -1,7 +1,7 @@
 # F1.1 — Tenant Authorization & Business-Scoped Audit Core (Implementation Record)
 
-**Statusi:** **IMPLEMENTED / PENDING_INDEPENDENT_REVIEW** — PASS vetëm pas Fable delta-review → Codex review (PM_REVIEW_PROTOCOL) → Human Gate i Pronarit → merge i aprovuar.
-**Autoriteti:** ADR-024 (MERGED / ACCEPTED, PR #23, merge `e0d4cdc`) + Platform Foundation Bootstrap (COMPLETED, PR #24 merged, squash `0f12488c`). **Data:** 27.07.2026 (v6 — docs/governance reconciliation: gate `ENG-005` cross-writer lock-order i regjistruar në Tracker + Gates OPEN; kushtëzimi i receipt re-read i saktësuar — rilexim VETËM në rrugët VersionConflict/receipt-conflict, kurrë pas 503 transient; parakushti real PostgreSQL i testeve i dokumentuar; v5 26.07.2026; v4 26.07.2026; v3 24.07.2026). **Increment:** F1.1 — vertical slice i kufizuar i F1, JO gjithë F1.
+**Statusi:** **COMPLETED / MERGED** — kaloi Fable delta-review → Codex review (PM_REVIEW_PROTOCOL) → Human Gate të Pronarit; PR #25 merged në `main` (squash `1dc06d5769797c0dabbf6f47a1561b315cb7993b`, 27.07.2026).
+**Autoriteti:** ADR-024 (MERGED / ACCEPTED, PR #23, merge `e0d4cdc`) + Platform Foundation Bootstrap (COMPLETED, PR #24 merged, squash `0f12488c`). **Data:** 27.07.2026 (v7 — post merge i PR #25: statusi → COMPLETED/MERGED; asnjë ndryshim tjetër përmbajtjeje; v6 27.07.2026 — docs/governance reconciliation: gate `ENG-005` cross-writer lock-order i regjistruar në Tracker + Gates OPEN; kushtëzimi i receipt re-read i saktësuar — rilexim VETËM në rrugët VersionConflict/receipt-conflict, kurrë pas 503 transient; parakushti real PostgreSQL i testeve i dokumentuar; v5 26.07.2026; v4 26.07.2026; v3 24.07.2026). **Increment:** F1.1 — vertical slice i kufizuar i F1, JO gjithë F1.
 
 ## Çfarë ËSHTË implementuar (vetëm kjo)
 

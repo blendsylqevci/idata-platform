@@ -1,6 +1,6 @@
 # Faza 0 — Decision Gates / ADR Register (iData+)
 
-**Versioni:** 1.4 · **Data:** 24 Korrik 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.28 §2, §11
+**Versioni:** 1.5 · **Data:** 27 Korrik 2026 · **Burimi:** `iData_Plus_SSOT.md` v2.28 §2, §11
 **Format:** ADR (Architecture Decision Record). Status: **Accepted** (mbyllur) / **Open** (vendoset në gate-in e caktuar) / **Proposed** / **Superseded** (ruhet si histori, por nuk është më vendimi aktiv).
 Çdo vendim i ri → kjo skedar + një rresht te SSOT Decisions Log.
 
@@ -25,7 +25,7 @@
 | ADR-021 | **Secret management** — secrets store; asnjë sekret/SEF-ID/çelës në repo; audit redaction | 28.06 | §9 |
 | ADR-022 | **Branch protection + GitHub 2FA** (PR-based, review i detyrueshëm, pa force-push) | 28.06 | §9 |
 | ADR-023 | **Backup / PITR / restore drill** i detyrueshëm para Fazës 1 (promovon ADR-015) | 28.06 | §2 |
-| ADR-024 | **Platform Runtime & Architecture Stack Freeze** — .NET/Angular/POS i instalueshëm/RN/PostgreSQL, modular monolith, migrim inkremental | 23.07 (merge PR #23 `e0d4cdc`) | **MERGED/ACCEPTED**; **Platform Foundation Bootstrap pre-F1 = IMPLEMENTED/PENDING_INDEPENDENT_REVIEW (PR #24)**; pjesa PËRTEJ Bootstrap-it/F1 = **NOT YET IMPLEMENTED**; wrapper/OS dhe identity provider/store = OPEN |
+| ADR-024 | **Platform Runtime & Architecture Stack Freeze** — .NET/Angular/POS i instalueshëm/RN/PostgreSQL, modular monolith, migrim inkremental | 23.07 (merge PR #23 `e0d4cdc`) | **MERGED/ACCEPTED**; Bootstrap pre-F1 = COMPLETED (PR #24, squash `0f12488c`); **F1.1 = COMPLETED/MERGED (PR #25, squash `1dc06d5`, 27.07.2026)**; F1 = ACTIVE / NOT COMPLETE; pjesa përtej F1.1 = **NOT YET IMPLEMENTED**; wrapper/OS = ADR-027 OPEN; identity = ADR-028 (PROPOSED target) |
 
 **Shënim korrigjues i datuar (12.07.2026 — full-corpus re-audit; NUK rishkruhet historia e ADR-020):** formulimi origjinal "items €0.0001/totals cents" është **i pasaktë për `CouponItem.Total`** — kontrata e saktë: **unit `Price` = ×10000; item `Total` + coupon totals/payments/tax = ×100 (cents)** (Gate v2.0 §3; T2-01). Gjithashtu **org-u zyrtar ka konflikte të regjistruara**: firma **C# P1363 vs Go ASN.1 DER** (CONF-02 — encoding = OPEN deri në server evidence); **PHP proto i vjetër inkompatibil**; **Ruby pa proto**; **Swagger v0.9 vs main pas tag-ut** (CONF-03/04) — **asnjë implementim i vetëm s'është kanonik në heshtje**; referenca e plotë = `../05-sef-atk/ATK_Source_Register.md` §4–§5.
 
@@ -112,13 +112,26 @@
 **Pronari:** Pronari + Tech. **Afati:** para implementimit të shell-it production të POS-it.
 
 ### ADR-028 · Identity Authority & Store
-**Statusi:** Open — OIDC/OAuth2 contract, një authority/login/SSO, MFA, RBAC, tenant authorization dhe audited break-glass janë kërkesa të vendosura; provider-i/store nuk hamendësohen.
-**Scope:** OpenIddict vs external IdP, ASP.NET Core Identity vs model tjetër store, PKCE/token validation, signing-key rotation, refresh-token reuse detection, recovery, session/device revocation, federation, HA/backup dhe incident response.
-**Pronari:** Pronari + Tech. **Afati:** para F1 Identity production implementation ose provider binding.
+**Statusi:** **PROPOSED / OWNER-DIRECTED TARGET / PENDING_INDEPENDENT_REVIEW — EFFECTIVE ONLY AFTER HUMAN GATE + MERGE.** (Ishte Open; kërkesat e vendosura — OIDC/OAuth2 contract, një authority/login/SSO, MFA, RBAC, tenant authorization, audited break-glass — mbeten të pandryshuara.)
+**Vendimi i propozuar (i drejtuar nga Pronari):** **ASP.NET Core Identity** = account/credential/recovery/MFA store; **OpenIddict** = self-hosted OIDC/OAuth2 authority; external federation = integration option (asnjë provider i jashtëm i zgjedhur në heshtje); **GUID/UUID keys, zero int IDs**; schema `identity` e ndarë fizikisht/logjikisht nga `platform`; **Identity roles NUK përdoren për tenant authorization** — `platform.role`/`permission`/`role_permission`/`business_membership` mbeten autoriteti tenant-scoped; `platform.app_user` = projection/provider-neutral mapping boundary; tabela eksplicite `identity.user_account` / `user_login` / `user_claim` / `user_token` / `oidc_application` / `oidc_authorization` / `oidc_scope` / `oidc_token` (zero `AspNetUsers`/`User`/`Rolers` si emra finalë të pakontrolluar; emrat finalë verifikohen në Increment B para migrimit 0003).
+**Siguria e ngrirë:** Authorization Code + PKCE (jo implicit, jo password grant) · MFA + recovery codes · refresh-token rotation/reuse detection · signing/encryption keys jashtë repo/log/renderers · session/device/token revocation · lockout/rate limiting · email/account recovery · key rotation · HA/backup/restore · audit i ngjarjeve identity · incident response · break-glass = gate i veçantë i audituar.
+**Specifikimi subordinate:** `docs/canonical/06-architecture/Identity_Authority_Store_Decision.md` (boundary/schema map, flows, migrimi 0003+, rollback, acceptance, follow-up-i i DETYRUESHËM i architecture test-it `Zero_identity_provider_konkret...` — ZËVENDËSIM i kontrolluar në Increment B, jo fshirje; në PR-në docs-only testi nuk preket).
+**Pronari:** Pronari + Tech. **Afati:** implementimi = Increment B (pas Increment A), vetëm pas Human Gate + merge të kësaj PR-je docs-only.
+
+### ADR-029 · Application Architecture Convention (module-first Clean/Onion + mediator + thin controllers)
+**Statusi:** **PROPOSED / OWNER-DIRECTED TARGET / PENDING_INDEPENDENT_REVIEW — EFFECTIVE ONLY AFTER HUMAN GATE + MERGE.**
+**Vendimi:** (1) modular monolith — jo microservices në këtë fazë; (2) Clean/Onion **module-first** — jo layer-a gjigantë globalë; struktura `Modules/<Module>/{Domain,Application/Features/<UseCase>,Infrastructure,Presentation/Controllers}` + `Idata.Platform.Persistence` (migration owner i vetëm) + `Idata.Platform.Api` (composition root); (3) vertical feature slices brenda çdo moduli; (4) DDD strategjik kudo, tactical vetëm ku ka invariante reale; (5) **CQRS selektiv** (command për mutacion/invariante; query për read model; zero ceremoni për CRUD trivial); (6) mediator = **martinothamar/Mediator (MIT)** me `IMediator`, `Mediator.Abstractions` në deklarime, `Mediator.SourceGenerator` vetëm në host, lifetime **Scoped**, version i pin-uar vetëm në Increment A me provenance; (7) **thin Controllers** + **BaseApiController minimal** (ControllerBase + IMediator + ProblemDetails; zero service locator/authorization/persistence/transaction); (8) pipeline behaviors VETËM validation/telemetry/correlation/exception-mapping — kurrë tenant authorization DB-backed, authority-lock, transaction boundary, idempotency, audit atomicity apo fiscal invariants; (9) **Scalar** = dev/internal API reference UI mbi OpenAPI, environment-gated; OpenAPI mbetet kontrata autoritative + burimi i klientit TS; zero Swagger paralel pa ADR; (10) zero `Common`/`Utils`; `BuildingBlocks` vetëm me ≥2 konsumatorë realë; (11) GUID/UUID standard, zero int IDs; (12) migrimet 0001/0002 të pandryshueshme — schema changes = 0003+ forward-only.
+**Arsyetimi:** F1.1 provoi module-first Clean/Onion me handler të thirrur direkt; para Increment-eve të ardhshme duhet konventë e vetme e ekzekutueshme (transport→mediator→handler) që shmang portim të dyfishtë dhe drift stilistik, pa e fshehur autoritetin DB-backed në middleware.
+**Alternativat e refuzuara:** LuckyPennySoftware/MediatR (licencim/drejtim i papranueshëm) · microservices tani (kosto operacionale pa evidence) · CQRS universal ceremonial · fat controllers / minimal-API pa konventë të vetme · Swagger UI paralel.
+**Risqet:** mediator shton një indirection (kufizohet me allowlist §8 të Convention-it) · migrimi C i AccessControl mund të prekë teste (politika: baseline i plotë GREEN, ndryshime vetëm mekanike, çdo devijim semantik = flamur) · Scoped lifetime kërkon kujdes në background workers (vendoset per-host në Increment A).
+**Rendi i implementimit:** **A** schema-free pilot (PlatformStatus) → **B** identity foundation (ADR-028) → **C** AccessControl migration → **D** module të reja — secili me PR/CI/review/Human Gate; detajet = Convention §15.
+**Specifikimi subordinate:** `docs/canonical/06-architecture/Application_Architecture_Convention.md` — specifikimi normativ i detajuar; SSOT/Roadmap/INDEX janë vetëm consumers/pointers.
+**Pronari:** Pronari + Tech + PM. **Afati:** effective vetëm pas Human Gate + merge; implementimi nis me Increment A me goal/prompt të ri.
 
 ---
 ## Përmbledhje statusi
 - **Accepted:** 17 (ADR-002…009, 013, 015, 018…024).
 - **Superseded:** 2 (ADR-001, ADR-010) — historia ruhet; target-i aktiv = ADR-024.
-- **Open:** 9 (ADR-011, ADR-012, ADR-014, ADR-016, ADR-017, ADR-025, ADR-026, ADR-027, ADR-028) — secili me pronar/gate.
+- **Open:** 8 (ADR-011, ADR-012, ADR-014, ADR-016, ADR-017, ADR-025, ADR-026, ADR-027) — secili me pronar/gate.
+- **Proposed:** 2 (ADR-028, ADR-029) — **OWNER-DIRECTED TARGET / PENDING_INDEPENDENT_REVIEW; effective vetëm pas Human Gate + merge**; ADR-025/026/027 NUK mbyllen nga këto propozime.
 - ADR-024 mbyll runtime-in bazë dhe kufijtë e deployables, jo desktop wrapper/OS, identity provider/store ose gates domain/ops; implementimi fillon vetëm pas merge-it të aprovuar të PR-së së kanonizimit.

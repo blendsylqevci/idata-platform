@@ -15,7 +15,7 @@ Increment 1 është mbyllur teknikisht:
 - PR #6: Hapi B — `packages/database`, `apps/api`, `apps/web`, ping real `web → api → db`.
 - PR #8: security dependency bump — NestJS 11, Vitest 3, `multer` patch përmes `pnpm.overrides`; Dependabot alerts ranë nga 21 në 6.
 - PR #21: GOV-001 integrity-linter baseline advisory (`DOC-CORE` + `HISTORY-PRIV`) — merged; required-CI mbetet gated.
-- ADR-024: target stack/topology **MERGED/ACCEPTED** (PR #23). **Platform Foundation Bootstrap pre-F1 = COMPLETED (PR #24 merged, squash `0f12488c`)**; **F1 = ACTIVE / NOT COMPLETE (increment aktual F1.1)**; pjesa përtej F1.1 ende **NOT YET IMPLEMENTED**. Walking skeleton-i TS ruhet si evidence/oracle gjatë migrimit.
+- ADR-024: target stack/topology **MERGED/ACCEPTED** (PR #23). Bootstrap pre-F1 = COMPLETED (PR #24, `0f12488c`); **F1.1 = COMPLETED (PR #25 merged, squash `1dc06d5`, 27.07.2026)**; **F1 = ACTIVE / NOT COMPLETE — hapi aktual = Architecture Completion Freeze docs-only (ADR-029 + ADR-028 PROPOSED / PENDING_INDEPENDENT_REVIEW; rendi i implementimit A/B/C/D pas Human Gate + merge)**; pjesa përtej F1.1 ende **NOT YET IMPLEMENTED**. Walking skeleton-i TS ruhet si evidence/oracle gjatë migrimit.
 - Faza 0 ka bazë të fortë dokumentimi, data model, evidence nga PRO DATA, SEF test phase active, formula USAID e validuar dhe canonical docs të pastruara.
 
 Ky dokument është ura mes “kemi bazën” dhe “dimë çka ndërtojmë, në çfarë rendi, me cilat porta, dhe çka ndodh nëse diçka dështon”.
@@ -54,7 +54,7 @@ Këto janë datat më të vona të pranueshme që ruajnë shansin real për cuto
 | ADR-014 | Open | Connection pooling strategy | Tech | Faza 1/2 load path | 2026-07-20 | vazhdo me dev pool vetëm për PoC; mos bëj load commitments |
 | ADR-012 | Open | GL posting: PostgreSQL invariants/functions vs C# transaction/hybrid | Tech + PM | Accounting Core | para F2 freeze | pa Accounting Core freeze |
 | ADR-013 | Closed via ADR-024 | Edge Hub = ASP.NET Core + PostgreSQL lokal; POS/mobile = SQLite | Tech + ops | Foundation Bootstrap / PoC-4b | 2026-07-23 | hardware/support final mbetet gate |
-| ADR-024 | **MERGED / ACCEPTED** (PR #23, merge `e0d4cdc`) | Platform Runtime & Architecture Stack Freeze; target ≠ implemented — NOT YET IMPLEMENTED përtej Bootstrap-it | Pronari + Tech + PM | Foundation Bootstrap; F1; Step B | para migrimit | Bootstrap = COMPLETED (PR #24 merged `0f12488c`); F1 = ACTIVE (increment aktual F1.1); Step B = NOT STARTED / NO-GO |
+| ADR-024 | **MERGED / ACCEPTED** (PR #23, merge `e0d4cdc`) | Platform Runtime & Architecture Stack Freeze; target ≠ implemented — NOT YET IMPLEMENTED përtej Bootstrap-it | Pronari + Tech + PM | Foundation Bootstrap; F1; Step B | para migrimit | Bootstrap = COMPLETED (PR #24 `0f12488c`); **F1.1 = COMPLETED (PR #25 `1dc06d5`)**; F1 = ACTIVE — hapi aktual = Architecture Completion Freeze docs-only (ADR-029/ADR-028 PROPOSED); Step B = NOT STARTED / NO-GO |
 | ADR-025 | Open | Encryption-at-rest + key custody për POS/mobile/Edge/cloud; zero keys në renderer/repo/log | Pronari + Tech | F1 / F5 / pilot | para data-bearing F1 | pa vendim s'futen të dhëna reale dhe s'ka pilot |
 | ADR-026 | Open | Hosting/object-storage/secrets/KMS/backup/observability providers + rezidencë/DPA/exit plan | Pronari + Tech | mjediset jo-lokale | para provider binding | zhvillimi mbetet lokal/provider-neutral |
 | ADR-027 | Open | POS desktop wrapper (Electron vs tjetër) + OS matrix Windows/macOS/Linux, me installer/update/rollback dhe hardware/driver evidence | Pronari + Tech | POS production shell / F7 | para implementimit të shell-it production | POS-i mbetet i instalueshëm, por shell/OS nuk ngrihen pa ADR-017/HW-001/PoC-4b |
@@ -90,7 +90,7 @@ Ky plan ruan dhjetorin për parallel run, UAT, trajnim, freeze dhe cutover rehea
 
 | Faza | Owner kryesor | Kohëzgjatje e vlerësuar | Dritarja e synuar | Data më e vonë e nisjes | Milestone / alarm |
 |---|---|---:|---|---:|---|
-| F1 Foundation | Tech Lead + PM | 3–4 javë | HISTORICAL baseline: 2026-07-08 → 2026-08-05 | rebaseline: **F1 ACTIVE nga 2026-07-24** (post merge i Bootstrap PR #24; pa backdating) | F1 nisi mbi Bootstrap COMPLETED; increment aktual = F1.1 Tenant Authorization & Business-Scoped Audit Core |
+| F1 Foundation | Tech Lead + PM | 3–4 javë | HISTORICAL baseline: 2026-07-08 → 2026-08-05 | rebaseline: **F1 ACTIVE nga 2026-07-24** (post merge i Bootstrap PR #24; pa backdating) | F1 nisi mbi Bootstrap COMPLETED; **F1.1 = COMPLETED (PR #25 merged `1dc06d5`, 27.07.2026)**; hapi aktual = Architecture Completion Freeze docs-only (ADR-029/ADR-028 PROPOSED; incrementet A/B/C/D pas Human Gate + merge) |
 | F2 Accounting Core | Accounting Lead + Tech | 4–5 javë | 2026-08-01 → 2026-09-05 | 2026-08-05 | Pa F2, as KABI as PLANET nuk kanë GL/TVSH |
 | F3 Stok + Recetura + COGS | Inventory/Accounting Lead | 3–4 javë | 2026-08-20 → 2026-09-20 | 2026-08-25 | COGS/LOT/FEFO para KABI MVP |
 | F4 KABI Operacional MVP | KABI Product Lead + Tech | 4 javë | 2026-09-05 → 2026-10-05 | 2026-09-10 | Farmer intake/lab/tank/settlement duhet të hyjë në UAT |
@@ -134,7 +134,9 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 **Qëllimi:** të krijohet bazamenti i përdorshëm dhe i sigurt: auth, multi-company, RBAC, audit, monitorim, backup discipline dhe vendimi i payroll-it minimal.
 
-**Owner / kohëzgjatje / rebaseline:** Tech Lead + PM · 3–4 javë · target-i i vjetër 2026-07-15 = OVERDUE / SUPERSEDED; **nisja reale e F1 = 2026-07-24** (pas merge-it të Bootstrap-it, PR #24 squash `0f12488c` — pa backdating); increment aktual = **F1.1 Tenant Authorization & Business-Scoped Audit Core**.
+**Owner / kohëzgjatje / rebaseline:** Tech Lead + PM · 3–4 javë · target-i i vjetër 2026-07-15 = OVERDUE / SUPERSEDED; **nisja reale e F1 = 2026-07-24** (pas merge-it të Bootstrap-it, PR #24 squash `0f12488c` — pa backdating); **F1.1 = COMPLETED (PR #25 merged, squash `1dc06d5`, 27.07.2026)**; hapi aktual = **Architecture Completion Freeze (docs-only): ADR-029 Application Architecture Convention + ADR-028 Identity Authority & Store = PROPOSED / PENDING_INDEPENDENT_REVIEW** (effective vetëm pas Human Gate + merge).
+
+**Rendi i implementimit pas merge-it të freeze-it (secili me PR/CI/review/Human Gate; asnjëri s'nis pa goal/prompt të ri):** **Increment A** — schema-free pilot (PlatformStatus: mediator martinothamar/Mediator + Controllers/BaseApiController + Scalar env-gated; zero migrim/Identity) → **Increment B** — identity foundation (ASP.NET Core Identity + OpenIddict, schema `identity`, migrimi 0003+, zëvendësim i kontrolluar i architecture test-it provider-neutrality) → **Increment C** — AccessControl migration te Controllers/Mediator (baseline i plotë testesh — rillogaritet në nisje; authority-lock/transaction/idempotency/audit të paprekura) → **Increment D** — modulet e reja sipas convention-it.
 **Feature buckets:** Shared MVP, Accounting MVP foundations, Requires-ADR.
 
 **Scope brenda**
@@ -697,7 +699,7 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 1a. **GOVERNANCE PREREQUISITE — GOV-001 (COMPLETED BASELINE me merge-in e PR #21):** engine + `DOC-CORE`/`HISTORY-PRIV` advisory; 14 profile NOT_IMPLEMENTED; required-CI mbetet gated (`HG-LINTER-REQUIRED`).
 1b. **ADR-024 (COMPLETED — MERGED / ACCEPTED me PR #23, merge `e0d4cdc`):** stack-u/topologjia e aprovuar e kanonizuar; pjesa e target-it **përtej Foundation Bootstrap-it/F1 mbetet NOT YET IMPLEMENTED**.
 1c. **PLATFORM FOUNDATION BOOTSTRAP / STACK MIGRATION PRE-F1 = COMPLETED (PR #24 MERGED, squash `0f12488c`, 24.07.2026):** solution .NET + CI · një API/module smoke path · PostgreSQL dev migration path · OpenAPI client generation · Angular shell minimal — merged në main pas Fable→Codex→Human Gate. Legacy TS ruhet si oracle; asnjë modul biznesi nuk zgjerohet mbi stack-un e vjetër. Evidence: `docs/canonical/06-architecture/Platform_Foundation_Bootstrap_Record.md`.
-1d. **GATE AKTUAL — F1 FOUNDATION në stack-un e ri (ACTIVE / NOT COMPLETE):** Identity/Tenant/RBAC · audit · encryption/key custody · observability · backup/recovery · i18n foundation. Increment aktual: **F1.1 Tenant Authorization & Business-Scoped Audit Core** (modul AccessControl provider-neutral; identity provider/store = ADR-028 OPEN; ENG-004 fallback business-scoped-only AKTIV; Step B/C, PREFLIGHT, Tier 2 = NO-GO).
+1d. **GATE AKTUAL — F1 FOUNDATION në stack-un e ri (ACTIVE / NOT COMPLETE):** Identity/Tenant/RBAC · audit · encryption/key custody · observability · backup/recovery · i18n foundation. **F1.1 = COMPLETED (PR #25 merged `1dc06d5`, 27.07.2026)**; hapi aktual = **Architecture Completion Freeze docs-only** (ADR-029 convention + ADR-028 identity target = PROPOSED / PENDING_INDEPENDENT_REVIEW; incrementet A/B/C/D pas Human Gate + merge; ENG-004 fallback AKTIV; ENG-005 OPEN; Step B/C, PREFLIGHT, Tier 2 = NO-GO).
 2. **Step B — PRE-Tier2 code hardening (`ATK-012`, P0) në Fiscal bounded context të stack-ut të ri:** mbyllja e **T2-01..T2-10** (Gate v2 §4).
 3. **Step C — Fiscal Semantics Conformance Pack:** official golden vectors + C#↔TypeScript offline decimal/protobuf/hash equivalence + fake-HTTP/negative tests (kundër C#/Go @ pins).
 4. **Independent re-review** i deltës + i të gjitha gates të Tier 2.
