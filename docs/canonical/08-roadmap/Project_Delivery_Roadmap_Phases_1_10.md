@@ -1,7 +1,7 @@
 # iData+ — Project Delivery Roadmap, Fazat 1–10
 
 **Status:** canonical / approved (kopja kanonike e roadmap-it — miratuar nga Pronari; merged PR #9, përditësime me PR review)  
-**Data:** 2026-07-07 · **Përditësuar:** 2026-07-24
+**Data:** 2026-07-07 · **Përditësuar:** 2026-07-28 (PR #25 MERGED; PR #26 OPEN — ADR-028/029 PROPOSED)
 **Burime kryesore:** SSOT §3/§8/§12, Feature Status Register, Outstanding Confirmations Tracker, ADR Register, 5 PoC Specs, PRO DATA Evidence Closure, KABI Operational Evidence Update, Accountant Confirmation Pack, Increment 1 PR #4/#6, security PR #8  
 **Rregull i hekurt:** ky roadmap **nuk krijon numërim të ri fazash**. Ndjek 1:1 SSOT §3. Nëse ndryshon numërimi, duhet vendim formal në SSOT + Decisions Log.
 

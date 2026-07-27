@@ -27,14 +27,16 @@ contracts/openapi/platform-v1.json  # spec determinist — burimi: ASP.NET Core 
 Domain → asgjë · Application → Domain · Infrastructure → Application+Domain ·
 Presentation → Application(+Domain) · DbMigrator → Infrastructure · Api = composition root.
 
-> **HISTORICAL CORRECTION / SUPERSEDED POINTER (27.07.2026, docs-only — pa rishkrim historie):**
-> rreshti i mësipërm pasqyron formulimin e kohës së Bootstrap-it. Grafiku FINAL i
-> kanonizuar nga ADR-029 (i provuar nga `DependencyDirectionTests` mbi metadata reale,
-> direkt dhe transitive) është: **`DbMigrator → Persistence` dhe vetëm unazat e brendshme
-> realisht të nevojshme — JO blanket dependency ndaj Infrastructure**; `Persistence` =
-> migration owner NEUTRAL me zero varësi ndaj moduleve; zero reachability cross-module.
-> Autoriteti aktiv = ADR-029 + `Application_Architecture_Convention.md` §2. Fakti që
-> Bootstrap-i vetë NUK implementoi mediator/Identity/Scalar mbetet i pandryshuar.
+> **HISTORICAL CORRECTION / SUPERSEDED POINTER (27.07.2026, korrigjuar 28.07.2026, docs-only — pa rishkrim historie):**
+> rreshti i mësipërm pasqyron formulimin e kohës së Bootstrap-it. Grafiku i saktë REAL
+> (i provuar nga `DependencyDirectionTests` mbi metadata reale, direkt dhe transitive)
+> është: **`DbMigrator → Persistence` dhe vetëm unazat e brendshme realisht të nevojshme
+> — JO blanket dependency ndaj Infrastructure**; `Persistence` = migration owner NEUTRAL
+> me zero varësi ndaj moduleve; zero reachability cross-module. Ky grafik është
+> **PROPOSED TARGET GRAPH, subordinate ndaj ADR-029** — bëhet autoritet aktiv **VETËM pas
+> Fable/Codex review, Human Gate dhe merge**; deri atëherë ky Record mbetet evidencë
+> HISTORIKE e implementimit aktual. Fakti që Bootstrap-i vetë NUK implementoi
+> mediator/Identity/Scalar mbetet i pandryshuar.
 Pa MediatR/AutoMapper/broker/Redis/identity provider/UI kit; pa "Common/Utils" junk drawer;
 query/handler i thjeshtë (pa CQRS ceremonial).
 

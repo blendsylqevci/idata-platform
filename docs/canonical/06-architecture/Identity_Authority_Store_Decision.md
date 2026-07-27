@@ -2,7 +2,7 @@
 
 **Statusi:** **PROPOSED / OWNER-DIRECTED TARGET / PENDING_INDEPENDENT_REVIEW — EFFECTIVE ONLY AFTER HUMAN GATE + MERGE.**
 **Autoriteti:** ky dokument është **specifikimi SUBORDINATE ndaj ADR-028** (`docs/canonical/01-phase0/05_Decision_Gates_ADR.md`). ADR-028 mban vendimin; ky dokument mban boundary-t, schema/table map, flows, security gates, migrimin, rollback-un dhe acceptance criteria. Në konflikt fiton ADR-028.
-**Data:** 27.07.2026 (v1; **corrected pre-merge 27.07.2026** — correction pass i review-t të pavarur mbi PR #26, para merge-it; pa v2 artificial) · **Pronari:** Pronari + Tech · **Kufiri:** ZERO kod/dependency/migrim nga PR-ja që e krijon; implementimi = **Increment B** i rendit A/B/C/D (shih `Application_Architecture_Convention.md` §15). Asnjë secret/konfigurim real këtu.
+**Data:** 27.07.2026 (v1; **corrected pre-merge 27.07.2026 · 28.07.2026** — correction passes të review-t të pavarur mbi PR #26, para merge-it; pa v2 artificial) · **Pronari:** Pronari + Tech · **Kufiri:** ZERO kod/dependency/migrim nga PR-ja që e krijon; implementimi = **Increment B** i rendit A/B/C/D (shih `Application_Architecture_Convention.md` §15). Asnjë secret/konfigurim real këtu.
 
 ---
 
@@ -39,7 +39,17 @@ ASP.NET Core Identity + OpenIddict       AccessControl (F1.1, i pandryshuar)
 - **Projection absent / stale / ambiguous në rrugë autorizimi → DENY fail-closed** — kurrë "lejo se s'dimë".
 - Asnjë query direkte cross-schema në authority path; asnjë credential dhe asnjë PII e panevojshme në `platform.app_user`; audit/correlation pa material sensitiv.
 - **Mekanizmi konkret i delivery-t (outbox / event / worker / transport) = OPEN — vendoset në Increment B**, jo në këtë PR.
-- **Asgjë nga kjo kontratë NUK është e implementuar sot** — është kontratë target për Increment B, me teste failure/replay/duplicate/out-of-order/reconciliation si parakusht (shih edhe zgjerimin e `ENG-005` në Tracker).
+
+**FRESHNESS FAIL-CLOSED (autorizim vetëm nga projection i PROVUESHËM, jo thjesht ekzistues):**
+
+- Projection-i lokal mban një **sinjal MONOTON authority-version / watermark / revocation-epoch** (ose mekanizëm ekuivalent të provueshëm); Increment B përcakton: burimin e versionit, ruajtjen lokale, krahasimin monoton, **freshness bound/lease** dhe sjelljen gjatë ndërprerjes.
+- **Version i munguar, i paqartë, i pakrahasueshëm, i vjetruar, OSE burim freshness-i i paarritshëm → DENY** — kurrë silent allow.
+- **Disable/revoke i commit-uar te identity authority NUK lejohet të mbetet autorizim aktiv pafundësisht** vetëm sepse delivery u mbajt — freshness bound-i e detyron DENY-in brenda kufirit.
+- Pas recovery/reconciliation, projection-i **konvergon me authority-n DETERMINISTIKISHT, pa rikthyer grant-e të revokuara**.
+
+**Fixture DISKRIMINUES i Increment B (i detyrueshëm):** (1) autorizimi fillimisht lejohet; (2) disable/revoke commit-on te authority; (3) delivery i projection-it mbahet QËLLIMISHT; (4) freshness s'provohet dot; (5) platform authorization = **DENY**; (6) delivery/reconciliation rikthehet; (7) projection-i konvergon me authority-n dhe mbetet DENY. Plus rastet: duplicate delivery · out-of-order delivery · stale authority version · version i munguar/invalid · authority/freshness source unavailable · restart/recovery/reconciliation.
+
+- **Asgjë nga kjo kontratë NUK është e implementuar sot** — kontratë target për Increment B; **OPEN / planned / documented / waiver NUK numërohen PASS** (shih edhe zgjerimin e `ENG-005` në Tracker).
 
 ## 3. Schema / table map (emra target — verifikohen në Increment B PARA migrimit 0003)
 
@@ -96,8 +106,11 @@ MFA + recovery codes · signing/encryption keys **JASHTË** repo/log/renderers (
 ### 5.2 Credentials / certificates / keys — policy eksplicite
 
 - `AddDevelopmentSigningCertificate()` · `AddDevelopmentEncryptionCertificate()` · `AddEphemeralSigningKey()` · `AddEphemeralEncryptionKey()` lejohen **VETËM nën `IsDevelopment()`** (provenance: dokumentimi zyrtar i OpenIddict për encryption & signing credentials).
-- Në **Staging, Production ose environment të panjohur**: aplikacioni **DËSHTON në startup** nëse ka vetëm development/ephemeral credentials — fail-closed.
-- Production kërkon: signing DHE encryption credentials **persistente** · jashtë repo-s/log-eve/renderer-ëve · availability për të gjitha instancat · custody/access control · backup/recovery · **expiry monitoring** · **rotation me overlap të provuar** · signing/encryption të NDARA nga TLS certificate kur kërkohet · provenance dhe gate sipas **ADR-025/ADR-026**.
+- Development përcaktohet **VETËM** nga environment-i real `IHostEnvironment.IsDevelopment()`.
+- Jashtë Development, startup **DËSHTON nëse ekziston ÇFARËDO development ose ephemeral credential** — **edhe kur krahas tij ekzistojnë credentials persistent** (mixed persistent + dev/ephemeral jashtë Development = **FAIL**).
+- Jashtë Development, startup **DËSHTON nëse mungon persistent signing set OSE persistent encryption set** — të dyja të detyrueshme.
+- **Production/Staging/environment i panjohur NUK lejohen të bien në development fallback.**
+- Production credentials: jashtë repo-s/log-eve/renderer-ëve · **persistente** · me **rotacion/restart policy të provueshme** · availability për të gjitha instancat · custody/access control · backup/recovery · **expiry monitoring** · **rotation me overlap të provuar** · signing/encryption të NDARA nga TLS certificate kur kërkohet · provenance dhe gate sipas **ADR-025/ADR-026**.
 - **NUK ndalohet kategorikisht çdo self-signed certificate**: një certificate privately/self-issued mund të përdoret VETËM nëse lifecycle, trust, custody, rotation dhe deployment janë të aprovuara dhe të provuara.
 - Ky PR **nuk zgjedh** CA, KMS, secret store apo hosting provider (ADR-026 OPEN).
 
@@ -140,16 +153,26 @@ Testi ekzistues `Zero_identity_provider_konkret_ne_asnje_assembly_te_platformes`
 - Kthimi i kodit: paketat Identity/OpenIddict hiqen nga projektet e aprovuara, wiring-u nga host-i, projection sync — pa prekur `platform` schema, F1.1, 0001/0002 apo klientët e gjeneruar; architecture test-i i zëvendësuar rikthehet në formën provider-neutral.
 - **ZERO pretendim se rollback-u production është provuar nga kjo PR docs-only**; owner/gate për backup/PITR/key/provider = **ADR-025/ADR-026 OPEN**.
 
-## 9. Acceptance criteria (Increment B — matëse, jo deklarative)
+## 9. Acceptance matrix e Increment B (e MATSHME — çdo rresht me evidence, status, owner, closure gate)
 
-1. Schema `identity` me tabelat e §3 (emra të verifikuar), migrim 0003+ me upgrade path real nga 0002.
-2. Authorization Code + PKCE end-to-end kundër instance sintetike; implicit/password grant të provuara TË REFUZUARA.
-3. MFA + recovery + lockout + rotation/reuse detection me teste reale.
-4. Projection `app_user` 1:1 me teste (krijim/status sync; zero shkrim direkt cross-schema në rrugët authz).
-5. Tenant RBAC i F1.1 i PAPREKUR (baseline i plotë i testeve GREEN; zero Identity-role në vendimet e autorizimit).
-6. Architecture test i zëvendësuar sipas §7; zero provider i paaprovuar.
-7. Keys jashtë repo/log/renderers; zero sekret në git (gitleaks/guard).
-8. Audit i ngjarjeve identity i pranishëm dhe i redaktuar.
+**Rregull:** statusi i çdo rreshti sot = **OPEN / NOT IMPLEMENTED**; **OPEN / waiver / planned / documented NUK numërohen PASS dhe NUK e mbyllin Increment B** — mbyllja kërkon testin/evidencën e kolonës 2 të ekzekutuar GREEN.
+
+| # | Kriteri | Evidence/test i pritshëm | Statusi sot | Owner | Closure gate |
+|---|---|---|---|---|---|
+| A1 | Projection: committed disable/revoke + **withheld delivery** → DENY kur freshness s'provohet (fixture 7-hapësh §2.1) | integration test kundër PostgreSQL real me delivery të mbajtur qëllimisht | OPEN | Tech | Increment B PR + review |
+| A2 | Projection: duplicate / out-of-order / stale version / missing-invalid version / authority-freshness source unavailable | teste deterministike per-rast, zero silent allow | OPEN | Tech | Increment B PR + review |
+| A3 | Projection: restart/recovery/reconciliation → konvergim deterministik pa rikthim grant-esh të revokuara | test recovery + reconciliation | OPEN | Tech | Increment B PR + review |
+| B1 | Token validation — issuer i gabuar · audience e gabuar → refuzim | teste negative | OPEN | Tech | Increment B PR + review |
+| B2 | Token validation — signature/JWKS invalid OSE unavailable · unknown signing key → fail-closed | teste negative + burim i paarritshëm | OPEN | Tech | Increment B PR + review |
+| B3 | Token validation — key rollover me overlap · expired/not-yet-valid · clock-skew policy e kufizuar | teste pozitive+negative+overlap | OPEN | Tech | Increment B PR + review |
+| C1 | Credentials: matrica e plotë §5.2 — Development+dev OK · Development pa set minimal FAIL · Staging/Production/unknown + ÇFARËDO dev/ephemeral = startup FAIL (edhe mixed) · persistent signing missing FAIL · persistent encryption missing FAIL · set valid SUCCESS | startup tests per-rresht | OPEN | Tech | Increment B PR + review |
+| C2 | Credentials: restart me të njëjtat creds · rotation/rollover me overlap të kontrolluar · expired/invalid/unavailable → fail-closed | teste lifecycle | OPEN | Tech | Increment B PR + review |
+| D1 | Verification policy për email/telefon si **gate i veçantë** per-klasë user/client (§5.3); **recovery NUK e zëvendëson verification policy** | policy e specifikuar + teste enrollment/expiry/single-use/rate-limit | OPEN | Pronari + Tech | Increment B PR + Human Gate |
+| E1 | Schema `identity` me tabelat §3 (emra të verifikuar) · migrim 0003+ me upgrade real nga 0002 | migration tests | OPEN | Tech | Increment B PR + review |
+| E2 | Authorization Code + PKCE end-to-end; implicit/password grant të REFUZUARA | teste flows | OPEN | Tech | Increment B PR + review |
+| E3 | MFA + recovery + lockout + refresh rotation/reuse detection | teste reale | OPEN | Tech | Increment B PR + review |
+| E4 | Tenant RBAC F1.1 i PAPREKUR (baseline GREEN; zero Identity-role në authz) | baseline i plotë | OPEN | Tech | Increment B PR + review |
+| E5 | Architecture test i zëvendësuar §7; zero provider i paaprovuar; keys jashtë repo/log/renderers; audit identity i redaktuar | architecture + gitleaks/guard + audit tests | OPEN | Tech | Increment B PR + review |
 
 ## 10. External IdP — kushtet e RIHAPJES (jo adoptim automatik)
 

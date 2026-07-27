@@ -2,7 +2,7 @@
 
 **Statusi:** **TARGET CONVENTION — EFFECTIVE ONLY AFTER ADR-029 HUMAN GATE + MERGE. IMPLEMENTIMI FILLON ME INCREMENT A.**
 **Autoriteti:** ky dokument është **specifikimi normativ i detajuar, SUBORDINATE ndaj ADR-029** (`docs/canonical/01-phase0/05_Decision_Gates_ADR.md`). ADR-029 mban vendimin; ky dokument mban detajet. Në konflikt fiton ADR-029.
-**Data:** 27.07.2026 (v1; **corrected pre-merge 27.07.2026** — correction pass i review-t të pavarur mbi PR #26, para merge-it; pa v2 artificial) · **Pronari:** Tech/Platform Owner + PM · **Kufiri:** ASNJË rresht i këtij dokumenti nuk është i implementuar nga PR-ja që e krijon — zero kod, zero dependency, zero migrim.
+**Data:** 27.07.2026 (v1; **corrected pre-merge 27.07.2026 · 28.07.2026** — correction passes të review-t të pavarur mbi PR #26, para merge-it; pa v2 artificial) · **Pronari:** Tech/Platform Owner + PM · **Kufiri:** ASNJË rresht i këtij dokumenti nuk është i implementuar nga PR-ja që e krijon — zero kod, zero dependency, zero migrim.
 
 ---
 
@@ -102,10 +102,10 @@ Lejohen VETËM për shqetësime realisht horizontale: **validation · telemetry 
 ## 10. Scalar / OpenAPI / klienti i gjeneruar
 
 - **OpenAPI mbetet kontrata autoritative** dhe burimi i vetëm i klientit TypeScript të gjeneruar (`contracts:generate` / `drift-check` të pandryshuara).
-- **Scalar UI regjistrohet/ekspozohet VETËM kur `IHostEnvironment.IsDevelopment()` = true.** **Staging = absent. Production = absent. Environment i panjohur/munguar = absent, FAIL-CLOSED.**
-- OpenAPI document + generated TypeScript client mbeten **të pavarura** nga UI-ja (gjenerohen build-time si sot).
+- **Kontrata target e Increment A:** runtime `MapOpenApi()` DHE `MapScalarApiReference()` regjistrohen **VETËM brenda së njëjtës degë EKZAKTE `app.Environment.IsDevelopment()`**; jashtë Development, **as runtime OpenAPI JSON endpoint-i as Scalar UI nuk ekspozohen** (Staging = absent; Production = absent; environment i panjohur/munguar = absent, FAIL-CLOSED); kërkohen **teste negative për Staging/Production**.
+- Build-time OpenAPI generation + generated TypeScript client mbeten **të pavarura** nga runtime documentation endpoints (gjenerohen build-time si sot).
 - Nëse në të ardhmen kërkohet internal non-development documentation UI → **ADR/gate i ri** me authentication, authorization dhe network controls — jo zgjerim i heshtur.
-- Kjo PR vetëm e dokumenton; **Increment A e implementon dhe e provon** (test që Scalar mungon jashtë Development).
+- **DEVIJIM I NJOHUR DHE I DEKLARUAR — gjendja aktuale:** `MapOpenApi` regjistrohet **pa kusht environment-i** (`src/platform/Idata.Platform.Api/Program.cs:35`). Kontrata Development-only është **TARGET i Increment A, JO gjendje aktuale**; mbyllet në Increment A me teste negative për Staging/Production. Deri atëherë ky është devijim i njohur — gjendja aktuale **NUK quhet compliant me target-in**. (Scalar sot nuk ekziston fare në kod — vetëm target.)
 - **Zero Swagger/Swashbuckle paralel** pa ADR të ri.
 
 ## 11. Rregulli i vendimit DDD
@@ -135,7 +135,7 @@ Lejohen VETËM për shqetësime realisht horizontale: **validation · telemetry 
 ## 15. Rendi i implementimit — Incrementet A/B/C/D (secili me PR, CI, review dhe Human Gate)
 
 ### Increment A — SCHEMA-FREE PILOT
-Vetëm `PlatformStatus`; martinothamar/Mediator (pin + provenance); Controllers + `BaseApiController` minimal; Scalar dev/internal; OpenAPI/generated-client parity; architecture tests të reja; **zero migrim DB; zero Identity; zero ndryshim semantik i status endpoint-it**.
+Vetëm `PlatformStatus`; martinothamar/Mediator (pin + provenance); Controllers + `BaseApiController` minimal; **Scalar + runtime OpenAPI VETËM nën `IsDevelopment()` (§10) — përfshirë MBYLLJEN e devijimit aktual `Program.cs:35` (MapOpenApi i pakushtëzuar) me teste negative Staging/Production**; OpenAPI/generated-client parity; architecture tests të reja; **zero migrim DB; zero Identity; zero ndryshim semantik i status endpoint-it**.
 
 ### Increment B — IDENTITY FOUNDATION
 ASP.NET Core Identity + OpenIddict; schema `identity`; migrimi **0003+**; OIDC flows + security tests; projection boundary me `platform.app_user`; **zëvendësimi i kontrolluar** i architecture test-it të provider-neutrality (shih ADR-028 follow-up); **pa Identity roles për tenant RBAC**.
