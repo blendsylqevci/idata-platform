@@ -49,7 +49,7 @@
 | Edge | **ASP.NET Core Edge Hub + PostgreSQL lokal** | Autoritet operacional i lokacionit gjatë ndërprerjes; sinkronizohet me cloud |
 | POS Local Host | **.NET process i shpërndarë me instalimin e POS-it** | Zotëron domain/outbox/SQLite/keys dhe ekspozon kontratë lokale IPC të tipizuar; renderer-i nuk hap DB/keys; wrapper-i vendoset në ADR-027 |
 | Pajisje | **.NET Device Agent** | Printerë, skanerë, peshore dhe integrime lokale; pa DB access nga UI |
-| Identity | **OIDC/OAuth2 contract + provider-neutral ASP.NET Core authorization boundary** | Një authority/login/SSO, MFA, company selector, RBAC per modul, tenant authorization dhe break-glass i audituar; OpenIddict vs external IdP + store = ADR-028 OPEN |
+| Identity | **OIDC/OAuth2 contract + provider-neutral ASP.NET Core authorization boundary** | Një authority/login/SSO, MFA, company selector, RBAC per modul, tenant authorization dhe break-glass i audituar; provider/store target = **ADR-028 PROPOSED / PENDING_INDEPENDENT_REVIEW** — effective vetëm pas independent review + Human Gate + merge |
 | Të dhënat | **PostgreSQL qendror** + module-owned schemas; **SQLite e enkriptuar** në POS/mobile | Cloud = source-of-record afatgjatë; POS SQLite zotërohet nga local host-i, mobile SQLite nga data layer-i; asnjë renderer/UI nuk hap DB/keys direkt |
 | Kontratat | **OpenAPI → generated TypeScript clients** | I vetmi kufi i tipizuar UI/API; DTO-të nuk kopjohen me dorë |
 | Offline | **Versioned outbox + idempotency + retry/replay** | Sync vendor-i nuk kyçet në këtë ADR |
