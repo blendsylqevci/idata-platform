@@ -29,6 +29,12 @@ Presentation → Application(+Domain) · DbMigrator → Infrastructure · Api = 
 Pa MediatR/AutoMapper/broker/Redis/identity provider/UI kit; pa "Common/Utils" junk drawer;
 query/handler i thjeshtë (pa CQRS ceremonial).
 
+> **HISTORICAL BOOTSTRAP SCOPE (shënim 27.07.2026, docs-only):** kjo deklaratë përshkruan
+> saktë çfarë PR #24 NUK implementoi — dhe mbetet e saktë si histori. ADR-029 dhe ADR-028
+> qeverisin target-in e incrementeve të ARDHSHME (mediator martinothamar/Mediator,
+> Controllers, Scalar, Identity/OpenIddict) vetëm pasi të kalojnë review, Human Gate dhe
+> merge. Historia e Bootstrap-it mbetet e pandryshuar.
+
 ## Command matrix (root)
 
 | Komanda | Çfarë bën |
