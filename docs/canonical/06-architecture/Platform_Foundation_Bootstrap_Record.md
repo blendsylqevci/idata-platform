@@ -26,8 +26,25 @@ contracts/openapi/platform-v1.json  # spec determinist — burimi: ASP.NET Core 
 
 Domain → asgjë · Application → Domain · Infrastructure → Application+Domain ·
 Presentation → Application(+Domain) · DbMigrator → Infrastructure · Api = composition root.
+
+> **HISTORICAL CORRECTION / SUPERSEDED POINTER (27.07.2026, korrigjuar 28.07.2026, docs-only — pa rishkrim historie):**
+> rreshti i mësipërm pasqyron formulimin e kohës së Bootstrap-it. Grafiku i saktë REAL
+> (i provuar nga `DependencyDirectionTests` mbi metadata reale, direkt dhe transitive)
+> është: **`DbMigrator → Persistence` dhe vetëm unazat e brendshme realisht të nevojshme
+> — JO blanket dependency ndaj Infrastructure**; `Persistence` = migration owner NEUTRAL
+> me zero varësi ndaj moduleve; zero reachability cross-module. Ky grafik është
+> **PROPOSED TARGET GRAPH, subordinate ndaj ADR-029** — bëhet autoritet aktiv **VETËM pas
+> Fable/Codex review, Human Gate dhe merge**; deri atëherë ky Record mbetet evidencë
+> HISTORIKE e implementimit aktual. Fakti që Bootstrap-i vetë NUK implementoi
+> mediator/Identity/Scalar mbetet i pandryshuar.
 Pa MediatR/AutoMapper/broker/Redis/identity provider/UI kit; pa "Common/Utils" junk drawer;
 query/handler i thjeshtë (pa CQRS ceremonial).
+
+> **HISTORICAL BOOTSTRAP SCOPE (shënim 27.07.2026, docs-only):** kjo deklaratë përshkruan
+> saktë çfarë PR #24 NUK implementoi — dhe mbetet e saktë si histori. ADR-029 dhe ADR-028
+> qeverisin target-in e incrementeve të ARDHSHME (mediator martinothamar/Mediator,
+> Controllers, Scalar, Identity/OpenIddict) vetëm pasi të kalojnë review, Human Gate dhe
+> merge. Historia e Bootstrap-it mbetet e pandryshuar.
 
 ## Command matrix (root)
 
@@ -96,7 +113,7 @@ i18n scaffold; CI që verifikon të dy stack-et; ky record.
 
 Identity/Tenant/RBAC production · audit/outbox/observability/recovery production ·
 encryption/key custody (ADR-025) · providers (ADR-026) · POS/wrapper (ADR-027) ·
-identity provider/store (ADR-028) · module biznesi · Edge/Device Agent/mobile/KDS ·
+identity provider/store (ADR-028 — PROPOSED 27.07.2026, effective pas Human Gate + merge) · module biznesi · Edge/Device Agent/mobile/KDS ·
 fiscal domain/SEF · Step B/C · preflight/Tier 2. Gates OPEN të ADR-024 të paprekura.
 
 ## Siguria (correction pass i review-t të pavarur, 24.07.2026)
