@@ -2,7 +2,7 @@
 
 **Statusi:** **TARGET CONVENTION — EFFECTIVE ONLY AFTER ADR-029 HUMAN GATE + MERGE. IMPLEMENTIMI FILLON ME INCREMENT A.**
 **Autoriteti:** ky dokument është **specifikimi normativ i detajuar, SUBORDINATE ndaj ADR-029** (`docs/canonical/01-phase0/05_Decision_Gates_ADR.md`). ADR-029 mban vendimin; ky dokument mban detajet. Në konflikt fiton ADR-029.
-**Data:** 27.07.2026 (v1) · **Pronari:** Tech/Platform Owner + PM · **Kufiri:** ASNJË rresht i këtij dokumenti nuk është i implementuar nga PR-ja që e krijon — zero kod, zero dependency, zero migrim.
+**Data:** 27.07.2026 (v1; **corrected pre-merge 27.07.2026** — correction pass i review-t të pavarur mbi PR #26, para merge-it; pa v2 artificial) · **Pronari:** Tech/Platform Owner + PM · **Kufiri:** ASNJË rresht i këtij dokumenti nuk është i implementuar nga PR-ja që e krijon — zero kod, zero dependency, zero migrim.
 
 ---
 
@@ -25,9 +25,18 @@ tests/platform/                        # Unit · Integration · Architecture
 
 Modulet ekzistuese (`PlatformStatus`, `AccessControl`) migrojnë në këtë formë GRADUALISHT sipas incrementeve A/C — jo big-bang.
 
-## 2. Drejtimet e varësisë (të pandryshuara nga Bootstrap-i, të provuara me ArchitectureTests)
+## 2. Drejtimet e varësisë (të provuara me ArchitectureTests mbi metadata reale)
 
-`Domain → asgjë` · `Application → Domain` (+ abstraksione të aprovuara) · `Infrastructure → Application + Domain` · `Presentation → Application (+ Domain)` · `DbMigrator → Infrastructure` · `Api = composition root` (i vetmi që sheh gjithçka). **Zero referencë direkte cross-module** — komunikim vetëm përmes kontratave të aprovuara. Persistence mbetet NEUTRAL ndaj moduleve (storage records POCO; mapping records↔domain në Infrastructure të modulit).
+Grafiku CANONICAL (i provuar nga `DependencyDirectionTests` mbi metadata reale, direkt DHE transitive):
+
+- `Domain → zero layer tjetër i platformës`;
+- `Application → vetëm Domain-i i modulit të vet` (+ abstraksione të aprovuara);
+- `Infrastructure → Application + Domain të modulit + Persistence (neutral/shared)`;
+- `Presentation → Application + Domain të modulit`;
+- **`Persistence` = migration owner NEUTRAL: zero varësi direkte ose transitive ndaj asnjë moduli** (storage records POCO; mapping records↔domain në Infrastructure të modulit);
+- **`DbMigrator → Persistence` dhe vetëm unazat e brendshme realisht të nevojshme — JO blanket dependency ndaj Infrastructure** (referenca reale e vetme sot: `Idata.Platform.Persistence`);
+- `Api = composition root` — i vetmi outer host që lidh komponentët;
+- **Zero reachability cross-module, direkt ose transitiv** — komunikim vetëm përmes kontratave të aprovuara.
 
 ## 3. Përgjegjësitë per-layer
 
@@ -93,19 +102,23 @@ Lejohen VETËM për shqetësime realisht horizontale: **validation · telemetry 
 ## 10. Scalar / OpenAPI / klienti i gjeneruar
 
 - **OpenAPI mbetet kontrata autoritative** dhe burimi i vetëm i klientit TypeScript të gjeneruar (`contracts:generate` / `drift-check` të pandryshuara).
-- **Scalar** = development/internal API reference UI mbi OpenAPI, **environment-gated** (vetëm Development/internal; kurrë i ekspozuar publik pa vendim të veçantë).
+- **Scalar UI regjistrohet/ekspozohet VETËM kur `IHostEnvironment.IsDevelopment()` = true.** **Staging = absent. Production = absent. Environment i panjohur/munguar = absent, FAIL-CLOSED.**
+- OpenAPI document + generated TypeScript client mbeten **të pavarura** nga UI-ja (gjenerohen build-time si sot).
+- Nëse në të ardhmen kërkohet internal non-development documentation UI → **ADR/gate i ri** me authentication, authorization dhe network controls — jo zgjerim i heshtur.
+- Kjo PR vetëm e dokumenton; **Increment A e implementon dhe e provon** (test që Scalar mungon jashtë Development).
 - **Zero Swagger/Swashbuckle paralel** pa ADR të ri.
 
 ## 11. Rregulli i vendimit DDD
 
-- **DDD strategjik kudo:** bounded contexts = modulet; ubiquitous language nga docs canonical.
-- **Tactical DDD (aggregates/domain events/value objects të plota) VETËM ku ka invariante reale** (p.sh. fiscal, GL posting, settlement). CRUD-i i thjeshtë nuk detyrohet në aggregate ceremonial.
+- **Modular boundaries përdoren në gjithë platformën — por një modul NUK shpallet automatikisht bounded context.** Bounded context kërkon **domain evidence**: ubiquitous language, model authority, invariante, ownership dhe boundary map; lidhja modul↔bounded-context dokumentohet me **context map/ADR kur provohet**.
+- **Tactical DDD (aggregates/domain events/value objects të plota) VETËM ku ka invariante reale** (p.sh. fiscal, GL posting, settlement). CRUD-i i thjeshtë nuk mbështillet me aggregate ceremonial.
+- Vendimi modular-monolith / module-first mbetet i PANDRYSHUAR.
 
 ## 12. Migration / versioning
 
 - Migrimet **0001/0002 NUK rishkruhen**; çdo schema change = **0003+ forward-only**.
 - EF Core mbetet migration owner i vetëm; SQL i audituar brenda migrimeve për constraints/triggers.
-- **GUID/UUID mbetet standard**; zero ndryshim në int IDs.
+- **GUID/UUID mbetet standard**; zero ndryshim në int IDs. **Arsyetimi:** UUID mbështet krijim të decentralizuar/OFFLINE të records pa round-trip te serveri (POS/mobile/Edge), identitet global dhe correlation gjatë sync-ut. **KUJDES — pa overclaim:** UUID **vetëm** NUK garanton idempotency/dedup; ato kërkojnë ende command receipts, outbox, unique constraints, versioning dhe teste.
 
 ## 13. Testing pyramid + architecture tests
 

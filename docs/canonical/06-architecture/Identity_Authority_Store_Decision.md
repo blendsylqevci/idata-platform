@@ -2,7 +2,7 @@
 
 **Statusi:** **PROPOSED / OWNER-DIRECTED TARGET / PENDING_INDEPENDENT_REVIEW — EFFECTIVE ONLY AFTER HUMAN GATE + MERGE.**
 **Autoriteti:** ky dokument është **specifikimi SUBORDINATE ndaj ADR-028** (`docs/canonical/01-phase0/05_Decision_Gates_ADR.md`). ADR-028 mban vendimin; ky dokument mban boundary-t, schema/table map, flows, security gates, migrimin, rollback-un dhe acceptance criteria. Në konflikt fiton ADR-028.
-**Data:** 27.07.2026 (v1) · **Pronari:** Pronari + Tech · **Kufiri:** ZERO kod/dependency/migrim nga PR-ja që e krijon; implementimi = **Increment B** i rendit A/B/C/D (shih `Application_Architecture_Convention.md` §15). Asnjë secret/konfigurim real këtu.
+**Data:** 27.07.2026 (v1; **corrected pre-merge 27.07.2026** — correction pass i review-t të pavarur mbi PR #26, para merge-it; pa v2 artificial) · **Pronari:** Pronari + Tech · **Kufiri:** ZERO kod/dependency/migrim nga PR-ja që e krijon; implementimi = **Increment B** i rendit A/B/C/D (shih `Application_Architecture_Convention.md` §15). Asnjë secret/konfigurim real këtu.
 
 ---
 
@@ -31,6 +31,16 @@ ASP.NET Core Identity + OpenIddict       AccessControl (F1.1, i pandryshuar)
 - Rrjedha e vetme e lejuar identity→platform: krijimi/sinkronizimi i projeksionit `app_user` (id + status lifecycle) përmes kontrate të tipizuar — **jo** query direkte cross-schema në rrugët e autorizimit.
 - Asnjë tabelë e `identity` nuk merr pjesë në vendimin e autorizimit tenant; asnjë tabelë e `platform` nuk mban kredenciale.
 
+### 2.1 Kontrata normative e projection-it `identity → platform.app_user` (FAIL-CLOSED)
+
+- **`identity.user_account` = source of truth** për account lifecycle; **`platform.app_user` = projection / provider-neutral mapping boundary** — kurrë burim paralel vendimi.
+- Mbulohen TË PAKTËN ngjarjet: **create · activate/enable · disable/lock/revoke** dhe çdo status tjetër që ndikon autorizimin.
+- Delivery e ngjarjeve duhet të jetë **versioned, idempotente dhe e gjurmueshme**: ngjarje **duplicate → zero efekt shtesë**; ngjarje **out-of-order/stale → NUK e kthen projection-in prapa**; **delivery failure → regjistrohet**, me retry/recovery/**reconciliation të detyrueshme**.
+- **Projection absent / stale / ambiguous në rrugë autorizimi → DENY fail-closed** — kurrë "lejo se s'dimë".
+- Asnjë query direkte cross-schema në authority path; asnjë credential dhe asnjë PII e panevojshme në `platform.app_user`; audit/correlation pa material sensitiv.
+- **Mekanizmi konkret i delivery-t (outbox / event / worker / transport) = OPEN — vendoset në Increment B**, jo në këtë PR.
+- **Asgjë nga kjo kontratë NUK është e implementuar sot** — është kontratë target për Increment B, me teste failure/replay/duplicate/out-of-order/reconciliation si parakusht (shih edhe zgjerimin e `ENG-005` në Tracker).
+
 ## 3. Schema / table map (emra target — verifikohen në Increment B PARA migrimit 0003)
 
 | Tabela target | Roli |
@@ -38,13 +48,17 @@ ASP.NET Core Identity + OpenIddict       AccessControl (F1.1, i pandryshuar)
 | `identity.user_account` | llogaria (credentials hash, MFA flags, lockout, status) |
 | `identity.user_login` | external/federated logins (nëse aktivizohet federation) |
 | `identity.user_claim` | claims të llogarisë |
-| `identity.user_token` | token store (recovery/MFA/refresh artefakte të Identity-t) |
+| `identity.user_token` | token artifacts të ASP.NET Core Identity për funksione **account-level** (p.sh. authenticator/recovery/confirmation/provider-token storage — sipas mapping-ut REAL të Increment B) — **JO** OAuth2/OIDC refresh/access tokens |
 | `identity.oidc_application` | klientët OIDC (Backoffice, POS, mobile) |
 | `identity.oidc_authorization` | authorizations/consents |
 | `identity.oidc_scope` | scopes |
-| `identity.oidc_token` | tokens e lëshuara (lifecycle/revocation) |
+| `identity.oidc_token` | tokens/artifacts OPERACIONALE OAuth2/OIDC të OpenIddict — access, refresh, authorization/device artifacts sipas konfigurimit final — me lifecycle/revocation në KËTË store autoritativ |
 
-**Zero emra default të pakontrolluar** (`AspNetUsers`, `AspNetRoles`, `User`, `Rolers` etj.) si emra finalë — mapping-u i EF/OpenIddict konfigurohet në emrat e mësipërm; **emrat finalë verifikohen në Increment B para migrimit 0003**.
+**Zero emra default të pakontrolluar** (`AspNetUsers`, `AspNetRoles`, `User` etj.) si emra finalë — mapping-u i EF/OpenIddict konfigurohet në emrat e mësipërm; **emrat finalë (dhe llojet reale të token-ave që paketat i përdorin) verifikohen në Increment B para migrimit 0003** — nuk deklarohen lloje që paketa finale nuk i përdor.
+
+**Pronësia e token-ave — ZERO mbivendosje (kontratë + test i ardhshëm):** Increment B shton architecture/schema acceptance test që provon (a) **zero ownership të dyfishtë** midis `user_token` dhe `oidc_token`; (b) **zero token material në schema `platform`**; (c) lifecycle/revocation ndodhin në store-in autoritativ përkatës.
+
+**Arsyetimi i emërtimit (i saktë, pa overclaim):** `USER` është **fjalë e rezervuar e PostgreSQL** (SQL key words, PostgreSQL 16 — burim zyrtar), prandaj canonical përdor `identity.user_account` dhe `platform.app_user`. **NUK pretendohet** se `Users`, `Role` apo çdo emër tjetër janë të gjithë reserved — emrat e tjerë eksplicitë përdoren për qartësi domain-i, schema ownership, lowercase naming dhe shmangie të mapping-ut default të pakontrolluar. `Rolers` është emër i pavlefshëm/typo — jo alternativë.
 
 ## 4. Flows (target)
 
@@ -56,12 +70,52 @@ ASP.NET Core Identity + OpenIddict       AccessControl (F1.1, i pandryshuar)
 
 ## 5. Security gates (të ngrira si kërkesa — evidence në Increment B)
 
-MFA + recovery codes · signing/encryption keys **JASHTË** repo/log/renderers (custody sipas ADR-025/ADR-026) · refresh-token rotation/reuse detection · session/device/token revocation · lockout + rate limiting · email/account recovery · key rotation · HA/backup/restore i identity store-it · **audit i ngjarjeve identity** (login, MFA, lockout, revocation, recovery — pa PII të tepërt, pa sekrete) · incident response · **break-glass mbetet gate i veçantë dhe i audituar** (ADR-008; s'implementohet këtu).
+MFA + recovery codes · signing/encryption keys **JASHTË** repo/log/renderers (custody sipas ADR-025/ADR-026) · refresh-token rotation/reuse detection · session/device/token revocation · lockout + rate limiting · email/account recovery · key rotation · HA/backup/restore i identity store-it · **audit i ngjarjeve identity** (login, MFA, lockout, revocation, recovery — pa PII të tepërt, pa sekrete) · incident response · **break-glass mbetet gate i veçantë dhe i audituar** (ADR-008; s'implementohet këtu) · **token validation sipas kontratës §5.1**.
+
+### 5.1 Token validation — kontratë MECHANISM-NEUTRAL (gate i rikthyer)
+
+Çdo API që pranon token DUHET të verifikojë, pavarësisht mekanizmit:
+
+- **issuer**-i përputhet me authority-n e konfiguruar;
+- **audience/resource** kontrollohet kur kontrata e token-it e kërkon;
+- **token type/usage** është i lejuar për endpoint-in;
+- **autenticiteti** provohet përmes **signature / decryption / introspection** ose mekanizmit tjetër të aprovuar;
+- vetëm **algoritme të lejuara** (allowlist eksplicit);
+- **lifetime, not-before dhe expiry** kontrollohen;
+- **clock-skew** është eksplicit, i KUFIZUAR dhe i testuar;
+- **unknown issuer / audience / key / algorithm / token-type → fail-closed**;
+- **expired / not-yet-valid / revoked → fail-closed**;
+- **key rollover/rotation** ka teste pozitive, negative dhe **overlap**.
+
+**NUK mandatohet JWT/JWKS si format universal** — NUK pretendohet "të gjithë tokenët janë JWT" dhe as "JWKS është gjithmonë i detyrueshëm". Mekanizmat e lejuar për VLERËSIM në Increment B (zgjedhja konkrete dokumentohet dhe provohet aty; provenance: dokumentimi zyrtar i OpenIddict për token validation në API):
+
+1. `UseLocalServer()` kur API dhe authority janë co-located;
+2. trusted OIDC discovery/JWKS mbi TLS për authority remote me çelësa asimetrikë;
+3. introspection ose mekanizëm tjetër i aprovuar me garanci ekuivalente.
+
+### 5.2 Credentials / certificates / keys — policy eksplicite
+
+- `AddDevelopmentSigningCertificate()` · `AddDevelopmentEncryptionCertificate()` · `AddEphemeralSigningKey()` · `AddEphemeralEncryptionKey()` lejohen **VETËM nën `IsDevelopment()`** (provenance: dokumentimi zyrtar i OpenIddict për encryption & signing credentials).
+- Në **Staging, Production ose environment të panjohur**: aplikacioni **DËSHTON në startup** nëse ka vetëm development/ephemeral credentials — fail-closed.
+- Production kërkon: signing DHE encryption credentials **persistente** · jashtë repo-s/log-eve/renderer-ëve · availability për të gjitha instancat · custody/access control · backup/recovery · **expiry monitoring** · **rotation me overlap të provuar** · signing/encryption të NDARA nga TLS certificate kur kërkohet · provenance dhe gate sipas **ADR-025/ADR-026**.
+- **NUK ndalohet kategorikisht çdo self-signed certificate**: një certificate privately/self-issued mund të përdoret VETËM nëse lifecycle, trust, custody, rotation dhe deployment janë të aprovuara dhe të provuara.
+- Ky PR **nuk zgjedh** CA, KMS, secret store apo hosting provider (ADR-026 OPEN).
+
+### 5.3 Account/email/phone VERIFICATION ≠ RECOVERY — gate OPEN
+
+**Statusi: OPEN / PENDING SPECIFICATION IN INCREMENT B — as DECIDED, as IMPLEMENTED.**
+
+- Për SECILËN klasë user/client përcaktohet në Increment B nëse kërkohet account confirmation, verified email, verified phone ose sinjal tjetër — ky PR **NUK deklaron** se çdo user duhet patjetër të ketë email/telefon.
+- **Email/telefon i PAVERIFIKUAR nuk përdoret KURRË si trusted recovery/MFA destination.**
+- Enrollment, resend, expiry, single-use, rate-limit, change dhe re-verification kërkojnë policy + teste.
+- Audit/redaction pa PII të tepërt.
+- **Verification dhe recovery janë dy koncepte të NDARA** — nuk barazohen.
 
 ## 6. Migrimi (Increment B)
 
-- Schema `identity` hyn me migrimin **0003+ forward-only** (owner i vetëm mbetet Persistence/EF; SQL i audituar brenda migrimit).
-- **0001/0002 NUK rishkruhen.**
+- Schema `identity` hyn me migrimin **0003+ forward-only** (SQL i audituar brenda migrimit).
+- **0001/0002 janë IMMUTABLE.**
+- **Pronësia e persistencës — vendoset QARTË në Increment B PARA migrimit 0003:** projekti/moduli Identity; DbContext/mappings; migration assembly; **migration owner i VETËM**; marrëdhënia me `Idata.Platform.Persistence`; **zero migration owner paralel dhe zero schema drift**.
 - `platform.app_user` NUK zëvendësohet — lidhet me projection (id 1:1, status sync i dokumentuar).
 - Seed i klientëve OIDC vetëm sintetik/dev në teste; konfigurimet reale jashtë repo-s (ADR-021/ADR-026).
 
@@ -77,9 +131,14 @@ Testi ekzistues `Zero_identity_provider_konkret_ne_asnje_assembly_te_platformes`
 
 **Në PR-në docs-only aktuale testi NUK preket.**
 
-## 8. Rollback (Increment B)
+## 8. Rollback (Increment B) — kontrata FORWARD-ONLY
 
-Hiqet migrimi 0003+ (Down i audituar), paketat Identity/OpenIddict nga projektet e aprovuara, wiring-u në host dhe projection sync — pa prekur `platform` schema, F1.1, migrimet 0001/0002 apo klientët e gjeneruar. Architecture test-i i zëvendësuar rikthehet në formën provider-neutral. Rollback-u provohet si pjesë e acceptance të Increment B.
+- **0001/0002 immutable; çdo schema change = 0003+ forward-only.**
+- `Down` **DESTRUKTIV lejohet VETËM në DB disposable/local/CI pa data reale**, nën guard-in ekzistues fail-closed (env + opt-in + DB sintetike) — kurrë si mekanizëm operacional.
+- Në environment **deployed ose data-bearing: JO destructive Down si rollback operacional.** Rollback-u aty = **compatible application rollback** (kur schema është backward-compatible), OSE **forward corrective migration**, OSE **restore nga backup/PITR i provuar** — gjithmonë plus **reconciliation e projection-it**.
+- **Expand/contract** përdoret kur ndryshimi kërkon kompatibilitet ndër-versionesh.
+- Kthimi i kodit: paketat Identity/OpenIddict hiqen nga projektet e aprovuara, wiring-u nga host-i, projection sync — pa prekur `platform` schema, F1.1, 0001/0002 apo klientët e gjeneruar; architecture test-i i zëvendësuar rikthehet në formën provider-neutral.
+- **ZERO pretendim se rollback-u production është provuar nga kjo PR docs-only**; owner/gate për backup/PITR/key/provider = **ADR-025/ADR-026 OPEN**.
 
 ## 9. Acceptance criteria (Increment B — matëse, jo deklarative)
 
@@ -92,6 +151,16 @@ Hiqet migrimi 0003+ (Down i audituar), paketat Identity/OpenIddict nga projektet
 7. Keys jashtë repo/log/renderers; zero sekret në git (gitleaks/guard).
 8. Audit i ngjarjeve identity i pranishëm dhe i redaktuar.
 
-## 10. Çfarë mbetet OPEN edhe pas kësaj PR-je
+## 10. External IdP — kushtet e RIHAPJES (jo adoptim automatik)
 
-Zgjedhja HA/backup topology konkrete (ADR-026) · key custody mekanizmi konkret (ADR-025) · federation e jashtme (opsion, pa provider të zgjedhur) · break-glass implementation (gate i veçantë) · production provisioning i roleve (F1.1 Record) · ndarja përfundimtare 401/403 në kontratën publike (implementohet me Increment B, dokumentohet aty).
+External IdP **nuk adoptohet automatikisht**. ADR-028 **rihapet për vlerësim** vetëm me evidence për një a më shumë nga: (a) enterprise federation ose SAML; (b) kërkesë normative/regulatorike/kontraktuale klienti; (c) HA/operations/security të pambuluara sigurt nga target-i self-hosted; (d) matje bindëse të total cost/risk; (e) migration + rollback + exit plan.
+
+**Reopen ≠ approval.** Çdo external provider kërkon: ADR të ri/ndryshim të aprovuar · threat model · subject/claims/tenant mapping · data residency/DPA review · revocation/audit/recovery parity · migration/rollback/exit evidence · **Human Gate**. **Asnjë package/config/schema/data replication e provider-it të jashtëm nuk lejohet në heshtje.**
+
+## 11. Arsyetimi i alternativës së refuzuar (Duende IdentityServer)
+
+Duende nuk zgjidhet sepse sjell **detyrime licensing/procurement/renewal për production** dhe sot **nuk është provuar asnjë capability gap** që kërkon Duende mbi OpenIddict. **Nuk hardcode-ohet asnjë prag të ardhurash apo edition specifik** — kushtet aktuale të licencës rishikohen nga **burimi zyrtar i Duende (docs/licensing)** nëse vendimi rihapet; rihapja kërkon **ADR + Human Gate**.
+
+## 12. Çfarë mbetet OPEN edhe pas kësaj PR-je
+
+Zgjedhja HA/backup topology konkrete (ADR-026) · key custody mekanizmi konkret (ADR-025) · federation e jashtme (vetëm sipas §10) · break-glass implementation (gate i veçantë) · production provisioning i roleve (F1.1 Record) · ndarja përfundimtare 401/403 (implementohet me Increment B) · **mekanizmi i delivery-t të projection-it (§2.1)** · **policy e verification-it per-klasë (§5.3)** · **mekanizmi konkret i token validation (§5.1)** · **emrat/llojet finale të tabelave para 0003 (§3)**.

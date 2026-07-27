@@ -26,6 +26,15 @@ contracts/openapi/platform-v1.json  # spec determinist — burimi: ASP.NET Core 
 
 Domain → asgjë · Application → Domain · Infrastructure → Application+Domain ·
 Presentation → Application(+Domain) · DbMigrator → Infrastructure · Api = composition root.
+
+> **HISTORICAL CORRECTION / SUPERSEDED POINTER (27.07.2026, docs-only — pa rishkrim historie):**
+> rreshti i mësipërm pasqyron formulimin e kohës së Bootstrap-it. Grafiku FINAL i
+> kanonizuar nga ADR-029 (i provuar nga `DependencyDirectionTests` mbi metadata reale,
+> direkt dhe transitive) është: **`DbMigrator → Persistence` dhe vetëm unazat e brendshme
+> realisht të nevojshme — JO blanket dependency ndaj Infrastructure**; `Persistence` =
+> migration owner NEUTRAL me zero varësi ndaj moduleve; zero reachability cross-module.
+> Autoriteti aktiv = ADR-029 + `Application_Architecture_Convention.md` §2. Fakti që
+> Bootstrap-i vetë NUK implementoi mediator/Identity/Scalar mbetet i pandryshuar.
 Pa MediatR/AutoMapper/broker/Redis/identity provider/UI kit; pa "Common/Utils" junk drawer;
 query/handler i thjeshtë (pa CQRS ceremonial).
 
@@ -102,7 +111,7 @@ i18n scaffold; CI që verifikon të dy stack-et; ky record.
 
 Identity/Tenant/RBAC production · audit/outbox/observability/recovery production ·
 encryption/key custody (ADR-025) · providers (ADR-026) · POS/wrapper (ADR-027) ·
-identity provider/store (ADR-028) · module biznesi · Edge/Device Agent/mobile/KDS ·
+identity provider/store (ADR-028 — PROPOSED 27.07.2026, effective pas Human Gate + merge) · module biznesi · Edge/Device Agent/mobile/KDS ·
 fiscal domain/SEF · Step B/C · preflight/Tier 2. Gates OPEN të ADR-024 të paprekura.
 
 ## Siguria (correction pass i review-t të pavarur, 24.07.2026)
