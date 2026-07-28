@@ -15,6 +15,12 @@
     <!-- Pin i unifikuar i EF Core runtime: provider-i Npgsql 10.0.3 kerkon
          10.0.4 ndersa Design 10.0.10 — pa pin te perbashket MSBuild leshon
          MSB3277 (konflikt versionesh) ne testet qe bashkojne te dy grafet. -->
+    <!-- ADR-028 Increment B.1: identity STORE foundation — pins ekzakte.
+         Microsoft.AspNetCore.Identity.EntityFrameworkCore 10.0.10 (MIT) =
+         store-i EF i ASP.NET Core Identity (roleless ne kete platform);
+         OpenIddict.EntityFrameworkCore 7.6.0 (Apache-2.0) = VETEM Core/EF
+         store i OpenIddict — ZERO Server/Validation/Client (B.2+). -->
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.10" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10" />
@@ -25,6 +31,7 @@
          (GHSA-v5pm-xwqc-g5wc); 2.11.0 është versioni i linjës 2.x me fix. -->
     <PackageVersion Include="Microsoft.OpenApi" Version="2.11.0" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <PackageVersion Include="OpenIddict.EntityFrameworkCore" Version="7.6.0" />
     <!-- ADR-029 Increment A: Scalar API reference UI (vetem Development). -->
     <PackageVersion Include="Scalar.AspNetCore" Version="2.16.16" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
