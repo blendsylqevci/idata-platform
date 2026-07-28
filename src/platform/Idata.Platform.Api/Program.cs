@@ -38,7 +38,8 @@ builder.Services.AddMediator(options =>
 builder.Services.AddControllers();
 
 // AccessControl (F1.1) — provider-neutral: host-i NUK regjistron asnjë
-// authentication scheme (ADR-028 OPEN) → principal bosh → deny-by-default;
+// authentication scheme (ADR-028 ACCEPTED / EFFECTIVE; Identity
+// implementation = Increment B NOT STARTED) → principal bosh → deny-by-default;
 // override auth lejohet VETËM në integration-test assembly.
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IAccessControlStore, EfAccessControlStore>();

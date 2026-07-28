@@ -120,3 +120,15 @@ jobs:
         run: |
           pnpm --filter @idata/platform-api-client generate
           git diff --exit-code -- contracts/openapi packages/platform-api-client/src/generated
+
+      - name: Production OpenAPI regression (kontrata byte-identike nen DOTNET_ENVIRONMENT=Production)
+        # ADR-029 §10 / Increment A: AddOpenApi + transformer-at jane te
+        # PAKUSHTEZUAR — gjenerimi build-time s'duhet te varet nga environment-i.
+        # Rebuild i plote (jo incremental, qe target-i i gjenerimit te mos
+        # skip-ohet) + rigjenerim i klientit TS + zero diff i detyruar.
+        env:
+          DOTNET_ENVIRONMENT: Production
+        run: |
+          dotnet build src/platform/Idata.Platform.Api --no-restore --no-incremental
+          pnpm --filter @idata/platform-api-client generate
+          git diff --exit-code -- contracts/openapi packages/platform-api-client/src/generated
