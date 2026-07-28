@@ -13,20 +13,30 @@ namespace Idata.Platform.Persistence;
 /// asnjë Domain moduli; çdo modul mapon records ↔ tipet e veta në shtresën
 /// e vet Infrastructure. Zero të dhëna reale.
 ///
-/// ADR-028 (Increment B.1): konteksti derivon nga
-/// <see cref="IdentityUserContext{TUser, TKey}"/> ROLELESS (JO
-/// IdentityDbContext me role) me çelësa Guid — schema `identity` mban vetëm
-/// store foundation (Identity + OpenIddict Core/EF); ZERO tabela rolesh,
-/// ZERO FK cross-schema drejt `platform`, ZERO projection para B.3.
+/// ADR-028 (Increment B.1): konteksti derivon nga varianti 5-generic i
+/// <see cref="IdentityUserContext{TUser, TKey, TUserClaim, TUserLogin, TUserToken}"/>
+/// ROLELESS (JO IdentityDbContext me role) me çelësa Guid dhe claim type
+/// CUSTOM (<see cref="UserClaimRecord"/> — çelës UUID; zero persisted int
+/// IDs ABSOLUT) — schema `identity` mban vetëm store foundation (Identity +
+/// OpenIddict Core/EF); ZERO tabela rolesh, ZERO FK cross-schema drejt
+/// `platform`, ZERO projection para B.3.
 /// </summary>
 public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> options)
-    : IdentityUserContext<UserAccountRecord, Guid>(options)
+    : IdentityUserContext<UserAccountRecord, Guid, UserClaimRecord, IdentityUserLogin<Guid>, IdentityUserToken<Guid>>(options)
 {
     public const string Schema = "platform";
     public const string IdentitySchema = "identity";
 
     public DbSet<MigrationSmokeCheck> MigrationSmokeChecks => Set<MigrationSmokeCheck>();
-    public DbSet<AppUserRecord> AppUsers => Set<AppUserRecord>();
+
+    /// <summary>
+    /// `platform.app_user` (projection boundary i F1.1) — i riemërtuar
+    /// `PlatformAppUsers` që të MOS ngatërrohet KURRË me inherited
+    /// <c>Users</c> (`identity.user_account`, store-i i Identity-t).
+    /// AccessControl përdor VETËM këtë; `Users` i takon vetëm Identity
+    /// wiring/store (guard-test diskriminues në ArchitectureTests).
+    /// </summary>
+    public DbSet<AppUserRecord> PlatformAppUsers => Set<AppUserRecord>();
     public DbSet<BusinessRecord> Businesses => Set<BusinessRecord>();
     public DbSet<RoleRecord> Roles => Set<RoleRecord>();
     public DbSet<PermissionRecord> Permissions => Set<PermissionRecord>();
@@ -212,7 +222,17 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
 
         modelBuilder.Entity<UserAccountRecord>(entity => entity.ToTable("user_account", IdentitySchema));
         modelBuilder.Entity<IdentityUserLogin<Guid>>(entity => entity.ToTable("user_login", IdentitySchema));
-        modelBuilder.Entity<IdentityUserClaim<Guid>>(entity => entity.ToTable("user_claim", IdentitySchema));
+        modelBuilder.Entity<UserClaimRecord>(entity =>
+        {
+            entity.ToTable("user_claim", IdentitySchema);
+            // ZERO persisted int IDs (ABSOLUT): çelësi i VETËM i persistuar =
+            // ClaimId (Guid, i gjeneruar në aplikacion — kurrë nga DB);
+            // inherited `IdentityUserClaim<TKey>.Id` (int) INJOROHET nga EF
+            // dhe nuk persiston asnjë kolonë int identifikuese.
+            entity.HasKey(claim => claim.ClaimId);
+            entity.Property(claim => claim.ClaimId).ValueGeneratedNever();
+            entity.Ignore(claim => claim.Id);
+        });
         modelBuilder.Entity<IdentityUserToken<Guid>>(entity => entity.ToTable("user_token", IdentitySchema));
         modelBuilder.Entity<OpenIddictEntityFrameworkCoreApplication<Guid>>(entity => entity.ToTable("oidc_application", IdentitySchema));
         modelBuilder.Entity<OpenIddictEntityFrameworkCoreAuthorization<Guid>>(entity => entity.ToTable("oidc_authorization", IdentitySchema));
@@ -220,6 +240,12 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
         modelBuilder.Entity<OpenIddictEntityFrameworkCoreToken<Guid>>(entity => entity.ToTable("oidc_token", IdentitySchema));
 
         ApplyIdentityColumnNaming(modelBuilder);
+
+        // PAS emërtimit mekanik snake_case: çelësi UUID i claim-it mapohet te
+        // kolona KANONIKE `id` (konsistente me user_account/oidc_*).
+        modelBuilder.Entity<UserClaimRecord>()
+            .Property(claim => claim.ClaimId)
+            .HasColumnName("id");
     }
 
     /// <summary>

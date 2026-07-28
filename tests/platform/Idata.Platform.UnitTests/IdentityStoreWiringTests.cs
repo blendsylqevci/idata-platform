@@ -59,7 +59,8 @@ public sealed class IdentityStoreWiringTests
         var store = scope.ServiceProvider.GetRequiredService<IUserStore<UserAccountRecord>>();
         var storeType = store.GetType();
 
-        // Tipi REAL i store-it: UserOnlyStore (roleless) — JO UserStore (me role).
+        // Tipi REAL i store-it: UserOnlyStore (roleless) — JO UserStore (me role);
+        // inferenca DUHET të përdorë UserClaimRecord (UUID), JO default claim type.
         Assert.StartsWith(
             "Microsoft.AspNetCore.Identity.EntityFrameworkCore.UserOnlyStore`",
             storeType.GetGenericTypeDefinition().FullName ?? string.Empty,
@@ -67,6 +68,8 @@ public sealed class IdentityStoreWiringTests
         Assert.Contains(typeof(UserAccountRecord), storeType.GenericTypeArguments);
         Assert.Contains(typeof(PlatformDbContext), storeType.GenericTypeArguments);
         Assert.Contains(typeof(Guid), storeType.GenericTypeArguments);
+        Assert.Contains(typeof(UserClaimRecord), storeType.GenericTypeArguments);
+        Assert.DoesNotContain(typeof(IdentityUserClaim<Guid>), storeType.GenericTypeArguments);
 
         // UserManager rezolvohet; RoleManager NUK ekziston si regjistrim.
         Assert.NotNull(scope.ServiceProvider.GetRequiredService<UserManager<UserAccountRecord>>());

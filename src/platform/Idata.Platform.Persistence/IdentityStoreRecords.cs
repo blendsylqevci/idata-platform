@@ -15,3 +15,18 @@ namespace Idata.Platform.Persistence;
 ///  - `platform.app_user` NUK preket — projection identity→platform = B.3.
 /// </summary>
 public sealed class UserAccountRecord : IdentityUser<Guid>;
+
+/// <summary>
+/// Storage record i claim-it të llogarisë (ADR-028, correction i B.1) —
+/// zbaton rregullin ABSOLUT "zero persisted int IDs":
+///  - `IdentityUserClaim&lt;TKey&gt;.Id` (int) i framework-ut NUK ritipizohet
+///    dot në mënyrë të sigurt → mbetet i TRASHËGUAR por INJOROHET nga EF
+///    (nuk persiston kurrë; asnjë kolonë int identifikuese në DB);
+///  - çelësi i VETËM i persistuar = <see cref="ClaimId"/> (Guid, i
+///    gjeneruar në aplikacion, kurrë bosh) → kolona `id` uuid e
+///    `identity.user_claim`.
+/// </summary>
+public sealed class UserClaimRecord : IdentityUserClaim<Guid>
+{
+    public Guid ClaimId { get; set; } = Guid.NewGuid();
+}

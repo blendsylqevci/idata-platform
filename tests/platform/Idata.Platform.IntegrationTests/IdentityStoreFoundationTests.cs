@@ -121,13 +121,16 @@ public sealed class IdentityStoreFoundationTests
               JOIN pg_namespace parent_ns ON parent_ns.oid = parent.relnamespace
               WHERE con.contype = 'f' AND child_ns.nspname <> parent_ns.nspname"));
 
-        // Kolonat kyçe: uuid kudo; përjashtimi i VETËM i deklaruar = user_claim.id (int surrogate).
+        // ZERO persisted int IDs (ABSOLUT): çdo kolonë `id` = uuid — përfshirë
+        // user_claim — dhe asnjë kolonë identifikuese (id / *_id) me tip int.
         Assert.Equal("uuid", await ScalarAsync<string>(connection,
             "SELECT data_type FROM information_schema.columns WHERE table_schema='identity' AND table_name='user_account' AND column_name='id'"));
-        Assert.Equal("integer", await ScalarAsync<string>(connection,
+        Assert.Equal("uuid", await ScalarAsync<string>(connection,
             "SELECT data_type FROM information_schema.columns WHERE table_schema='identity' AND table_name='user_claim' AND column_name='id'"));
         Assert.Equal(0L, await ScalarAsync<long>(connection,
-            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='identity' AND column_name='id' AND data_type NOT IN ('uuid') AND table_name <> 'user_claim'"));
+            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='identity' AND column_name='id' AND data_type <> 'uuid'"));
+        Assert.Equal(0L, await ScalarAsync<long>(connection,
+            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='identity' AND (column_name = 'id' OR column_name LIKE '%\\_id') AND data_type IN ('integer','bigint','smallint')"));
     }
 
     [Fact]
@@ -185,6 +188,84 @@ public sealed class IdentityStoreFoundationTests
             Assert.Equal(1L, await ScalarAsync<long>(connection, "SELECT COUNT(*) FROM identity.user_claim"));
             Assert.Equal(1L, await ScalarAsync<long>(connection, "SELECT COUNT(*) FROM identity.user_token"));
             Assert.Equal(0L, await ScalarAsync<long>(connection, "SELECT COUNT(*) FROM platform.app_user"));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("PLATFORM_PGDATABASE", previous);
+        }
+    }
+
+    /// <summary>
+    /// §4.4 i correction pass-it: cikli i PLOTË i claims përmes
+    /// UserManager/UserOnlyStore REAL (me UserClaimRecord UUID) kundrejt
+    /// PostgreSQL — Add ×2 · Get · Replace · Remove · GetUsersForClaim;
+    /// ClaimId non-empty + unikë të provuar në DB; fresh DI scope/fresh
+    /// DbContext/re-resolution e store-it midis fazave.
+    /// </summary>
+    [Fact]
+    public async Task User_claims_UUID_round_trip_i_plote_permes_UserOnlyStore_real()
+    {
+        await using var db = await PlatformTestDatabase.CreateAsync("identityclaims");
+        await MigrateAsync(db.DatabaseName);
+
+        var previous = Environment.GetEnvironmentVariable("PLATFORM_PGDATABASE");
+        Environment.SetEnvironmentVariable("PLATFORM_PGDATABASE", db.DatabaseName);
+        try
+        {
+            await using var factory = new WebApplicationFactory<Program>();
+            _ = factory.CreateClient();
+
+            // Faza 1 (scope i parë): krijim user + DY claims.
+            using (var scope = factory.Services.CreateScope())
+            {
+                var manager = scope.ServiceProvider.GetRequiredService<UserManager<UserAccountRecord>>();
+                var created = await manager.CreateAsync(new UserAccountRecord { UserName = "perdorues_claims_b1" });
+                Assert.True(created.Succeeded, string.Join("; ", created.Errors.Select(error => error.Code)));
+                var user = (await manager.FindByNameAsync("perdorues_claims_b1"))!;
+                Assert.True((await manager.AddClaimAsync(user, new Claim("tip_sintetik_1", "vlere_1"))).Succeeded);
+                Assert.True((await manager.AddClaimAsync(user, new Claim("tip_sintetik_2", "vlere_2"))).Succeeded);
+            }
+
+            // ClaimId REAL në DB: 2 rreshta, `id` uuid NON-EMPTY dhe UNIKË.
+            await using (var connection = await OpenAsync(db.DatabaseName))
+            {
+                var ids = await ColumnAsync(connection, "SELECT id::text FROM identity.user_claim ORDER BY id");
+                Assert.Equal(2, ids.Length);
+                var parsed = ids.Select(Guid.Parse).ToArray();
+                Assert.All(parsed, id => Assert.NotEqual(Guid.Empty, id));
+                Assert.Equal(2, parsed.Distinct().Count());
+            }
+
+            // Faza 2 (scope/DbContext/store I FRESKËT — re-resolution): Get + Replace + GetUsersForClaim.
+            using (var scope = factory.Services.CreateScope())
+            {
+                var manager = scope.ServiceProvider.GetRequiredService<UserManager<UserAccountRecord>>();
+                var user = (await manager.FindByNameAsync("perdorues_claims_b1"))!;
+                var claims = await manager.GetClaimsAsync(user);
+                Assert.Equal(2, claims.Count);
+
+                Assert.True((await manager.ReplaceClaimAsync(
+                    user, new Claim("tip_sintetik_1", "vlere_1"), new Claim("tip_sintetik_1", "vlere_1_zv"))).Succeeded);
+
+                var holders = await manager.GetUsersForClaimAsync(new Claim("tip_sintetik_1", "vlere_1_zv"));
+                Assert.Contains(holders, holder => holder.UserName == "perdorues_claims_b1");
+            }
+
+            // Faza 3 (scope i tretë i freskët): Remove + gjendja finale në DB.
+            using (var scope = factory.Services.CreateScope())
+            {
+                var manager = scope.ServiceProvider.GetRequiredService<UserManager<UserAccountRecord>>();
+                var user = (await manager.FindByNameAsync("perdorues_claims_b1"))!;
+                Assert.True((await manager.RemoveClaimAsync(user, new Claim("tip_sintetik_2", "vlere_2"))).Succeeded);
+                Assert.Single(await manager.GetClaimsAsync(user));
+            }
+
+            await using (var connection = await OpenAsync(db.DatabaseName))
+            {
+                Assert.Equal(1L, await ScalarAsync<long>(connection, "SELECT COUNT(*) FROM identity.user_claim"));
+                Assert.Equal(1L, await ScalarAsync<long>(connection,
+                    "SELECT COUNT(*) FROM identity.user_claim WHERE claim_type = 'tip_sintetik_1' AND claim_value = 'vlere_1_zv'"));
+            }
         }
         finally
         {

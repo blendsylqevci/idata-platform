@@ -417,14 +417,11 @@ namespace Idata.Platform.Persistence.Migrations
                     b.ToTable("user_account", "identity");
                 });
 
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<System.Guid>", b =>
+            modelBuilder.Entity("Idata.Platform.Persistence.UserClaimRecord", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
+                    b.Property<Guid>("ClaimId")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<string>("ClaimType")
                         .HasColumnType("text")
@@ -438,7 +435,7 @@ namespace Idata.Platform.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
-                    b.HasKey("Id");
+                    b.HasKey("ClaimId");
 
                     b.HasIndex("UserId");
 
@@ -820,7 +817,7 @@ namespace Idata.Platform.Persistence.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserClaim<System.Guid>", b =>
+            modelBuilder.Entity("Idata.Platform.Persistence.UserClaimRecord", b =>
                 {
                     b.HasOne("Idata.Platform.Persistence.UserAccountRecord", null)
                         .WithMany()

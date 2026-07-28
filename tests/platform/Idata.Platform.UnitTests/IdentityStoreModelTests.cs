@@ -69,7 +69,8 @@ public sealed class IdentityStoreModelTests
 
         Assert.Equal(typeof(UserAccountRecord), identityTables["user_account"]);
         Assert.Equal(typeof(IdentityUserLogin<Guid>), identityTables["user_login"]);
-        Assert.Equal(typeof(IdentityUserClaim<Guid>), identityTables["user_claim"]);
+        // Claim-i = tipi CUSTOM me çelës UUID — JO default-i IdentityUserClaim<Guid>.
+        Assert.Equal(typeof(UserClaimRecord), identityTables["user_claim"]);
         Assert.Equal(typeof(IdentityUserToken<Guid>), identityTables["user_token"]);
         Assert.Equal(typeof(OpenIddictEntityFrameworkCoreApplication<Guid>), identityTables["oidc_application"]);
         Assert.Equal(typeof(OpenIddictEntityFrameworkCoreAuthorization<Guid>), identityTables["oidc_authorization"]);
@@ -94,30 +95,20 @@ public sealed class IdentityStoreModelTests
     }
 
     [Fact]
-    public void Celesat_jane_Guid_uuid_me_perjashtimin_e_VETEM_te_deklaruar_user_claim_id()
+    public void Zero_persisted_int_IDs_celesat_jane_Guid_uuid_ose_kompozite_string_Guid()
     {
         using var context = CreateModelOnlyContext();
-        foreach (var (schema, table, entity) in EntityTables(context))
+        foreach (var (schema, _, entity) in EntityTables(context))
         {
             if (schema != PlatformDbContext.IdentitySchema)
             {
                 continue;
             }
 
+            // ABSOLUT: asnjë çelës primar int në ASNJË entitet identity —
+            // Guid ose komponente string të çelësave kompozitë REALË.
             foreach (var keyProperty in entity.FindPrimaryKey()!.Properties)
             {
-                if (table == "user_claim")
-                {
-                    // Përjashtimi i VETËM, i DEKLARUAR (§7/§3 — lloji REAL i
-                    // paketës): IdentityUserClaim<TKey>.Id është int surrogate
-                    // i framework-ut; user_id mbetet Guid/uuid.
-                    Assert.Equal(typeof(int), keyProperty.ClrType);
-                    continue;
-                }
-
-                // Tabelat user_login dhe user_token mbajnë çelësa të përbërë
-                // string+Guid REALË të Identity-t; asnjë int askund; pjesa
-                // tjetër (oidc_* dhe user_account) — Guid/uuid.
                 Assert.NotEqual(typeof(int), keyProperty.ClrType);
                 Assert.True(keyProperty.ClrType == typeof(Guid) || keyProperty.ClrType == typeof(string));
             }
@@ -136,6 +127,51 @@ public sealed class IdentityStoreModelTests
         Assert.Equal(typeof(Guid), idProperty.ClrType);
         Assert.Equal("uuid", idProperty.GetColumnType());
         Assert.Equal(ValueGenerated.OnAdd, idProperty.ValueGenerated);
+    }
+
+    [Fact]
+    public void User_claim_ka_PK_te_vetem_ClaimId_Guid_dhe_inherited_Id_int_ABSENT_nga_modeli()
+    {
+        using var context = CreateModelOnlyContext();
+        var userClaim = context.Model.FindEntityType(typeof(UserClaimRecord))!;
+
+        // PK i VETËM = ClaimId (Guid), i mapuar te kolona kanonike `id` uuid,
+        // i gjeneruar në APLIKACION (kurrë nga DB).
+        var keyProperty = Assert.Single(userClaim.FindPrimaryKey()!.Properties);
+        Assert.Equal(nameof(UserClaimRecord.ClaimId), keyProperty.Name);
+        Assert.Equal(typeof(Guid), keyProperty.ClrType);
+        Assert.Equal("uuid", keyProperty.GetColumnType());
+        Assert.Equal("id", keyProperty.GetColumnName(
+            StoreObjectIdentifier.Table("user_claim", PlatformDbContext.IdentitySchema)));
+        Assert.Equal(ValueGenerated.Never, keyProperty.ValueGenerated);
+
+        // Inherited `IdentityUserClaim<TKey>.Id` (int) = i INJORUAR nga EF:
+        // NUK ekziston si property e modelit → NUK persiston asnjë kolonë int.
+        Assert.Null(userClaim.FindProperty(nameof(IdentityUserClaim<Guid>.Id)));
+
+        // Fushat reale të claim-it mbeten (UserId FK + type/value).
+        Assert.NotNull(userClaim.FindProperty("UserId"));
+        Assert.NotNull(userClaim.FindProperty("ClaimType"));
+        Assert.NotNull(userClaim.FindProperty("ClaimValue"));
+        var foreignKey = Assert.Single(userClaim.GetForeignKeys());
+        Assert.Equal(typeof(UserAccountRecord), foreignKey.PrincipalEntityType.ClrType);
+    }
+
+    [Fact]
+    public void User_login_dhe_user_token_ruajne_celesat_kompozite_EKZAKTE_te_framework_ut()
+    {
+        using var context = CreateModelOnlyContext();
+
+        // §4.5 i mandatit: këta çelësa janë korrektë dhe NUK ndryshohen.
+        var userLogin = context.Model.FindEntityType(typeof(IdentityUserLogin<Guid>))!;
+        Assert.Equal(
+            ["LoginProvider", "ProviderKey"],
+            userLogin.FindPrimaryKey()!.Properties.Select(property => property.Name).ToArray());
+
+        var userToken = context.Model.FindEntityType(typeof(IdentityUserToken<Guid>))!;
+        Assert.Equal(
+            ["UserId", "LoginProvider", "Name"],
+            userToken.FindPrimaryKey()!.Properties.Select(property => property.Name).ToArray());
     }
 
     [Fact]

@@ -1,6 +1,5 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -23,9 +22,11 @@ namespace Idata.Platform.Persistence.Migrations
                     id = table.Column<Guid>(type: "uuid", nullable: false),
                     application_type = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
                     client_id = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
-                    // Për kolonat me fjalë kyçe të guard-it të privatësisë
-                    // (client_secret, concurrency_token) emri REAL vendoset me
-                    // parametrin `name:` — DDL i provuar IDENTIK me gjenerimin;
+                    // RREGULLIM I DOKUMENTUAR (correction pass PR #28, §5.1):
+                    // për kolonat me fjalë kyçe të guard-it të privatësisë
+                    // (client_secret, concurrency_token ×4) emri REAL vendoset
+                    // me parametrin `name:` të EF-it — DDL i provuar IDENTIK
+                    // me gjenerimin raw (diff i script-it të normalizuar = 0);
                     // false-positive mbi definicione DDL pa asnjë vlerë reale.
                     clientsecret = table.Column<string>(type: "text", nullable: true, name: "client_secret"),
                     client_type = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
@@ -123,8 +124,7 @@ namespace Idata.Platform.Persistence.Migrations
                 schema: "identity",
                 columns: table => new
                 {
-                    id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
                     user_id = table.Column<Guid>(type: "uuid", nullable: false),
                     claim_type = table.Column<string>(type: "text", nullable: true),
                     claim_value = table.Column<string>(type: "text", nullable: true)

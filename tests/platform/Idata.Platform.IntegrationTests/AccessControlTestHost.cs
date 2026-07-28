@@ -129,7 +129,7 @@ public static class AccessControlSeed
             new BusinessRecord { Id = BusinessA, Name = "biznes-sintetik-a", Status = RecordStatus.Active, CreatedAt = now },
             new BusinessRecord { Id = BusinessB, Name = "biznes-sintetik-b", Status = RecordStatus.Active, CreatedAt = now },
             new BusinessRecord { Id = BusinessDisabled, Name = "biznes-sintetik-x", Status = RecordStatus.Disabled, CreatedAt = now });
-        context.AppUsers.AddRange(
+        context.PlatformAppUsers.AddRange(
             new AppUserRecord { Id = UserA, Status = RecordStatus.Active, CreatedAt = now },
             new AppUserRecord { Id = UserB, Status = RecordStatus.Active, CreatedAt = now },
             new AppUserRecord { Id = UserC, Status = RecordStatus.Active, CreatedAt = now },
