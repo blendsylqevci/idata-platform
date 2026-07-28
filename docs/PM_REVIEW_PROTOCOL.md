@@ -1,6 +1,6 @@
 # PM Review Protocol — iData+ Quality Gate
 
-**Versioni:** 1.6 · **Data:** 2026-07-24 · **Pronari:** Group Owner / Human Gate (aprovon çdo ndryshim të këtij dokumenti)
+**Versioni:** 1.8 · **Data:** 2026-07-28 · **Pronari:** Group Owner / Human Gate (aprovon çdo ndryshim të këtij dokumenti)
 **Për kë:** agjenti PM / quality-gate (aktualisht Codex në VS Code). Vlen për ÇDO rishikim dorëzimi, PR apo increment-i, nga sot deri në lansim.
 **Rifreskimi:** në kufirin e çdo increment-i përditësohen VETËM §5 (scope) dhe lista e ndaluar; bërthama nuk ndryshon pa aprovimin e Pronarit.
 

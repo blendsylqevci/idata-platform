@@ -79,7 +79,7 @@ Në Increment A baza mbetet **module-local** (një konsumator real). **Increment
 
 ## Rollback
 
-Hiqet piloti pa prekur asgjë tjetër: rikthe `Program.cs` (AddScoped handler + MapPlatformStatus + MapOpenApi i pakushtëzuar), rikthe `PlatformStatusEndpoints.cs` + handler-in e vjetër, fshi `Features/GetPlatformStatus/`, `Controllers/`, `CanonicalContractOrderTransformer.cs`, hyrjet Mediator/Scalar nga props/csproj/lockfiles, testet e pilotit (`PlatformStatusPilotTests`, `ConventionEnforcementTests`) dhe këtë record; kontrata/klienti mbeten të pandryshuara (ishin byte-identike). AccessControl/Persistence/DbMigrator/migrimet e paprekura nga rollback-u.
+Hiqet piloti duke rikthyer VETËM ndryshimet specifike të tij: rikthe `Program.cs` (AddScoped handler + MapPlatformStatus + MapOpenApi i pakushtëzuar), rikthe `PlatformStatusEndpoints.cs` + handler-in e vjetër, fshi `Features/GetPlatformStatus/`, `Controllers/`, `CanonicalContractOrderTransformer.cs`, **hyrjet SPECIFIKE Mediator/Scalar** nga props/csproj/lockfiles, testet e pilotit (`PlatformStatusPilotTests`, `ConventionEnforcementTests`) dhe këtë record; kontrata/klienti mbeten të pandryshuara (ishin byte-identike). **Rollback-u NUK i rikthen tri heqjet e metadata-s fantazmë** në `Persistence/packages.lock.json`, `DbMigrator/packages.lock.json` dhe `AccessControl.Infrastructure/packages.lock.json` — ato tri delta **RUHEN sipas `HG-PR27-LOCKFILE-SCOPE-WAIVER`** (rikthimi do të rifuste metadata të pasaktë). Për pjesën tjetër: zero ndryshim semantik/csproj/kod/skemë në Persistence/DbMigrator/AccessControl.Infrastructure — vetëm tri lockfile-delta të autorizuara dhe të ruajtura nga waiver-i.
 
 ## Test evidence (recount në PR body nga output real)
 

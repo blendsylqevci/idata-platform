@@ -51,7 +51,7 @@
 | Edge | **ASP.NET Core Edge Hub + PostgreSQL lokal** | Autoritet operacional i lokacionit gjatë ndërprerjes; sinkronizohet me cloud |
 | POS Local Host | **.NET process i shpërndarë me instalimin e POS-it** | Zotëron domain/outbox/SQLite/keys dhe ekspozon kontratë lokale IPC të tipizuar; renderer-i nuk hap DB/keys; wrapper-i vendoset në ADR-027 |
 | Pajisje | **.NET Device Agent** | Printerë, skanerë, peshore dhe integrime lokale; pa DB access nga UI |
-| Identity | **OIDC/OAuth2 contract + provider-neutral ASP.NET Core authorization boundary** | Një authority/login/SSO, MFA, company selector, RBAC per modul, tenant authorization dhe break-glass i audituar; provider/store target = **ADR-028 PROPOSED / PENDING_INDEPENDENT_REVIEW** — effective vetëm pas independent review + Human Gate + merge |
+| Identity | **OIDC/OAuth2 contract + provider-neutral ASP.NET Core authorization boundary** | Një authority/login/SSO, MFA, company selector, RBAC per modul, tenant authorization dhe break-glass i audituar; provider/store = **ADR-028 ACCEPTED / EFFECTIVE** (PR #26 merged, squash `305aefd`, 28.07.2026); implementimi Identity = **Increment B NOT STARTED** |
 | Të dhënat | **PostgreSQL qendror** + module-owned schemas; **SQLite e enkriptuar** në POS/mobile | Cloud = source-of-record afatgjatë; POS SQLite zotërohet nga local host-i, mobile SQLite nga data layer-i; asnjë renderer/UI nuk hap DB/keys direkt |
 | Kontratat | **OpenAPI → generated TypeScript clients** | I vetmi kufi i tipizuar UI/API; DTO-të nuk kopjohen me dorë |
 | Offline | **Versioned outbox + idempotency + retry/replay** | Sync vendor-i nuk kyçet në këtë ADR |
@@ -77,7 +77,7 @@
 4. Ndërto vertical slices modul-pas-moduli: Master Data/Tax → Accounting → Inventory/WMS → OMS/Sales/Purchasing → Production/Recipes/KABI → POS/KDS/PLANET → Finance Ops/reports.
 5. Ruaj dokumentet canonical, governance/linter-in dhe PoC/testet ekzistuese si evidence/oracle. Legacy Nest/Next/TS hiqet **i fundit**, vetëm pas parity tests, rollback plan, independent review dhe Human Gate. Pa dual-write afatgjatë.
 
-**Gates që mbeten Open:** ADR-011 (PowerSync vs custom), ADR-012 (kufiri final DB-function vs C# për GL), ADR-014 (pooling), ADR-016 (EAS vs bare), ADR-017/ATK-004 (printer/hardware), ADR-025 (encryption/key custody), ADR-026 (hosting/object storage/secrets provider), ADR-027 (desktop wrapper + OS matrix), KDS shell/hardware, P1363 vs DER dhe sjelljet server-dependent të ATK-së. Këto nuk e rihapin runtime-in bazë ose kufijtë e deployables; vendosen në gate-in e tyre. ADR-028 dhe ADR-029 = **PROPOSED / OWNER-DIRECTED TARGET / PENDING_INDEPENDENT_REVIEW** — shih seksionin "Të propozuara".
+**Gates që mbeten Open:** ADR-011 (PowerSync vs custom), ADR-012 (kufiri final DB-function vs C# për GL), ADR-014 (pooling), ADR-016 (EAS vs bare), ADR-017/ATK-004 (printer/hardware), ADR-025 (encryption/key custody), ADR-026 (hosting/object storage/secrets provider), ADR-027 (desktop wrapper + OS matrix), KDS shell/hardware, P1363 vs DER dhe sjelljet server-dependent të ATK-së. Këto nuk e rihapin runtime-in bazë ose kufijtë e deployables; vendosen në gate-in e tyre. ADR-028 dhe ADR-029 **NUK janë gates OPEN** — **ACCEPTED / EFFECTIVE** (PR #26 `305aefd`, 28.07.2026); shih seksionin "Të pranuara më 28.07.2026".
 
 *(**HISTORICAL — anotim i datuar, pa rishkrim historie:** në tekstin origjinal të ADR-024 (23.07.2026), ADR-028 renditej ndër gates OPEN; më 27.07.2026 ADR-028 kaloi në PROPOSED / OWNER-DIRECTED TARGET / PENDING_INDEPENDENT_REVIEW. Kjo hyrje ruan gjurmën e atij tranzicioni.)*
 
