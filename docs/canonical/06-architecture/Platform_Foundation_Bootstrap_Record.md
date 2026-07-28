@@ -119,7 +119,7 @@ Identity = Increment B NOT STARTED**.)*
 
 Identity/Tenant/RBAC production · audit/outbox/observability/recovery production ·
 encryption/key custody (ADR-025) · providers (ADR-026) · POS/wrapper (ADR-027) ·
-identity provider/store (ADR-028 — në atë moment ende i pavendosur/i propozuar) · module biznesi · Edge/Device Agent/mobile/KDS ·
+identity provider/store (ADR-028 — OPEN/i pavendosur në atë moment) · module biznesi · Edge/Device Agent/mobile/KDS ·
 fiscal domain/SEF · Step B/C · preflight/Tier 2. Gates OPEN të ADR-024 të paprekura (në atë datë).
 
 ## Siguria (correction pass i review-t të pavarur, 24.07.2026)
