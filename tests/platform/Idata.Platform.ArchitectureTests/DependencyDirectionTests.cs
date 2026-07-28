@@ -15,7 +15,8 @@ namespace Idata.Platform.ArchitectureTests;
 ///  - DbMigrator → Persistence (+ unazat e brendshme);
 ///  - API Host = composition root (i vetmi që sheh gjithçka);
 ///  - ZERO arritje TRANSITIVE cross-module (AccessControl ↔ PlatformStatus);
-///  - ZERO identity provider konkret (ADR-028 OPEN); ZERO legacy refs.
+///  - ZERO identity provider konkret (guard-i mbetet deri në zëvendësimin
+///    e kontrolluar të Increment B sipas ADR-028 ACCEPTED); ZERO legacy refs.
 /// </summary>
 public sealed class DependencyDirectionTests
 {
