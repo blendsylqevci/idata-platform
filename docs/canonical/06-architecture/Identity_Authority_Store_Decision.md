@@ -1,6 +1,6 @@
 # Identity Authority & Store — Decision Specification (ADR-028)
 
-**Statusi:** **PROPOSED / OWNER-DIRECTED TARGET / PENDING_INDEPENDENT_REVIEW — EFFECTIVE ONLY AFTER HUMAN GATE + MERGE.**
+**Statusi:** **ACCEPTED / EFFECTIVE — ADR-028 ACCEPTED (PR #26 merged, squash `305aefd`, 28.07.2026, pas Fable→Codex→Human Gate). IMPLEMENTIMI = INCREMENT B (NOT STARTED); asnjë rresht i acceptance matrix §9 s'mbyllet pa evidencë të ekzekutuar.**
 **Autoriteti:** ky dokument është **specifikimi SUBORDINATE ndaj ADR-028** (`docs/canonical/01-phase0/05_Decision_Gates_ADR.md`). ADR-028 mban vendimin; ky dokument mban boundary-t, schema/table map, flows, security gates, migrimin, rollback-un dhe acceptance criteria. Në konflikt fiton ADR-028.
 **Data:** 27.07.2026 (v1; **corrected pre-merge 27.07.2026 · 28.07.2026** — correction passes të review-t të pavarur mbi PR #26, para merge-it; pa v2 artificial) · **Pronari:** Pronari + Tech · **Kufiri:** ZERO kod/dependency/migrim nga PR-ja që e krijon; implementimi = **Increment B** i rendit A/B/C/D (shih `Application_Architecture_Convention.md` §15). Asnjë secret/konfigurim real këtu.
 

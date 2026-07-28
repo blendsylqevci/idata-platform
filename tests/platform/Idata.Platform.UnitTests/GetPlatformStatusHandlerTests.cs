@@ -1,4 +1,5 @@
 using Idata.Platform.Modules.PlatformStatus.Application;
+using Idata.Platform.Modules.PlatformStatus.Application.Features.GetPlatformStatus;
 using Idata.Platform.Modules.PlatformStatus.Domain;
 using Idata.Platform.Modules.PlatformStatus.Presentation;
 using Xunit;
@@ -18,7 +19,7 @@ public sealed class GetPlatformStatusHandlerTests
     public async Task Database_ready_prodhon_status_ok()
     {
         var handler = new GetPlatformStatusHandler(new FakeProbe(DatabaseState.Ready));
-        var report = await handler.HandleAsync(TestContext.Current.CancellationToken);
+        var report = await handler.Handle(new GetPlatformStatusQuery(), TestContext.Current.CancellationToken);
         Assert.Equal(PlatformHealth.Ok, report.Status);
         Assert.Equal(DatabaseState.Ready, report.Database);
     }
@@ -27,7 +28,7 @@ public sealed class GetPlatformStatusHandlerTests
     public async Task Database_unavailable_prodhon_gjendje_te_kontrolluar_degraded()
     {
         var handler = new GetPlatformStatusHandler(new FakeProbe(DatabaseState.Unavailable));
-        var report = await handler.HandleAsync(TestContext.Current.CancellationToken);
+        var report = await handler.Handle(new GetPlatformStatusQuery(), TestContext.Current.CancellationToken);
         Assert.Equal(PlatformHealth.Degraded, report.Status);
         Assert.Equal(DatabaseState.Unavailable, report.Database);
     }
@@ -36,7 +37,7 @@ public sealed class GetPlatformStatusHandlerTests
     public async Task Capabilities_e_bootstrap_it_jane_eksplicite_f1_pending()
     {
         var handler = new GetPlatformStatusHandler(new FakeProbe(DatabaseState.Ready));
-        var report = await handler.HandleAsync(TestContext.Current.CancellationToken);
+        var report = await handler.Handle(new GetPlatformStatusQuery(), TestContext.Current.CancellationToken);
         Assert.Equal(BootstrapCapabilities.F1Pending, report.Capabilities);
     }
 

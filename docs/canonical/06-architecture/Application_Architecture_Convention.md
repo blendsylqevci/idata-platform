@@ -1,6 +1,6 @@
 # Application Architecture Convention (iData+ platform)
 
-**Statusi:** **TARGET CONVENTION — EFFECTIVE ONLY AFTER ADR-029 HUMAN GATE + MERGE. IMPLEMENTIMI FILLON ME INCREMENT A.**
+**Statusi:** **EFFECTIVE — ADR-029 ACCEPTED (PR #26 merged, squash `305aefd`, 28.07.2026, pas Fable→Codex→Human Gate). IMPLEMENTIMI NIS ME INCREMENT A (ACTIVE / NOT COMPLETE).**
 **Autoriteti:** ky dokument është **specifikimi normativ i detajuar, SUBORDINATE ndaj ADR-029** (`docs/canonical/01-phase0/05_Decision_Gates_ADR.md`). ADR-029 mban vendimin; ky dokument mban detajet. Në konflikt fiton ADR-029.
 **Data:** 27.07.2026 (v1; **corrected pre-merge 27.07.2026 · 28.07.2026** — correction passes të review-t të pavarur mbi PR #26, para merge-it; pa v2 artificial) · **Pronari:** Tech/Platform Owner + PM · **Kufiri:** ASNJË rresht i këtij dokumenti nuk është i implementuar nga PR-ja që e krijon — zero kod, zero dependency, zero migrim.
 
@@ -105,7 +105,7 @@ Lejohen VETËM për shqetësime realisht horizontale: **validation · telemetry 
 - **Kontrata target e Increment A:** runtime `MapOpenApi()` DHE `MapScalarApiReference()` regjistrohen **VETËM brenda së njëjtës degë EKZAKTE `app.Environment.IsDevelopment()`**; jashtë Development, **as runtime OpenAPI JSON endpoint-i as Scalar UI nuk ekspozohen** (Staging = absent; Production = absent; environment i panjohur/munguar = absent, FAIL-CLOSED); kërkohen **teste negative për Staging/Production**.
 - Build-time OpenAPI generation + generated TypeScript client mbeten **të pavarura** nga runtime documentation endpoints (gjenerohen build-time si sot).
 - Nëse në të ardhmen kërkohet internal non-development documentation UI → **ADR/gate i ri** me authentication, authorization dhe network controls — jo zgjerim i heshtur.
-- **DEVIJIM I NJOHUR DHE I DEKLARUAR — gjendja aktuale:** `MapOpenApi` regjistrohet **pa kusht environment-i** (`src/platform/Idata.Platform.Api/Program.cs:35`). Kontrata Development-only është **TARGET i Increment A, JO gjendje aktuale**; mbyllet në Increment A me teste negative për Staging/Production. Deri atëherë ky është devijim i njohur — gjendja aktuale **NUK quhet compliant me target-in**. (Scalar sot nuk ekziston fare në kod — vetëm target.)
+- **Devijimi i mëparshëm (MapOpenApi i pakushtëzuar në runtime) = CLOSED nga Increment A** — i implementuar në branch-in e PR #27 (pret review + Human Gate; **NUK** quhet MERGED/COMPLETE): `MapOpenApi` + `MapScalarApiReference` tani janë brenda degës ekzakte `app.Environment.IsDevelopment()`; **environment-matrix tests** e provojnë (Development: OpenAPI/Scalar të arritshme + status 200; Staging/Production/environment i panjohur: docs endpoints **404**, statusi mbetet i arritshëm 200); regression i automatizuar në CI provon kontratën byte-identike edhe nën `DOTNET_ENVIRONMENT=Production`.
 - **Zero Swagger/Swashbuckle paralel** pa ADR të ri.
 
 ## 11. Rregulli i vendimit DDD

@@ -33,9 +33,10 @@ Presentation → Application(+Domain) · DbMigrator → Infrastructure · Api = 
 > është: **`DbMigrator → Persistence` dhe vetëm unazat e brendshme realisht të nevojshme
 > — JO blanket dependency ndaj Infrastructure**; `Persistence` = migration owner NEUTRAL
 > me zero varësi ndaj moduleve; zero reachability cross-module. Ky grafik është
-> **PROPOSED TARGET GRAPH, subordinate ndaj ADR-029** — bëhet autoritet aktiv **VETËM pas
-> Fable/Codex review, Human Gate dhe merge**; deri atëherë ky Record mbetet evidencë
-> HISTORIKE e implementimit aktual. Fakti që Bootstrap-i vetë NUK implementoi
+> **TARGET GRAPH subordinate ndaj ADR-029** — kushtet u plotësuan më 28.07.2026 (PR #26
+> MERGED `305aefd` pas Fable/Codex review + Human Gate): grafiku tani është **autoritet
+> AKTIV** përmes ADR-029 ACCEPTED; ky Record mbetet evidencë HISTORIKE e implementimit
+> të Bootstrap-it. Fakti që Bootstrap-i vetë NUK implementoi
 > mediator/Identity/Scalar mbetet i pandryshuar.
 Pa MediatR/AutoMapper/broker/Redis/identity provider/UI kit; pa "Common/Utils" junk drawer;
 query/handler i thjeshtë (pa CQRS ceremonial).
@@ -109,12 +110,17 @@ Status-sync post-merge; solution/build/CI .NET i pin-uar; NJË vertical smoke sl
 EF/PostgreSQL migration path; OpenAPI determinist + klient TS i gjeneruar; Angular shell +
 i18n scaffold; CI që verifikon të dy stack-et; ky record.
 
-## Çfarë MBETET F1+ (të pahapura këtu)
+## Çfarë MBETEJ F1+ — HISTORICAL SNAPSHOT ("as of" merge i PR #24, 24.07.2026)
+
+*(Kjo listë pasqyron gjendjen NË MOMENTIN e merge-it të PR #24 dhe NUK përditësohet
+si status aktual — statusi CURRENT autoritativ është ADR Register:
+**ADR-028 = ACCEPTED/EFFECTIVE me PR #26 `305aefd`, 28.07.2026; implementimi
+Identity = Increment B NOT STARTED**.)*
 
 Identity/Tenant/RBAC production · audit/outbox/observability/recovery production ·
 encryption/key custody (ADR-025) · providers (ADR-026) · POS/wrapper (ADR-027) ·
-identity provider/store (ADR-028 — PROPOSED 27.07.2026, effective pas Human Gate + merge) · module biznesi · Edge/Device Agent/mobile/KDS ·
-fiscal domain/SEF · Step B/C · preflight/Tier 2. Gates OPEN të ADR-024 të paprekura.
+identity provider/store (ADR-028 — OPEN/i pavendosur në atë moment) · module biznesi · Edge/Device Agent/mobile/KDS ·
+fiscal domain/SEF · Step B/C · preflight/Tier 2. Gates OPEN të ADR-024 të paprekura (në atë datë).
 
 ## Siguria (correction pass i review-t të pavarur, 24.07.2026)
 

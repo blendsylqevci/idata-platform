@@ -251,7 +251,8 @@
           "Idata.Platform.Modules.PlatformStatus.Presentation": "[1.0.0, )",
           "Idata.Platform.Persistence": "[1.0.0, )",
           "Microsoft.AspNetCore.OpenApi": "[10.0.10, )",
-          "Microsoft.OpenApi": "[2.11.0, )"
+          "Microsoft.OpenApi": "[2.11.0, )",
+          "Scalar.AspNetCore": "[2.16.16, )"
         }
       },
       "idata.platform.dbmigrator": {
@@ -290,7 +291,8 @@
       "idata.platform.modules.platformstatus.application": {
         "type": "Project",
         "dependencies": {
-          "Idata.Platform.Modules.PlatformStatus.Domain": "[1.0.0, )"
+          "Idata.Platform.Modules.PlatformStatus.Domain": "[1.0.0, )",
+          "Mediator.Abstractions": "[3.0.2, )"
         }
       },
       "idata.platform.modules.platformstatus.domain": {
@@ -311,17 +313,26 @@
       "idata.platform.modules.platformstatus.presentation": {
         "type": "Project",
         "dependencies": {
-          "Idata.Platform.Modules.PlatformStatus.Application": "[1.0.0, )"
+          "Idata.Platform.Modules.PlatformStatus.Application": "[1.0.0, )",
+          "Mediator.Abstractions": "[3.0.2, )"
         }
       },
       "idata.platform.persistence": {
         "type": "Project",
         "dependencies": {
-          "Idata.Platform.Modules.AccessControl.Domain": "[1.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.10, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
           "Npgsql": "[10.0.3, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
+        }
+      },
+      "Mediator.Abstractions": {
+        "type": "CentralTransitive",
+        "requested": "[3.0.2, )",
+        "resolved": "3.0.2",
+        "contentHash": "TytjnyN8gLObZBxkM7HHPFJF3LHtk6Y8mHW56ONuXRuVEK6Fmed3f0z79H9TpmoZQP2zQAIS4/0O9R2w0v02qw==",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.0"
         }
       },
       "Microsoft.AspNetCore.OpenApi": {
@@ -382,6 +393,12 @@
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.4, 11.0.0)",
           "Npgsql": "10.0.3"
         }
+      },
+      "Scalar.AspNetCore": {
+        "type": "CentralTransitive",
+        "requested": "[2.16.16, )",
+        "resolved": "2.16.16",
+        "contentHash": "Ax0e0bIh+Upf92k1+pTBUom3e/kbpu20qsrDYmmS1NM721Eq2xF8c789x6IbiNrvW8WwySRzPv/icYYhb6idSg=="
       }
     }
   }

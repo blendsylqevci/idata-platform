@@ -3,4 +3,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Domain\Idata.Platform.Modules.PlatformStatus.Domain.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- ADR-029: abstraksionet e mediator-it aty ku deklarohen query/handler. -->
+    <PackageReference Include="Mediator.Abstractions" />
+  </ItemGroup>
 </Project>

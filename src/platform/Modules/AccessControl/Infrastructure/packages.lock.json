@@ -130,7 +130,6 @@
       "idata.platform.persistence": {
         "type": "Project",
         "dependencies": {
-          "Idata.Platform.Modules.AccessControl.Domain": "[1.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.10, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
           "Npgsql": "[10.0.3, )",

@@ -22,23 +22,33 @@ public sealed class ApiSurfaceTests
         await using var factory = new AccessControlApiFactory();
         _ = factory.CreateClient(); // ndez host-in
         var dataSource = factory.Services.GetRequiredService<EndpointDataSource>();
+        // Normalizim: pattern-et MVC s'kanë "/" nistore (Increment A —
+        // statusi kaloi te Controllers); minimal API-t e kanë.
         var patterns = dataSource.Endpoints
             .OfType<RouteEndpoint>()
-            .Select(endpoint => endpoint.RoutePattern.RawText ?? string.Empty)
+            .Select(endpoint => (endpoint.RoutePattern.RawText ?? string.Empty).TrimStart('/'))
             .Order()
+            .ToArray();
+
+        // ENVIRONMENT-AWARE: rrugët e dokumentimit (openapi/scalar) ekzistojnë
+        // VETËM në Development (default i WebApplicationFactory) — matrica e
+        // plotë per-environment provohet te `PlatformStatusPilotTests`.
+        var functional = patterns
+            .Where(pattern => !pattern.StartsWith("openapi", StringComparison.Ordinal)
+                && !pattern.StartsWith("scalar", StringComparison.Ordinal))
             .ToArray();
 
         Assert.Equal(
             [
-                "/api/platform/access-context",
-                "/api/platform/memberships/{membershipId:guid}/role",
-                "/api/platform/status",
-                "/openapi/{documentName}.json",
+                "api/platform/access-context",
+                "api/platform/memberships/{membershipId:guid}/role",
+                "api/platform/status",
             ],
-            patterns);
+            functional);
 
+        Assert.Single(patterns, pattern => pattern == "api/platform/status"); // zero duplicate
         Assert.DoesNotContain(patterns, pattern => pattern.Contains("/poc", StringComparison.OrdinalIgnoreCase));
-        Assert.DoesNotContain(patterns, pattern => pattern.Contains("test", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(functional, pattern => pattern.Contains("test", StringComparison.OrdinalIgnoreCase));
         await Task.CompletedTask;
     }
 

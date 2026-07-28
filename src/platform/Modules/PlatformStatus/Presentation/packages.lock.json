@@ -2,10 +2,17 @@
   "version": 2,
   "dependencies": {
     "net10.0": {
+      "Mediator.Abstractions": {
+        "type": "Direct",
+        "requested": "[3.0.2, )",
+        "resolved": "3.0.2",
+        "contentHash": "TytjnyN8gLObZBxkM7HHPFJF3LHtk6Y8mHW56ONuXRuVEK6Fmed3f0z79H9TpmoZQP2zQAIS4/0O9R2w0v02qw=="
+      },
       "idata.platform.modules.platformstatus.application": {
         "type": "Project",
         "dependencies": {
-          "Idata.Platform.Modules.PlatformStatus.Domain": "[1.0.0, )"
+          "Idata.Platform.Modules.PlatformStatus.Domain": "[1.0.0, )",
+          "Mediator.Abstractions": "[3.0.2, )"
         }
       },
       "idata.platform.modules.platformstatus.domain": {
