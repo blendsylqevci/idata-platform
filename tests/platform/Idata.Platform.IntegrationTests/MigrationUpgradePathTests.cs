@@ -11,13 +11,21 @@ namespace Idata.Platform.IntegrationTests;
 
 /// <summary>
 /// Kompatibiliteti REAL 0001 → 0002 (§6): DB sintetike me EKZAKT 0001 të
-/// aplikuar → migratori normal aplikon VETËM 0002; row-i historik i 0001
+/// aplikuar → aplikohet VETËM 0002; row-i historik i 0001
 /// (MigrationId, ProductVersion) i pandryshuar; sentinel/data e 0001 e
-/// ruajtur; objektet e 0002 ekzistojnë; no-op i qëndrueshëm. Rollback
+/// ruajtur; objektet e 0002 ekzistojnë. Rollback
 /// 0002→0001 VETËM me helper test-only të guard-uar (guard tripalësh PARA
 /// çdo DbContext/connection/query): DownOperations e 0002 →
 /// IMigrationsSqlGenerator → NJË transaction PostgreSQL (DDL + heqja e
 /// row-it të historisë), JO `IMigrator` me target migration.
+///
+/// PËRSHTATJE MEKANIKE B.1 (0003 në assembly — E FLAMURUAR në PR body):
+/// pending counts derivohen tani nga seti 3-migrimesh (1 applied → 2
+/// pending; 2 applied → 1 pending); hapi "migratori normal aplikon vetëm
+/// 0002" bëhet aplikim i shënjestruar i 0002 me të NJËJTIN mekanizëm të
+/// EF-it (migratori normal tani do të aplikonte edhe 0003 — rruga
+/// {0001,0002}→0003 provohet te `IdentityMigrationUpgradeTests`).
+/// Semantika historike 0001→0002 mbetet E PANDRYSHUAR.
 /// </summary>
 [Collection(nameof(MigratorEnvCollection))]
 public sealed class MigrationUpgradePathTests
@@ -49,18 +57,19 @@ public sealed class MigrationUpgradePathTests
     }
 
     /// <summary>
-    /// Apliko EKZAKT deri te 0001 (forward). EF Core 10 nuk targeton dot ID-të
-    /// jo-timestamp, ndaj përdoret mekanizmi i EF-it: UpOperations e 0001 →
-    /// IMigrationsSqlGenerator → executor + INSERT i row-it të historisë me
-    /// ProductVersion-in e Designer-it të 0001. Pa guard destruktiv (forward).
+    /// Apliko EKZAKT NJË migrim forward (0001 ose 0002). EF Core 10 nuk
+    /// targeton dot ID-të jo-timestamp, ndaj përdoret mekanizmi i EF-it:
+    /// UpOperations → IMigrationsSqlGenerator → executor + INSERT i row-it
+    /// të historisë me ProductVersion-in e Designer-it. Pa guard destruktiv
+    /// (forward-only). Target i FIKSUAR nga thirrësi — asnjë target arbitrar.
     /// </summary>
-    private static async Task ApplyExactly0001Async(string databaseName)
+    private static async Task ApplyExactlyAsync(string databaseName, string migrationId)
     {
         await using var context = CreateContext(databaseName);
         _ = await OpenVerifiedAsync(context, databaseName);
 
         var assembly = context.GetService<IMigrationsAssembly>();
-        var migration = (Migration)Activator.CreateInstance(assembly.Migrations[Migration0001].AsType())!;
+        var migration = (Migration)Activator.CreateInstance(assembly.Migrations[migrationId].AsType())!;
         typeof(Migration).GetProperty(nameof(Migration.ActiveProvider))!
             .SetValue(migration, context.Database.ProviderName);
 
@@ -69,14 +78,25 @@ public sealed class MigrationUpgradePathTests
         await context.GetService<IMigrationCommandExecutor>()
             .ExecuteNonQueryAsync(commands, context.GetService<IRelationalConnection>());
 
-        // Tabela e historisë menaxhohet nga EF veçmas nga operacionet.
-        // GetCreateScript-i i Npgsql-it është IF-NOT-EXISTS (idempotent), ndaj
-        // ekzekutohet pa kusht, pastaj regjistrohet row-i i 0001 me
-        // ProductVersion-in e Designer-it.
-        await context.Database.ExecuteSqlRawAsync(context.GetService<IHistoryRepository>().GetCreateScript());
-        await context.Database.ExecuteSqlRawAsync(
-            $"INSERT INTO platform.\"__ef_migrations_history\" (\"MigrationId\", \"ProductVersion\") VALUES ('{Migration0001}', '10.0.10')");
+        // Tabela e historisë menaxhohet nga EF veçmas nga operacionet —
+        // krijohet me variantin IF-NOT-EXISTS (idempotent për thirrje të
+        // njëpasnjëshme 0001→0002), pastaj regjistrohet row-i me
+        // ProductVersion-in e Designer-it. SQL-i i historisë = KONSTANTE e
+        // fiksuar per-migrim (asnjë interpolim vlerash runtime — anti EF1002).
+        await context.Database.ExecuteSqlRawAsync(context.GetService<IHistoryRepository>().GetCreateIfNotExistsScript());
+        var historyInsert = migrationId switch
+        {
+            Migration0001 =>
+                $"INSERT INTO platform.\"__ef_migrations_history\" (\"MigrationId\", \"ProductVersion\") VALUES ('{Migration0001}', '10.0.10')",
+            Migration0002 =>
+                $"INSERT INTO platform.\"__ef_migrations_history\" (\"MigrationId\", \"ProductVersion\") VALUES ('{Migration0002}', '10.0.10')",
+            _ => throw new ArgumentOutOfRangeException(nameof(migrationId)),
+        };
+        await context.Database.ExecuteSqlRawAsync(historyInsert);
     }
+
+    private static Task ApplyExactly0001Async(string databaseName)
+        => ApplyExactlyAsync(databaseName, Migration0001);
 
     /// <summary>
     /// Helper TEST-ONLY i rollback-ut me target të FIKSUAR 0001 — I NJËJTI
@@ -214,11 +234,12 @@ public sealed class MigrationUpgradePathTests
         await ScalarAsync<object>(db.DatabaseName,
             "INSERT INTO platform.migration_smoke_check DEFAULT VALUES RETURNING \"Id\"");
 
-        // 5. applied=1, pending=1.
-        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "1", "1", "present"));
+        // 5. applied=1, pending=2 (assembly 3-migrimesh — 0002+0003 pending).
+        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "1", "2", "present"));
 
-        // 6-7. Migratori NORMAL aplikon vetëm 0002.
-        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "migrate"));
+        // 6-7. Aplikohet EKZAKT 0002 (i shënjestruar — migratori normal do të
+        //      aplikonte edhe 0003; rruga {0001,0002}→0003 provohet veçmas).
+        await ApplyExactlyAsync(db.DatabaseName, Migration0002);
 
         // 8. Historia = ekzakt {0001, 0002}, secili një herë.
         var historyAt0002 = await HistoryAsync(db.DatabaseName);
@@ -241,17 +262,20 @@ public sealed class MigrationUpgradePathTests
         Assert.True(await ScalarAsync<bool>(db.DatabaseName,
             "SELECT COUNT(*) >= 1 FROM information_schema.table_constraints WHERE table_schema='platform' AND table_name='role_permission' AND constraint_type='FOREIGN KEY'"));
 
-        // 12. No-op migrate → historia identike, sentinel i paprekur.
-        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "migrate"));
+        // 12. Gjendja pas 0002: applied=2, pending=1 (0003); historia identike.
         Assert.Equal(historyAt0002, await HistoryAsync(db.DatabaseName));
-        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "2", "0", "present"));
+        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "2", "1", "present"));
     }
 
     [Fact]
     public async Task Rollback_i_guarduar_0002_ne_0001_dhe_reapply()
     {
         await using var db = await PlatformTestDatabase.CreateAsync("rollbackpath");
-        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "migrate"));
+        // Gjendje EKZAKTE {0001,0002} (aplikim i shënjestruar — migratori
+        // normal do të sillte edhe 0003; ky test mbetet prova HISTORIKE
+        // e rollback-ut 0002→0001).
+        await ApplyExactly0001Async(db.DatabaseName);
+        await ApplyExactlyAsync(db.DatabaseName, Migration0002);
         await ScalarAsync<object>(db.DatabaseName,
             "INSERT INTO platform.migration_smoke_check DEFAULT VALUES RETURNING \"Id\"");
 
@@ -275,7 +299,7 @@ public sealed class MigrationUpgradePathTests
             Environment.SetEnvironmentVariable(DestructiveResetGuard.OptInVariable, previousOptIn);
         }
 
-        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "2", "0", "present"));
+        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "2", "1", "present"));
 
         // Me guard të plotë → rollback te 0001.
         Environment.SetEnvironmentVariable("DOTNET_ENVIRONMENT", "CI");
@@ -290,27 +314,29 @@ public sealed class MigrationUpgradePathTests
             Environment.SetEnvironmentVariable(DestructiveResetGuard.OptInVariable, previousOptIn);
         }
 
-        // 0001 applied · 0002 pending · sentinel i 0001 mbetet · objektet e 0002 mungojnë.
+        // 0001 applied · 0002+0003 pending · sentinel i 0001 mbetet · objektet e 0002 mungojnë.
         Assert.Equal(
             [Migration0001],
             (await HistoryAsync(db.DatabaseName)).Select(row => row.MigrationId).ToArray());
-        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "1", "1", "present"));
+        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "1", "2", "present"));
         Assert.Equal(1L, await ScalarAsync<long>(db.DatabaseName, "SELECT COUNT(*) FROM platform.migration_smoke_check"));
         Assert.False(await ObjectExistsAsync(db.DatabaseName, "platform.business"));
         Assert.False(await ObjectExistsAsync(db.DatabaseName, "platform.audit_log"));
         Assert.True(await ScalarAsync<bool>(db.DatabaseName,
             "SELECT to_regproc('platform.audit_log_block_mutation') IS NULL"));
 
-        // Reapply 0002 → kalon.
+        // Reapply → migratori normal aplikon 0002+0003 → gjendja LATEST e plotë.
         Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "migrate"));
-        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "2", "0", "present"));
+        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "3", "0", "present"));
     }
 
     [Fact]
     public async Task Rollback_atomik_deshtim_i_injektuar_pas_down_nuk_le_partial_down()
     {
         await using var db = await PlatformTestDatabase.CreateAsync("rollbackatomic");
-        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "migrate"));
+        // Gjendje EKZAKTE {0001,0002} — prova historike e atomicitetit 0002-down.
+        await ApplyExactly0001Async(db.DatabaseName);
+        await ApplyExactlyAsync(db.DatabaseName, Migration0002);
         await ScalarAsync<object>(db.DatabaseName,
             "INSERT INTO platform.migration_smoke_check DEFAULT VALUES RETURNING \"Id\"");
 
@@ -334,7 +360,7 @@ public sealed class MigrationUpgradePathTests
         Assert.Equal(
             [Migration0001, Migration0002],
             (await HistoryAsync(db.DatabaseName)).Select(row => row.MigrationId).ToArray());
-        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "2", "0", "present"));
+        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "2", "1", "present"));
         Assert.True(await ObjectExistsAsync(db.DatabaseName, "platform.business"));
         Assert.True(await ObjectExistsAsync(db.DatabaseName, "platform.audit_log"));
         Assert.True(await ScalarAsync<bool>(db.DatabaseName,
@@ -380,6 +406,6 @@ public sealed class MigrationUpgradePathTests
         }
 
         // DB-ja sintetike kandidate mbetet e pandryshuar: gjendja e migruar intakte.
-        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "2", "0", "present"));
+        Assert.Equal(0, await RunMigratorAsync(db.DatabaseName, "assert-state", "3", "0", "present"));
     }
 }

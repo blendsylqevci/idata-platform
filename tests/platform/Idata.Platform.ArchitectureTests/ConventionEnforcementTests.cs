@@ -80,6 +80,64 @@ public sealed class ConventionEnforcementTests
         }
     }
 
+    /// <summary>
+    /// ADR-028 B.1 — vendosja e paketave identity në nivel csproj:
+    /// dy paketat STORE (Identity.EFCore + OpenIddict.EFCore) lejohen VETËM
+    /// në Persistence (storage mapping) dhe Modules/Identity/Infrastructure
+    /// (wiring); API host-i i konsumon vetëm si composition root përmes
+    /// project reference — pa PackageReference direkt.
+    /// </summary>
+    [Fact]
+    public void Identity_store_paketat_vetem_ne_csproj_et_e_aprovuara()
+    {
+        string[] approvedSuffixes =
+            [Path.Combine("Idata.Platform.Persistence", "Idata.Platform.Persistence.csproj"),
+             Path.Combine("Infrastructure", "Idata.Platform.Modules.Identity.Infrastructure.csproj")];
+        string[] storePackages =
+            ["\"Microsoft.AspNetCore.Identity.EntityFrameworkCore\"", "\"OpenIddict.EntityFrameworkCore\""];
+
+        foreach (var project in AllProjectFiles())
+        {
+            var content = File.ReadAllText(project);
+            if (storePackages.Any(package => content.Contains(package, StringComparison.Ordinal)))
+            {
+                Assert.Contains(approvedSuffixes, suffix => project.EndsWith(suffix, StringComparison.Ordinal));
+            }
+        }
+
+        // Të dyja paketat duhet të ekzistojnë realisht në të dy projektet e
+        // aprovuara — allowlist-i nuk është i vdekur.
+        foreach (var suffix in approvedSuffixes)
+        {
+            var project = Assert.Single(AllProjectFiles(), path => path.EndsWith(suffix, StringComparison.Ordinal));
+            var content = File.ReadAllText(project);
+            Assert.All(storePackages, package => Assert.Contains(package, content, StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// B.1 = STORE foundation: paketat e protokollit OIDC (Server/Validation/
+    /// Client/AspNetCore metapackage), Identity UI dhe çdo provider komercial
+    /// (Duende/IdentityServer/Auth0/Okta) = TË NDALUARA në props + çdo csproj.
+    /// </summary>
+    [Fact]
+    public void Zero_paketa_identity_protokolli_ose_provider_te_paaprovuar()
+    {
+        string[] forbidden =
+            ["OpenIddict.AspNetCore", "OpenIddict.Server", "OpenIddict.Validation", "OpenIddict.Client",
+             "Microsoft.AspNetCore.Identity.UI", "IdentityServer", "Duende", "Auth0", "Okta"];
+
+        var props = File.ReadAllText(Path.Combine(PlatformRoot, "Directory.Packages.props"));
+        foreach (var name in forbidden)
+        {
+            Assert.DoesNotContain(name, props, StringComparison.OrdinalIgnoreCase);
+            foreach (var project in AllProjectFiles())
+            {
+                Assert.DoesNotContain(name, File.ReadAllText(project), StringComparison.OrdinalIgnoreCase);
+            }
+        }
+    }
+
     [Fact]
     public void Zero_pipeline_behaviors_ne_asnje_assembly_te_platformes()
     {
@@ -167,6 +225,7 @@ public sealed class ConventionEnforcementTests
          Assembly.Load("Idata.Platform.Modules.AccessControl.Application"),
          Assembly.Load("Idata.Platform.Modules.AccessControl.Infrastructure"),
          Assembly.Load("Idata.Platform.Modules.AccessControl.Presentation"),
+         Assembly.Load("Idata.Platform.Modules.Identity.Infrastructure"),
          Assembly.Load("Idata.Platform.Persistence"),
          Assembly.Load("Idata.Platform.DbMigrator"),
          Assembly.Load("Idata.Platform.Api")];

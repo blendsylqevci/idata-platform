@@ -399,6 +399,14 @@
           "Idata.Platform.Modules.AccessControl.Domain": "[1.0.0, )"
         }
       },
+      "idata.platform.modules.identity.infrastructure": {
+        "type": "Project",
+        "dependencies": {
+          "Idata.Platform.Persistence": "[1.0.0, )",
+          "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "[10.0.10, )",
+          "OpenIddict.EntityFrameworkCore": "[7.6.0, )"
+        }
+      },
       "idata.platform.modules.platformstatus.application": {
         "type": "Project",
         "dependencies": {
