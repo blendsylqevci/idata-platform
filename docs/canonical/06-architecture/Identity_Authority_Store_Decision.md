@@ -66,6 +66,8 @@ ASP.NET Core Identity + OpenIddict       AccessControl (F1.1, i pandryshuar)
 
 **Zero emra default të pakontrolluar** (`AspNetUsers`, `AspNetRoles`, `User` etj.) si emra finalë — mapping-u i EF/OpenIddict konfigurohet në emrat e mësipërm; **emrat finalë (dhe llojet reale të token-ave që paketat i përdorin) verifikohen në Increment B para migrimit 0003** — nuk deklarohen lloje që paketa finale nuk i përdor.
 
+**Verifikim B.1 (28.07.2026, para migrimit 0003 — `Identity_Store_Foundation_B1_Record.md`):** tabelat §3 u konfirmuan kundër modelit REAL të paketave; `user_token` = artefakte account-level të Identity-t me PK të përbërë (`user_id`/`login_provider`/`name`); `oidc_token` = OpenIddict me çelës Guid; pronësia e ndarë e provuar me teste (model + schema reale). Përjashtim i deklaruar: `identity.user_claim.id` = **integer surrogate i framework-ut** (`IdentityUserClaim<TKey>.Id` — lloji real i paketës; `user_id` mbetet uuid) — sipas rregullit të këtij seksioni që llojet reale fitojnë mbi deklarimet.
+
 **Pronësia e token-ave — ZERO mbivendosje (kontratë + test i ardhshëm):** Increment B shton architecture/schema acceptance test që provon (a) **zero ownership të dyfishtë** midis `user_token` dhe `oidc_token`; (b) **zero token material në schema `platform`**; (c) lifecycle/revocation ndodhin në store-in autoritativ përkatës.
 
 **Arsyetimi i emërtimit (i saktë, pa overclaim):** `USER` është **fjalë e rezervuar e PostgreSQL** (SQL key words, PostgreSQL 16 — burim zyrtar), prandaj canonical përdor `identity.user_account` dhe `platform.app_user`. **NUK pretendohet** se `Users`, `Role` apo çdo emër tjetër janë të gjithë reserved — emrat e tjerë eksplicitë përdoren për qartësi domain-i, schema ownership, lowercase naming dhe shmangie të mapping-ut default të pakontrolluar. `Rolers` është emër i pavlefshëm/typo — jo alternativë.
@@ -142,7 +144,7 @@ Testi ekzistues `Zero_identity_provider_konkret_ne_asnje_assembly_te_platformes`
 4. ndryshimi arsyetohet EKSPLICIT në PR body;
 5. architecture coverage **NUK dobësohet në heshtje**.
 
-**Në PR-në docs-only aktuale testi NUK preket.**
+**Në PR-në docs-only aktuale testi NUK preket.** *(Shënim i datuar B.1, 28.07.2026: zëvendësimi i kontrolluar u krye në branch-in e B.1 sipas pikave 1–5 — allowlist ekzakt assemblies + projekte të aprovuara; providerët/protokolli të ndaluar kudo; coverage i FORCUAR; pending review — shih `Identity_Store_Foundation_B1_Record.md`.)*
 
 ## 8. Rollback (Increment B) — kontrata FORWARD-ONLY
 
@@ -168,7 +170,7 @@ Testi ekzistues `Zero_identity_provider_konkret_ne_asnje_assembly_te_platformes`
 | C1 | Credentials: matrica e plotë §5.2 — Development+dev OK · Development pa set minimal FAIL · Staging/Production/unknown + ÇFARËDO dev/ephemeral = startup FAIL (edhe mixed) · persistent signing missing FAIL · persistent encryption missing FAIL · set valid SUCCESS | startup tests per-rresht | OPEN | Tech | Increment B PR + review |
 | C2 | Credentials: restart me të njëjtat creds · rotation/rollover me overlap të kontrolluar · expired/invalid/unavailable → fail-closed | teste lifecycle | OPEN | Tech | Increment B PR + review |
 | D1 | Verification policy për email/telefon si **gate i veçantë** per-klasë user/client (§5.3); **recovery NUK e zëvendëson verification policy** | policy e specifikuar + teste enrollment/expiry/single-use/rate-limit | OPEN | Pronari + Tech | Increment B PR + Human Gate |
-| E1 | Schema `identity` me tabelat §3 (emra të verifikuar) · migrim 0003+ me upgrade real nga 0002 | migration tests | OPEN | Tech | Increment B PR + review |
+| E1 | Schema `identity` me tabelat §3 (emra të verifikuar) · migrim 0003+ me upgrade real nga 0002 | migration tests | **IMPLEMENTED në branch B.1 / PENDING_INDEPENDENT_REVIEW — NOT MERGED** (28.07.2026; teste të ekzekutuara GREEN — shih `Identity_Store_Foundation_B1_Record.md`) | Tech | Increment B PR + review |
 | E2 | Authorization Code + PKCE end-to-end; implicit/password grant të REFUZUARA | teste flows | OPEN | Tech | Increment B PR + review |
 | E3 | MFA + recovery + lockout + refresh rotation/reuse detection | teste reale | OPEN | Tech | Increment B PR + review |
 | E4 | Tenant RBAC F1.1 i PAPREKUR (baseline GREEN; zero Identity-role në authz) | baseline i plotë | OPEN | Tech | Increment B PR + review |
