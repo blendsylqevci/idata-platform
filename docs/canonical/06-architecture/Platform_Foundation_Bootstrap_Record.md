@@ -33,9 +33,10 @@ Presentation → Application(+Domain) · DbMigrator → Infrastructure · Api = 
 > është: **`DbMigrator → Persistence` dhe vetëm unazat e brendshme realisht të nevojshme
 > — JO blanket dependency ndaj Infrastructure**; `Persistence` = migration owner NEUTRAL
 > me zero varësi ndaj moduleve; zero reachability cross-module. Ky grafik është
-> **PROPOSED TARGET GRAPH, subordinate ndaj ADR-029** — bëhet autoritet aktiv **VETËM pas
-> Fable/Codex review, Human Gate dhe merge**; deri atëherë ky Record mbetet evidencë
-> HISTORIKE e implementimit aktual. Fakti që Bootstrap-i vetë NUK implementoi
+> **TARGET GRAPH subordinate ndaj ADR-029** — kushtet u plotësuan më 28.07.2026 (PR #26
+> MERGED `305aefd` pas Fable/Codex review + Human Gate): grafiku tani është **autoritet
+> AKTIV** përmes ADR-029 ACCEPTED; ky Record mbetet evidencë HISTORIKE e implementimit
+> të Bootstrap-it. Fakti që Bootstrap-i vetë NUK implementoi
 > mediator/Identity/Scalar mbetet i pandryshuar.
 Pa MediatR/AutoMapper/broker/Redis/identity provider/UI kit; pa "Common/Utils" junk drawer;
 query/handler i thjeshtë (pa CQRS ceremonial).

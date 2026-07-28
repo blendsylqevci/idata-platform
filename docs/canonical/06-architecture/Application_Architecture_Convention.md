@@ -1,6 +1,6 @@
 # Application Architecture Convention (iData+ platform)
 
-**Statusi:** **TARGET CONVENTION — EFFECTIVE ONLY AFTER ADR-029 HUMAN GATE + MERGE. IMPLEMENTIMI FILLON ME INCREMENT A.**
+**Statusi:** **EFFECTIVE — ADR-029 ACCEPTED (PR #26 merged, squash `305aefd`, 28.07.2026, pas Fable→Codex→Human Gate). IMPLEMENTIMI NIS ME INCREMENT A (ACTIVE / NOT COMPLETE).**
 **Autoriteti:** ky dokument është **specifikimi normativ i detajuar, SUBORDINATE ndaj ADR-029** (`docs/canonical/01-phase0/05_Decision_Gates_ADR.md`). ADR-029 mban vendimin; ky dokument mban detajet. Në konflikt fiton ADR-029.
 **Data:** 27.07.2026 (v1; **corrected pre-merge 27.07.2026 · 28.07.2026** — correction passes të review-t të pavarur mbi PR #26, para merge-it; pa v2 artificial) · **Pronari:** Tech/Platform Owner + PM · **Kufiri:** ASNJË rresht i këtij dokumenti nuk është i implementuar nga PR-ja që e krijon — zero kod, zero dependency, zero migrim.
 
