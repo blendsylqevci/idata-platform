@@ -33,7 +33,7 @@ Grafiku CANONICAL (i provuar nga `DependencyDirectionTests` mbi metadata reale, 
 - `Application → vetëm Domain-i i modulit të vet` (+ abstraksione të aprovuara);
 - `Infrastructure → Application + Domain të modulit + Persistence (neutral/shared)`;
 - `Presentation → Application + Domain të modulit`;
-- **`Persistence` = migration owner NEUTRAL: zero varësi direkte ose transitive ndaj asnjë moduli** (storage records POCO; mapping records↔domain në Infrastructure të modulit);
+- **`Persistence` = technical EF adapter + migration owner i VETËM** (formulim i rekonsiliuar në correction pass të PR #28, i drejtuar nga Pronari): **zero varësi direkte ose transitive ndaj Domain/Application të asnjë moduli** dhe zero logjikë biznesi; storage records POCO + mapping records↔domain në Infrastructure të modulit; **LEJOHET të njohë VETËM mapping/store packages të miratuara nga ADR-028** (ASP.NET Core Identity EF + OpenIddict EF — store mapping, pa OIDC protocol behavior, pa endpoint, pa token issuance/validation, pa credential lifecycle). Ky NUK është "provider exception" blanket — përjashtimi vlen vetëm për store mapping-un EKZAKT të ADR-028; `Modules/Identity/Infrastructure` mban composition/wiring; API host = composition root **pa direct identity PackageReference** (të gjitha të imponuara me architecture tests);
 - **`DbMigrator → Persistence` dhe vetëm unazat e brendshme realisht të nevojshme — JO blanket dependency ndaj Infrastructure** (referenca reale e vetme sot: `Idata.Platform.Persistence`);
 - `Api = composition root` — i vetmi outer host që lidh komponentët;
 - **Zero reachability cross-module, direkt ose transitiv** — komunikim vetëm përmes kontratave të aprovuara.
@@ -46,7 +46,7 @@ Grafiku CANONICAL (i provuar nga `DependencyDirectionTests` mbi metadata reale, 
 | Application | use-cases, ports, commands/queries, responses, handlers | varësi jashtë Domain + abstraksioneve të aprovuara |
 | Infrastructure | implementime adapters/providers/repositories | business rules; transport concerns |
 | Presentation | controllers, transport mapping, HTTP contracts | DbContext/UoW/repository, business logic, tenant resolution |
-| Persistence | DbContext, mappings, migrations (owner i vetëm) | varësi nga Domain i moduleve; logjikë biznesi |
+| Persistence | DbContext, mappings, migrations (owner i vetëm); store mapping i miratuar nga ADR-028 (Identity/OpenIddict EF) | varësi nga Domain/Application i moduleve; logjikë biznesi; protocol/server/validation/client behavior; token issuance/validation; credential lifecycle |
 | API (host) | composition root, DI wiring, pipeline, environment gating | business logic; access i drejtpërdrejtë në DB |
 
 ## 4. Feature-slice template

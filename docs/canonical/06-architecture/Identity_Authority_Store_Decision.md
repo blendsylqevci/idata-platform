@@ -66,7 +66,7 @@ ASP.NET Core Identity + OpenIddict       AccessControl (F1.1, i pandryshuar)
 
 **Zero emra default të pakontrolluar** (`AspNetUsers`, `AspNetRoles`, `User` etj.) si emra finalë — mapping-u i EF/OpenIddict konfigurohet në emrat e mësipërm; **emrat finalë (dhe llojet reale të token-ave që paketat i përdorin) verifikohen në Increment B para migrimit 0003** — nuk deklarohen lloje që paketa finale nuk i përdor.
 
-**Verifikim B.1 (28.07.2026, para migrimit 0003 — `Identity_Store_Foundation_B1_Record.md`):** tabelat §3 u konfirmuan kundër modelit REAL të paketave; `user_token` = artefakte account-level të Identity-t me PK të përbërë (`user_id`/`login_provider`/`name`); `oidc_token` = OpenIddict me çelës Guid; pronësia e ndarë e provuar me teste (model + schema reale). Përjashtim i deklaruar: `identity.user_claim.id` = **integer surrogate i framework-ut** (`IdentityUserClaim<TKey>.Id` — lloji real i paketës; `user_id` mbetet uuid) — sipas rregullit të këtij seksioni që llojet reale fitojnë mbi deklarimet.
+**Verifikim B.1 (28.07.2026, para migrimit 0003; i korrigjuar në correction pass të PR #28, 29.07.2026 — `Identity_Store_Foundation_B1_Record.md`):** tabelat §3 u konfirmuan kundër modelit REAL të paketave; `user_token` = artefakte account-level të Identity-t me PK të përbërë (`user_id`/`login_provider`/`name`); `oidc_token` = OpenIddict me çelës Guid; pronësia e ndarë e provuar me teste (model + schema reale). **Zero persisted int IDs = ABSOLUT (vendim i Pronarit):** `identity.user_claim` përdor claim type CUSTOM (`UserClaimRecord : IdentityUserClaim<Guid>`) me çelës të VETËM të persistuar `ClaimId` (Guid → kolona `id` uuid, i gjeneruar në aplikacion); inherited `Id:int` i framework-ut INJOROHET nga EF dhe NUK persiston — asnjë kolonë identifikuese int në schema `identity` (provuar me model + DB tests + round-trip real UserManager/UserOnlyStore).
 
 **Pronësia e token-ave — ZERO mbivendosje (kontratë + test i ardhshëm):** Increment B shton architecture/schema acceptance test që provon (a) **zero ownership të dyfishtë** midis `user_token` dhe `oidc_token`; (b) **zero token material në schema `platform`**; (c) lifecycle/revocation ndodhin në store-in autoritativ përkatës.
 
@@ -157,7 +157,7 @@ Testi ekzistues `Zero_identity_provider_konkret_ne_asnje_assembly_te_platformes`
 
 ## 9. Acceptance matrix e Increment B (e MATSHME — çdo rresht me evidence, status, owner, closure gate)
 
-**Rregull:** statusi i çdo rreshti sot = **OPEN / NOT IMPLEMENTED**; **OPEN / waiver / planned / documented NUK numërohen PASS dhe NUK e mbyllin Increment B** — mbyllja kërkon testin/evidencën e kolonës 2 të ekzekutuar GREEN.
+**Rregull (i korrigjuar në correction pass të PR #28):** statusi **default = OPEN derisa të ketë evidencë të ekzekutuar**; çdo rresht **klasifikohet INDIVIDUALISHT** sipas evidencës reale (OPEN / PARTIAL / IMPLEMENTED-në-branch / N/A me justifikim); **OPEN / PARTIAL / N/A / waiver / planned / documented NUK numërohen PASS dhe NUK e mbyllin Increment B** — mbyllja e një rreshti kërkon testin/evidencën e kolonës 2 të ekzekutuar GREEN + review + Human Gate; **Increment B nuk quhet COMPLETE** para B.2/B.3.
 
 | # | Kriteri | Evidence/test i pritshëm | Statusi sot | Owner | Closure gate |
 |---|---|---|---|---|---|
@@ -170,11 +170,11 @@ Testi ekzistues `Zero_identity_provider_konkret_ne_asnje_assembly_te_platformes`
 | C1 | Credentials: matrica e plotë §5.2 — Development+dev OK · Development pa set minimal FAIL · Staging/Production/unknown + ÇFARËDO dev/ephemeral = startup FAIL (edhe mixed) · persistent signing missing FAIL · persistent encryption missing FAIL · set valid SUCCESS | startup tests per-rresht | OPEN | Tech | Increment B PR + review |
 | C2 | Credentials: restart me të njëjtat creds · rotation/rollover me overlap të kontrolluar · expired/invalid/unavailable → fail-closed | teste lifecycle | OPEN | Tech | Increment B PR + review |
 | D1 | Verification policy për email/telefon si **gate i veçantë** per-klasë user/client (§5.3); **recovery NUK e zëvendëson verification policy** | policy e specifikuar + teste enrollment/expiry/single-use/rate-limit | OPEN | Pronari + Tech | Increment B PR + Human Gate |
-| E1 | Schema `identity` me tabelat §3 (emra të verifikuar) · migrim 0003+ me upgrade real nga 0002 | migration tests | **IMPLEMENTED në branch B.1 / PENDING_INDEPENDENT_REVIEW — NOT MERGED** (28.07.2026; teste të ekzekutuara GREEN — shih `Identity_Store_Foundation_B1_Record.md`) | Tech | Increment B PR + review |
+| E1 | Schema `identity` me tabelat §3 (emra të verifikuar) · migrim 0003+ me upgrade real nga 0002 | migration tests | **IMPLEMENTED në branch B.1 (PR #28) / PENDING_INDEPENDENT_REVIEW — NOT MERGED** (28–29.07.2026; teste të ekzekutuara GREEN, përfshirë UUID claim key pas correction pass — shih `Identity_Store_Foundation_B1_Record.md`) | Tech | Increment B PR + review |
 | E2 | Authorization Code + PKCE end-to-end; implicit/password grant të REFUZUARA | teste flows | OPEN | Tech | Increment B PR + review |
 | E3 | MFA + recovery + lockout + refresh rotation/reuse detection | teste reale | OPEN | Tech | Increment B PR + review |
-| E4 | Tenant RBAC F1.1 i PAPREKUR (baseline GREEN; zero Identity-role në authz) | baseline i plotë | OPEN | Tech | Increment B PR + review |
-| E5 | Architecture test i zëvendësuar §7; zero provider i paaprovuar; keys jashtë repo/log/renderers; audit identity i redaktuar | architecture + gitleaks/guard + audit tests | OPEN | Tech | Increment B PR + review |
+| E4 | Tenant RBAC F1.1 i PAPREKUR (baseline GREEN; zero Identity-role në authz) | baseline i plotë | **PROVUAR në branch B.1 / PENDING_INDEPENDENT_REVIEW** (baseline i plotë GREEN zero skip + zero Identity roles strukturalisht + kufiri `Users`↔`PlatformAppUsers` i guard-uar; mbyllja me review + merge) | Tech | Increment B PR + review |
+| E5 | Architecture test i zëvendësuar §7; zero provider i paaprovuar; keys jashtë repo/log/renderers; audit identity i redaktuar | architecture + gitleaks/guard + audit tests | **PARTIAL** (architecture replacement + inventari fail-closed + gitleaks/guard = të provuara në branch B.1; keys/credentials = B.2, audit identity events = B.2/B.3 — OPEN) | Tech | Increment B PR + review |
 
 ## 10. External IdP — kushtet e RIHAPJES (jo adoptim automatik)
 
