@@ -138,6 +138,109 @@ public sealed class ConventionEnforcementTests
         }
     }
 
+    /// <summary>
+    /// Inventari FAIL-CLOSED i paketave identity/security (correction pass
+    /// PR #28, §8): lockfiles e dy direct owners (Persistence +
+    /// Identity.Infrastructure) duhet të përmbajnë EKZAKT setin e njohur
+    /// emër→(version, lloj) — çdo paketë identity/security e RE ose version
+    /// i panjohur = RED (jo allowlist automatik). `Direct` lejohet VETËM për
+    /// dy paketat store të ADR-028.
+    /// </summary>
+    [Fact]
+    public void Inventari_identity_security_i_lockfiles_eshte_fail_closed()
+    {
+        string[] surveillancePrefixes =
+            ["Microsoft.AspNetCore.Identity", "Microsoft.Extensions.Identity", "OpenIddict",
+             "Microsoft.IdentityModel", "Microsoft.Bcl.Cryptography",
+             "IdentityServer", "Duende", "Auth0", "Okta"];
+        var expected = new Dictionary<string, (string Version, string Type)>(StringComparer.Ordinal)
+        {
+            ["Microsoft.AspNetCore.Identity.EntityFrameworkCore"] = ("10.0.10", "Direct"),
+            ["OpenIddict.EntityFrameworkCore"] = ("7.6.0", "Direct"),
+            ["Microsoft.Extensions.Identity.Core"] = ("10.0.10", "Transitive"),
+            ["Microsoft.Extensions.Identity.Stores"] = ("10.0.10", "Transitive"),
+            ["Microsoft.IdentityModel.Abstractions"] = ("8.19.2", "Transitive"),
+            ["Microsoft.IdentityModel.Logging"] = ("8.19.2", "Transitive"),
+            ["Microsoft.IdentityModel.Tokens"] = ("8.19.2", "Transitive"),
+            ["Microsoft.Bcl.Cryptography"] = ("10.0.2", "Transitive"),
+            ["OpenIddict.Abstractions"] = ("7.6.0", "Transitive"),
+            ["OpenIddict.Core"] = ("7.6.0", "Transitive"),
+            ["OpenIddict.EntityFrameworkCore.Models"] = ("7.6.0", "Transitive"),
+        };
+
+        string[] lockfiles =
+            [Path.Combine(PlatformRoot, "Idata.Platform.Persistence", "packages.lock.json"),
+             Path.Combine(PlatformRoot, "Modules", "Identity", "Infrastructure", "packages.lock.json")];
+
+        foreach (var lockfile in lockfiles)
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockfile));
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var framework in document.RootElement.GetProperty("dependencies").EnumerateObject())
+            {
+                foreach (var dependency in framework.Value.EnumerateObject())
+                {
+                    if (!surveillancePrefixes.Any(prefix =>
+                            dependency.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        continue;
+                    }
+
+                    // FAIL-CLOSED: paketë e panjohur identity/security → RED.
+                    Assert.True(expected.ContainsKey(dependency.Name),
+                        $"Paketë identity/security e PA-inventarizuar: {dependency.Name} ({lockfile})");
+                    Assert.Equal(expected[dependency.Name].Version,
+                        dependency.Value.GetProperty("resolved").GetString());
+                    Assert.Equal(expected[dependency.Name].Type,
+                        dependency.Value.GetProperty("type").GetString());
+                    seen.Add(dependency.Name);
+                }
+            }
+
+            // Inventari s'është i vdekur: i GJITHË seti i pritur ekziston.
+            Assert.Equal(expected.Keys.Order().ToArray(), seen.Order().ToArray());
+        }
+    }
+
+    /// <summary>
+    /// Kufiri `Users` ↔ `PlatformAppUsers` (correction pass PR #28, §6):
+    /// kodi i AccessControl (authorization/storage) NUK lejohet të përdorë
+    /// `context.Users` (inherited — `identity.user_account` i Identity-t);
+    /// përdor VETËM `PlatformAppUsers` (`platform.app_user`).
+    /// </summary>
+    [Fact]
+    public void AccessControl_perdor_vetem_PlatformAppUsers_kurre_context_Users()
+    {
+        var accessControlSources = Directory.GetFiles(
+                Path.Combine(PlatformRoot, "Modules", "AccessControl"), "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .ToArray();
+        Assert.NotEmpty(accessControlSources);
+
+        foreach (var source in accessControlSources)
+        {
+            Assert.False(UsersAccessDetector().IsMatch(File.ReadAllText(source)),
+                $"AccessControl përdor `.Users` (store i Identity-t): {source}");
+        }
+
+        // Guard-i s'është i vdekur: konsumatori real i PlatformAppUsers ekziston.
+        Assert.Contains(accessControlSources, source =>
+            File.ReadAllText(source).Contains(".PlatformAppUsers", StringComparison.Ordinal));
+    }
+
+    /// <summary>Prova DISKRIMINUESE e detektorit: përdorimi hipotetik kapet; i sakti jo.</summary>
+    [Fact]
+    public void Detektori_i_Users_kap_perdorimin_e_ndaluar_dhe_lejon_te_saktin()
+    {
+        Assert.Matches(UsersAccessDetector(), "var hit = context.Users.Any(user => user.Id == id);");
+        Assert.Matches(UsersAccessDetector(), "await context.Users.ToListAsync();");
+        Assert.DoesNotMatch(UsersAccessDetector(), "var ok = context.PlatformAppUsers.Any(user => user.Id == id);");
+        Assert.DoesNotMatch(UsersAccessDetector(), "await manager.GetUsersForClaimAsync(claim);");
+    }
+
+    private static System.Text.RegularExpressions.Regex UsersAccessDetector()
+        => new(@"\.Users\b");
+
     [Fact]
     public void Zero_pipeline_behaviors_ne_asnje_assembly_te_platformes()
     {

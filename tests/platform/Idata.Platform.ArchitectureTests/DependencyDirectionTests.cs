@@ -170,25 +170,28 @@ public sealed class DependencyDirectionTests
                 or "Idata.Platform.Modules.PlatformStatus.Presentation"
                 or "Idata.Platform.Modules.AccessControl.Presentation");
 
+    private static readonly string[] IdentitySurfacePrefixes =
+        ["OpenIddict", "IdentityServer", "Duende", "Microsoft.AspNetCore.Identity",
+         "Microsoft.Extensions.Identity", "Microsoft.IdentityModel", "Auth0", "Okta"];
+
     /// <summary>
     /// ZËVENDËSIMI i kontrolluar (ADR-028 §7, Increment B.1) i testit të
     /// vjetër `Zero_identity_provider_konkret_ne_asnje_assembly_te_platformes`
-    /// — JO fshirje: coverage FORCOHET. Rregulli i ri:
+    /// — JO fshirje: coverage FORCOHET. Rregulli i ri (i shtrënguar në
+    /// correction pass të PR #28):
     ///  1. çdo referencë identity-surface duhet të jetë EKZAKT në allowlist-in
     ///     e ADR-028 (store only) — kjo ndalon automatikisht OpenIddict
     ///     Server/Validation/Client (B.2+), Identity.UI, sipërfaqen sign-in
     ///     `Microsoft.AspNetCore.Identity` (cookies/SignInManager) dhe ÇDO
     ///     provider tjetër (Duende/IdentityServer/Auth0/Okta — kudo);
-    ///  2. referencat e lejuara jetojnë VETËM në projektet e aprovuara:
-    ///     Persistence (storage mapping), Identity.Infrastructure (wiring)
-    ///     dhe API host (composition root, kur kërkohet realisht).
+    ///  2. direct owners = VETËM Persistence (storage mapping) dhe
+    ///     Identity.Infrastructure (wiring) — **API host-i NUK është owner**
+    ///     direkt identity derisa B.2 ta autorizojë veçmas (test i dedikuar
+    ///     më poshtë).
     /// </summary>
     [Fact]
     public void Identity_paketat_vetem_assemblies_e_aprovuara_dhe_vetem_ne_projektet_e_aprovuara()
     {
-        string[] identitySurfacePrefixes =
-            ["OpenIddict", "IdentityServer", "Duende", "Microsoft.AspNetCore.Identity",
-             "Microsoft.Extensions.Identity", "Auth0", "Okta"];
         string[] approvedIdentityAssemblies =
             ["Microsoft.AspNetCore.Identity.EntityFrameworkCore",
              "Microsoft.Extensions.Identity.Core",
@@ -199,8 +202,7 @@ public sealed class DependencyDirectionTests
              "OpenIddict.EntityFrameworkCore.Models"];
         string[] approvedProjects =
             ["Idata.Platform.Persistence",
-             "Idata.Platform.Modules.Identity.Infrastructure",
-             "Idata.Platform.Api"];
+             "Idata.Platform.Modules.Identity.Infrastructure"];
 
         foreach (var assembly in AllPlatformAssemblies)
         {
@@ -208,7 +210,7 @@ public sealed class DependencyDirectionTests
             foreach (var reference in assembly.GetReferencedAssemblies())
             {
                 var name = reference.Name ?? string.Empty;
-                if (!identitySurfacePrefixes.Any(prefix =>
+                if (!IdentitySurfacePrefixes.Any(prefix =>
                         name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
                 {
                     continue;
@@ -221,46 +223,30 @@ public sealed class DependencyDirectionTests
     }
 
     /// <summary>
-    /// Roleless i imponuar STRUKTURALISHT: asnjë tip i platformës nuk
-    /// ekspozon/trashëgon IdentityRole/RoleManager/RoleStore — Identity
-    /// roles NUK ekzistojnë as si tip, as si varësi (tenant RBAC = vetëm
-    /// platform.role/permission/role_permission/business_membership, F1.1).
+    /// API host = composition root PA pronësi direkte identity: konsumon
+    /// store foundation-in VETËM përmes project reference te
+    /// Identity.Infrastructure; ZERO referencë direkte assembly-je
+    /// identity-surface (derisa B.2 ta autorizojë veçmas me gate të ri).
     /// </summary>
     [Fact]
-    public void Zero_Identity_roles_ne_asnje_tip_te_platformes()
+    public void Api_composition_root_ka_zero_referenca_direkte_identity()
     {
-        string[] forbiddenMarkers =
-            ["Microsoft.AspNetCore.Identity.IdentityRole",
-             "Microsoft.AspNetCore.Identity.IdentityUserRole",
-             "Microsoft.AspNetCore.Identity.IdentityRoleClaim",
-             "Microsoft.AspNetCore.Identity.RoleManager",
-             "Microsoft.AspNetCore.Identity.EntityFrameworkCore.RoleStore",
-             "Microsoft.AspNetCore.Identity.IRoleStore"];
+        Assert.Contains("Idata.Platform.Modules.Identity.Infrastructure",
+            DirectPlatformReferencesOf(ApiHost));
 
-        foreach (var assembly in AllPlatformAssemblies)
+        foreach (var reference in ApiHost.GetReferencedAssemblies())
         {
-            foreach (var type in assembly.GetTypes())
-            {
-                var surfaces = new List<string>();
-                for (var baseType = type.BaseType; baseType is not null; baseType = baseType.BaseType)
-                {
-                    surfaces.Add(baseType.FullName ?? string.Empty);
-                    surfaces.AddRange(baseType.GenericTypeArguments.Select(argument => argument.FullName ?? string.Empty));
-                }
-
-                surfaces.AddRange(type.GetProperties().Select(property => property.PropertyType.FullName ?? string.Empty));
-                surfaces.AddRange(type.GetConstructors()
-                    .SelectMany(constructor => constructor.GetParameters())
-                    .Select(parameter => parameter.ParameterType.FullName ?? string.Empty));
-
-                foreach (var surface in surfaces)
-                {
-                    Assert.DoesNotContain(forbiddenMarkers, marker =>
-                        surface.StartsWith(marker, StringComparison.Ordinal));
-                }
-            }
+            var name = reference.Name ?? string.Empty;
+            Assert.DoesNotContain(IdentitySurfacePrefixes, prefix =>
+                name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         }
     }
+
+    // Testi strukturor "zero Identity roles" u ZËVENDËSUA (correction pass
+    // PR #28) me traversal REKURSIV të plotë + fixtures diskriminuese —
+    // shih `IdentityRoleSurfaceTests` + `RoleSurfaceScanner` (coverage
+    // strikt më i gjerë: fields/methods/events/attributes/nested/constraints,
+    // publike dhe jo-publike; zero fshirje coverage-i).
 
     [Fact]
     public void Cdo_referece_Idata_eshte_brenda_setit_te_njohur_te_platformes()
