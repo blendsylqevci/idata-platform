@@ -19,7 +19,7 @@
 | Mediator.SourceGenerator | **3.0.2** | MIT | VETËM `Idata.Platform.Api.csproj`; `PrivateAssets=all`; `IncludeAssets=runtime; build; native; contentfiles; analyzers` | nuget.org/packages/Mediator.SourceGenerator/3.0.2 |
 | Scalar.AspNetCore | **2.16.16** | MIT | VETËM API host | nuget.org/packages/Scalar.AspNetCore/2.16.16 |
 
-Zero wildcard; lockfiles të rifreskuara deterministikisht (`--force-evaluate` — përfshiu edhe korrigjimin mekanik të grafit stale të trashëguar `Persistence→AccessControl.Domain`, i hequr në F1.1 pa ri-evaluim lockfile). **Zero MediatR/LuckyPennySoftware · zero AutoMapper · zero Swagger/Swashbuckle · zero pipeline behaviors** (të provuara me architecture tests).
+Zero wildcard; lockfiles të rifreskuara deterministikisht (`--force-evaluate`). Tri lockfile-delta jashtë modulit të pilotit (heqje e metadata-s fantazmë të trashëguar) mbulohen nga **`HG-PR27-LOCKFILE-SCOPE-WAIVER`** (shih seksionin përkatës). **Zero MediatR/LuckyPennySoftware · zero AutoMapper · zero Swagger/Swashbuckle · zero pipeline behaviors** (të provuara me architecture tests).
 
 ## Pse Mediator lifetime = SCOPED
 
@@ -52,10 +52,30 @@ Kalimi në MVC solli dy devijime që u MBYLLËN pa ndryshim semantik: (a) MVC re
 
 Në Increment A baza mbetet **module-local** (një konsumator real). **Increment C sjell potencialisht konsumatorin e dytë → kjo aktivizon REVIEW, JO promovim automatik.** Promovimi bëhet vetëm nëse provohet sjellje identike, e ripërdorshme nga ≥2 module reale; vetëm një property `IMediator` NUK mjafton për inheritance ceremonial; është e vlefshme që çdo modul të mbajë controller-in e vet pa shared base. Nëse promovohet: abstraksion Presentation NEUTRAL i emërtuar qartë + dependency graph i përditësuar + architecture tests + review + Human Gate. **AccessControl NUK lejohet KURRË të referojë PlatformStatus.Presentation** (guard ekzistues). Zero `Common`/`Utils`/shared `BuildingBlocks`/BaseApiController në API host tani.
 
+## HG-PR27-LOCKFILE-SCOPE-WAIVER (APROVUAR nga Pronari)
+
+- **Waiver ID:** `HG-PR27-LOCKFILE-SCOPE-WAIVER` — **aprovuar nga Pronari**.
+- Lejon VETËM tri lockfile-delta EKZISTUESE të PR #27: `src/platform/Idata.Platform.Persistence/packages.lock.json` · `src/platform/Idata.Platform.DbMigrator/packages.lock.json` · `src/platform/Modules/AccessControl/Infrastructure/packages.lock.json`.
+- Delta u krijua kur `restore --force-evaluate` hoqi **metadata fantazmë të trashëguar** (`idata.platform.modules.accesscontrol.domain` — mbetje e grafit të vjetër para neutralizimit të Persistence në F1.1). **E provuar mekanikisht:** diff-i i tri file-ve = VETËM heqje të asaj metadata-je (zero shtim); **zero ndryshim `.csproj`, kod, skemë ose varësi reale**; `dotnet restore --locked-mode` kalon.
+- **REVERT-i NDALOHET** — do të rikthente metadata të pasaktë.
+- Formulimi i saktë: *"Zero ndryshim semantik në Persistence/DbMigrator/AccessControl.Infrastructure; vetëm tri lockfile-delta të autorizuara nga waiver-i i Pronarit."* (Pretendime si "të paprekura"/"zero lockfile changes" janë të PASAKTA dhe nuk përdoren.)
+- **Kufi i njohur (JO defekt i provuar i CI-së):** locked restore kaloi, por nuk përdoret si provë universale që çdo metadata e vjetruar është pastruar. Vlerësimi i një force-evaluate drift-check deterministik mbetet **follow-up OPEN** para ndryshimit të ardhshëm të package graph-it; **Owner: Tech/Platform**.
+
+## Incidenti Docker (vetëm faktet e provuara)
+
+1. Tentativa `open -a Docker` priti **7 minuta** dhe përfundoi me **exit 143** (timeout).
+2. Gjatë asaj tentative **nuk u pretendua asnjë PASS** i testeve DB-dependent.
+3. Rikuperimi u bë me **`docker desktop start`**.
+4. Container-i PostgreSQL sintetik (host port **5455**) u verifikua **ready** (`pg_isready`).
+5. **Vetëm pas rikuperimit** u ekzekutua suita e plotë.
+6. Rezultati lokal: **219/219, zero skip** (rikonfirmuar edhe nga correction pass-i).
+7. **CI mbi të njëjtin HEAD** e konfirmoi suitën (build-test SUCCESS).
+
 ## Deviations të deklaruara
 
 1. **Commit i kuq `6efe01c`:** `git add` abortoi në pathspec-in e parë (file i fshirë tashmë i staged me `git rm`) pa shtuar pjesën tjetër — commit-i kapi VETËM 2 fshirjet dhe s'buildohet i izoluar. Amend/rebase të ndaluara nga mandati → kompletim FORWARD-ONLY me `48e16bf`; `6efe01c + 48e16bf` = një njësi logjike.
 2. **Bashkimi slice+gating në `48e16bf`:** `Program.cs` mbarte të dy ndryshimet në një file; ndarja pas kompletimit do të kërkonte histori të rishkruar — e ndaluar. I dokumentuar këtu + PR body.
+3. **Tri lockfile-t jashtë §12 fillestar** — të mbuluara nga `HG-PR27-LOCKFILE-SCOPE-WAIVER` (më lart).
 
 ## Rollback
 
