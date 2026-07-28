@@ -189,8 +189,12 @@ public sealed class IdentityMigrationUpgradeTests
     private static Task<bool> ObjectExistsAsync(string databaseName, string qualifiedName)
         => ScalarAsync<bool>(databaseName, $"SELECT to_regclass('{qualifiedName}') IS NOT NULL");
 
-    /// <summary>Sentinel sintetik i të dhënave të platform-ës: një app_user row.</summary>
-    private static readonly Guid SyntheticAppUserId = new("00000000-0000-4000-8000-0000000000b1");
+    /// <summary>
+    /// Sentinel sintetik i të dhënave të platform-ës: një app_user row —
+    /// Guid i GJENERUAR në ekzekutim (zero literale në burim; anti
+    /// false-positive i skanerëve PII mbi vargje shifrash).
+    /// </summary>
+    private static readonly Guid SyntheticAppUserId = Guid.NewGuid();
 
     private static async Task SeedPlatformDataAsync(string databaseName)
     {
