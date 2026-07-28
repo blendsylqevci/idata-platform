@@ -6,6 +6,10 @@
     <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
   </PropertyGroup>
   <ItemGroup>
+    <!-- ADR-029 Increment A: mediator MIT i pin-uar ekzakt (provenance: NuGet
+         Mediator.Abstractions/SourceGenerator 3.0.2, github.com/martinothamar/Mediator). -->
+    <PackageVersion Include="Mediator.Abstractions" Version="3.0.2" />
+    <PackageVersion Include="Mediator.SourceGenerator" Version="3.0.2" />
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.10" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.10" />
     <!-- Pin i unifikuar i EF Core runtime: provider-i Npgsql 10.0.3 kerkon
@@ -21,6 +25,8 @@
          (GHSA-v5pm-xwqc-g5wc); 2.11.0 është versioni i linjës 2.x me fix. -->
     <PackageVersion Include="Microsoft.OpenApi" Version="2.11.0" />
     <PackageVersion Include="Npgsql" Version="10.0.3" />
+    <!-- ADR-029 Increment A: Scalar API reference UI (vetem Development). -->
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.16.16" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
     <PackageVersion Include="xunit.v3" Version="3.2.2" />

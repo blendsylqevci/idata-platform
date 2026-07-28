@@ -10,6 +10,13 @@
     <ProjectReference Include="..\Modules\PlatformStatus\Presentation\Idata.Platform.Modules.PlatformStatus.Presentation.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <!-- ADR-029: SourceGenerator-i i mediator-it VETEM ne outermost host. -->
+    <PackageReference Include="Mediator.SourceGenerator">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <!-- ADR-029: Scalar UI mbi OpenAPI — mapohet VETEM nen IsDevelopment(). -->
+    <PackageReference Include="Scalar.AspNetCore" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <!-- Referencë direkte për të imponuar versionin e riparuar të varësisë
          transitive (shih Directory.Packages.props / GHSA-v5pm-xwqc-g5wc). -->

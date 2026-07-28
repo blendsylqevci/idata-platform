@@ -6,4 +6,8 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- ADR-029: IMediator eshte surface i vetem i lejuar i Presentation-it. -->
+    <PackageReference Include="Mediator.Abstractions" />
+  </ItemGroup>
 </Project>

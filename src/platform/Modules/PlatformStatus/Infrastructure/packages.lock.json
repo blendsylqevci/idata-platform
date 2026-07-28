@@ -129,13 +129,11 @@
         "resolved": "10.0.10",
         "contentHash": "5wu/GrYVd8mG2DVUw3vFJzF+O336TyTGg/Kmcgw9bfwYhCoFiV5lR5QeEmKecJyrW4W54nMfD3p3589E8a7czQ=="
       },
-      "idata.platform.modules.accesscontrol.domain": {
-        "type": "Project"
-      },
       "idata.platform.modules.platformstatus.application": {
         "type": "Project",
         "dependencies": {
-          "Idata.Platform.Modules.PlatformStatus.Domain": "[1.0.0, )"
+          "Idata.Platform.Modules.PlatformStatus.Domain": "[1.0.0, )",
+          "Mediator.Abstractions": "[3.0.2, )"
         }
       },
       "idata.platform.modules.platformstatus.domain": {
@@ -144,11 +142,19 @@
       "idata.platform.persistence": {
         "type": "Project",
         "dependencies": {
-          "Idata.Platform.Modules.AccessControl.Domain": "[1.0.0, )",
           "Microsoft.EntityFrameworkCore": "[10.0.10, )",
           "Microsoft.EntityFrameworkCore.Relational": "[10.0.10, )",
           "Npgsql": "[10.0.3, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )"
+        }
+      },
+      "Mediator.Abstractions": {
+        "type": "CentralTransitive",
+        "requested": "[3.0.2, )",
+        "resolved": "3.0.2",
+        "contentHash": "TytjnyN8gLObZBxkM7HHPFJF3LHtk6Y8mHW56ONuXRuVEK6Fmed3f0z79H9TpmoZQP2zQAIS4/0O9R2w0v02qw==",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.0"
         }
       }
     }
