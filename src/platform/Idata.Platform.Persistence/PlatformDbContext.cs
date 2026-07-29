@@ -224,14 +224,19 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
         modelBuilder.Entity<IdentityUserLogin<Guid>>(entity => entity.ToTable("user_login", IdentitySchema));
         modelBuilder.Entity<UserClaimRecord>(entity =>
         {
-            entity.ToTable("user_claim", IdentitySchema);
+            // Invarianti DB (§7.2, correction R2): zero-UUID refuzohet nga
+            // PostgreSQL — shprehja pa literal shifrash (anti false-positive
+            // i skanerëve): repeat('0', 32)::uuid.
+            entity.ToTable("user_claim", IdentitySchema, table => table.HasCheckConstraint(
+                "ck_user_claim_id_non_empty", "id <> CAST(repeat('0', 32) AS uuid)"));
             // ZERO persisted int IDs (ABSOLUT): çelësi i VETËM i persistuar =
             // ClaimId (Guid, i gjeneruar në aplikacion — kurrë nga DB);
             // inherited `IdentityUserClaim<TKey>.Id` (int) INJOROHET nga EF
-            // dhe nuk persiston asnjë kolonë int identifikuese.
+            // me formë STRING/metadata (zero referencë ekzekutuese IL ndaj
+            // getter/setter-it — IL guard-i i CI-së e ndalon përdorimin).
             entity.HasKey(claim => claim.ClaimId);
             entity.Property(claim => claim.ClaimId).ValueGeneratedNever();
-            entity.Ignore(claim => claim.Id);
+            entity.Ignore(nameof(IdentityUserClaim<Guid>.Id));
         });
         modelBuilder.Entity<IdentityUserToken<Guid>>(entity => entity.ToTable("user_token", IdentitySchema));
         modelBuilder.Entity<OpenIddictEntityFrameworkCoreApplication<Guid>>(entity => entity.ToTable("oidc_application", IdentitySchema));

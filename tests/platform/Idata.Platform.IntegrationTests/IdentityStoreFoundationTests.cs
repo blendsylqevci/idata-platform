@@ -196,6 +196,43 @@ public sealed class IdentityStoreFoundationTests
     }
 
     /// <summary>
+    /// §7.2 i correction R2: PostgreSQL REAL refuzon zero-UUID në
+    /// `identity.user_claim.id` (CHECK constraint) — INSERT raw me UUID bosh
+    /// dështon me check_violation dhe ZERO row mbetet; UUID normal persiston.
+    /// </summary>
+    [Fact]
+    public async Task PostgreSQL_refuzon_zero_UUID_ne_user_claim_id_dhe_zero_row_mbetet()
+    {
+        await using var db = await PlatformTestDatabase.CreateAsync("identityclaimck");
+        await MigrateAsync(db.DatabaseName);
+        await using var connection = await OpenAsync(db.DatabaseName);
+
+        // Prind sintetik për FK-në.
+        var userId = Guid.NewGuid();
+        await ScalarAsync<object>(connection,
+            $"INSERT INTO identity.user_account (id, email_confirmed, phone_number_confirmed, two_factor_enabled, lockout_enabled, access_failed_count) VALUES ('{userId}', false, false, false, false, 0) RETURNING id");
+
+        // Zero-UUID (i ndërtuar pa literal shifrash — anti false-positive):
+        // repeat('0', 32)::uuid brenda vetë INSERT-it.
+        var zeroInsert =
+            $"INSERT INTO identity.user_claim (id, user_id, claim_type, claim_value) VALUES (CAST(repeat('0', 32) AS uuid), '{userId}', 'tip_sintetik', 'vlere_sintetike')";
+        var failure = await Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = zeroInsert;
+            await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        });
+        Assert.Equal("23514", failure.SqlState); // check_violation
+        Assert.Contains("ck_user_claim_id_non_empty", failure.Message, StringComparison.Ordinal);
+        Assert.Equal(0L, await ScalarAsync<long>(connection, "SELECT COUNT(*) FROM identity.user_claim"));
+
+        // UUID normal persiston.
+        await ScalarAsync<object>(connection,
+            $"INSERT INTO identity.user_claim (id, user_id, claim_type, claim_value) VALUES ('{Guid.NewGuid()}', '{userId}', 'tip_sintetik', 'vlere_sintetike') RETURNING id");
+        Assert.Equal(1L, await ScalarAsync<long>(connection, "SELECT COUNT(*) FROM identity.user_claim"));
+    }
+
+    /// <summary>
     /// §4.4 i correction pass-it: cikli i PLOTË i claims përmes
     /// UserManager/UserOnlyStore REAL (me UserClaimRecord UUID) kundrejt
     /// PostgreSQL — Add ×2 · Get · Replace · Remove · GetUsersForClaim;

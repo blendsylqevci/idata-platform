@@ -20,13 +20,27 @@ public sealed class UserAccountRecord : IdentityUser<Guid>;
 /// Storage record i claim-it të llogarisë (ADR-028, correction i B.1) —
 /// zbaton rregullin ABSOLUT "zero persisted int IDs":
 ///  - `IdentityUserClaim&lt;TKey&gt;.Id` (int) i framework-ut NUK ritipizohet
-///    dot në mënyrë të sigurt → mbetet i TRASHËGUAR por INJOROHET nga EF
-///    (nuk persiston kurrë; asnjë kolonë int identifikuese në DB);
-///  - çelësi i VETËM i persistuar = <see cref="ClaimId"/> (Guid, i
-///    gjeneruar në aplikacion, kurrë bosh) → kolona `id` uuid e
-///    `identity.user_claim`.
+///    dot në mënyrë të sigurt → mbetet anëtar CLR i TRASHËGUAR, INJOROHET
+///    nga EF (mapping string-based — zero kolonë int identifikuese në DB)
+///    dhe çdo përdorim EKZEKUTUES i tij ndalohet nga IL architecture guard
+///    në CI (nuk pretendohet compiler-level inaccessibility për kod jashtë
+///    repo-s);
+///  - çelësi i VETËM i persistuar = <see cref="ClaimId"/> (Guid) → kolona
+///    `id` uuid — INVARIANT dy-shtresor: setter-i refuzon
+///    <see cref="Guid.Empty"/> në aplikacion; CHECK constraint
+///    `ck_user_claim_id_non_empty` e refuzon në PostgreSQL.
 /// </summary>
 public sealed class UserClaimRecord : IdentityUserClaim<Guid>
 {
-    public Guid ClaimId { get; set; } = Guid.NewGuid();
+    private Guid claimId = Guid.NewGuid();
+
+    public Guid ClaimId
+    {
+        get => claimId;
+        set => claimId = value != Guid.Empty
+            ? value
+            : throw new ArgumentException(
+                "ClaimId nuk lejohet te jete Guid.Empty — celesi UUID gjenerohet ne aplikacion dhe duhet te jete non-empty.",
+                nameof(value));
+    }
 }

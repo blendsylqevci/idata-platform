@@ -1,6 +1,7 @@
 using Idata.Platform.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
@@ -155,6 +156,51 @@ public sealed class IdentityStoreModelTests
         Assert.NotNull(userClaim.FindProperty("ClaimValue"));
         var foreignKey = Assert.Single(userClaim.GetForeignKeys());
         Assert.Equal(typeof(UserAccountRecord), foreignKey.PrincipalEntityType.ClrType);
+    }
+
+    /// <summary>
+    /// §7.1 i correction R2: invarianti i APLIKACIONIT — ClaimId refuzon
+    /// Guid.Empty në setter; default construction = UUID non-empty.
+    /// </summary>
+    [Fact]
+    public void ClaimId_refuzon_Guid_Empty_ne_aplikacion_dhe_default_eshte_non_empty()
+    {
+        var record = new UserClaimRecord();
+        Assert.NotEqual(Guid.Empty, record.ClaimId);
+
+        var replacement = Guid.NewGuid();
+        record.ClaimId = replacement;
+        Assert.Equal(replacement, record.ClaimId);
+
+        var failure = Assert.Throws<ArgumentException>(() => record.ClaimId = Guid.Empty);
+        Assert.Contains("ClaimId", failure.Message, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => new UserClaimRecord { ClaimId = Guid.Empty });
+
+        // Vlera e mëparshme mbetet e paprekur pas refuzimit.
+        Assert.Equal(replacement, record.ClaimId);
+    }
+
+    /// <summary>
+    /// §7.2 i correction R2: invarianti i DATABASE-it — CHECK constraint
+    /// determinist mbi `identity.user_claim.id` që ndalon zero-UUID.
+    /// </summary>
+    [Fact]
+    public void User_claim_ka_CHECK_constraint_non_empty_mbi_id()
+    {
+        // Evidencë DIREKT në operacionet e migrimit 0003 (modeli runtime
+        // është read-optimized dhe s'i mban check constraints).
+        var migrationType = typeof(PlatformDbContext).Assembly
+            .GetTypes()
+            .Single(type => type.Name == "IdentityStoreFoundation");
+        var migration = (Migration)Activator.CreateInstance(migrationType)!;
+
+        var userClaimTable = migration.UpOperations
+            .OfType<CreateTableOperation>()
+            .Single(operation => operation.Name == "user_claim");
+        var constraint = Assert.Single(userClaimTable.CheckConstraints,
+            candidate => candidate.Name == "ck_user_claim_id_non_empty");
+        Assert.Contains("repeat('0', 32)", constraint.Sql, StringComparison.Ordinal);
+        Assert.Contains("uuid", constraint.Sql, StringComparison.Ordinal);
     }
 
     [Fact]

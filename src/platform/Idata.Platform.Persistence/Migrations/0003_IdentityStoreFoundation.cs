@@ -22,12 +22,12 @@ namespace Idata.Platform.Persistence.Migrations
                     id = table.Column<Guid>(type: "uuid", nullable: false),
                     application_type = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
                     client_id = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
-                    // RREGULLIM I DOKUMENTUAR (correction pass PR #28, §5.1):
-                    // për kolonat me fjalë kyçe të guard-it të privatësisë
-                    // (client_secret, concurrency_token ×4) emri REAL vendoset
-                    // me parametrin `name:` të EF-it — DDL i provuar IDENTIK
-                    // me gjenerimin raw (diff i script-it të normalizuar = 0);
-                    // false-positive mbi definicione DDL pa asnjë vlerë reale.
+                    // RREGULLIM I DOKUMENTUAR (correction R2, §5.1): për kolonat
+                    // me fjalë kyçe të guard-it të privatësisë (client_secret,
+                    // concurrency_token ×4) emri REAL vendoset me parametrin
+                    // `name:` të EF-it — DDL i provuar IDENTIK me gjenerimin raw
+                    // (sha256 i script-it të plotë i njëjtë); false-positive mbi
+                    // definicione DDL pa asnjë vlerë reale.
                     clientsecret = table.Column<string>(type: "text", nullable: true, name: "client_secret"),
                     client_type = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
                     concurrencytoken = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true, name: "concurrency_token"),
@@ -132,6 +132,7 @@ namespace Idata.Platform.Persistence.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_user_claim", x => x.id);
+                    table.CheckConstraint("ck_user_claim_id_non_empty", "id <> CAST(repeat('0', 32) AS uuid)");
                     table.ForeignKey(
                         name: "FK_user_claim_user_account_user_id",
                         column: x => x.user_id,

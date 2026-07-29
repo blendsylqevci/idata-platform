@@ -436,7 +436,10 @@ namespace Idata.Platform.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("user_claim", "identity");
+                    b.ToTable("user_claim", "identity", t =>
+                        {
+                            t.HasCheckConstraint("ck_user_claim_id_non_empty", "id <> CAST(repeat('0', 32) AS uuid)");
+                        });
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityUserLogin<System.Guid>", b =>
