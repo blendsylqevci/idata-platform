@@ -61,6 +61,19 @@ public sealed class IdentityRoleSurfaceTests
     [InlineData(typeof(FixtureGenericConstraintExposure<>), "generic constraint")]
     [InlineData(typeof(FixtureAttributeExposure), "attribute Type argument")]
     [InlineData(typeof(FixtureNestedExposure), "nested type")]
+    [InlineData(typeof(FixtureMethodGenericConstraintExposure), "METHOD generic constraint")]
+    [InlineData(typeof(FixtureMethodAttributeExposure), "attribute mbi method")]
+    [InlineData(typeof(FixturePropertyAttributeExposure), "attribute mbi property")]
+    [InlineData(typeof(FixtureFieldAttributeExposure), "attribute mbi field")]
+    [InlineData(typeof(FixtureEventAttributeExposure), "attribute mbi event")]
+    [InlineData(typeof(FixtureParameterAttributeExposure), "attribute mbi parameter")]
+    [InlineData(typeof(FixtureReturnAttributeExposure), "attribute mbi return value")]
+    [InlineData(typeof(FixtureGenericParameterAttributeExposure<>), "attribute mbi generic parameter")]
+    [InlineData(typeof(FixtureNamedAttributeArgumentExposure), "named attribute argument")]
+    [InlineData(typeof(FixtureArrayAttributeArgumentExposure), "array attribute argument")]
+    [InlineData(typeof(FixtureByRefExposure), "by-ref parameter")]
+    [InlineData(typeof(FixtureArrayFieldExposure), "array element type")]
+    [InlineData(typeof(FixtureDeepGenericExposure), "deep generic nesting")]
     public void Traversal_i_kap_te_gjitha_llojet_e_ekspozimit_fixtures(Type fixture, string branch)
     {
         var finding = RoleSurfaceScanner.FindForbiddenSurface(fixture);
@@ -127,7 +140,7 @@ public sealed class IdentityRoleSurfaceTests
     internal sealed class FixtureGenericConstraintExposure<TRole>
         where TRole : IdentityRole<Guid>;
 
-    [AttributeUsage(AttributeTargets.Class)]
+    [AttributeUsage(AttributeTargets.All)]
     internal sealed class RoleMarkerAttribute(Type marker) : Attribute
     {
         public Type Marker { get; } = marker;
@@ -139,6 +152,89 @@ public sealed class IdentityRoleSurfaceTests
     internal sealed class FixtureNestedExposure
     {
         internal sealed class Inner : IdentityRole<Guid>;
+    }
+
+    // ── Fixtures shtesë (correction R2 — silent-pass-et e mbyllura) ──
+
+    internal sealed class FixtureMethodGenericConstraintExposure
+    {
+        public void Consume<TRole>()
+            where TRole : IdentityRole<Guid>
+            => _ = typeof(TRole);
+    }
+
+    internal sealed class FixtureMethodAttributeExposure
+    {
+        [RoleMarker(typeof(IdentityRole<Guid>))]
+        public void Marked()
+        {
+        }
+    }
+
+    internal sealed class FixturePropertyAttributeExposure
+    {
+        [RoleMarker(typeof(IdentityRole<Guid>))]
+        public int Value { get; set; }
+    }
+
+    internal sealed class FixtureFieldAttributeExposure
+    {
+        [RoleMarker(typeof(IdentityRole<Guid>))]
+        public int Field = 0;
+    }
+
+    internal sealed class FixtureEventAttributeExposure
+    {
+        [RoleMarker(typeof(IdentityRole<Guid>))]
+        public event Action? Changed;
+
+        public void Raise() => Changed?.Invoke();
+    }
+
+    internal sealed class FixtureParameterAttributeExposure
+    {
+        public void Consume([RoleMarker(typeof(IdentityRole<Guid>))] int value) => _ = value;
+    }
+
+    internal sealed class FixtureReturnAttributeExposure
+    {
+        [return: RoleMarker(typeof(IdentityRole<Guid>))]
+        public int Produce() => 0;
+    }
+
+    internal sealed class FixtureGenericParameterAttributeExposure<[RoleMarker(typeof(IdentityRole<Guid>))] T>;
+
+    [AttributeUsage(AttributeTargets.All)]
+    internal sealed class RoleMarkerNamedAttribute : Attribute
+    {
+        public Type? TypeValue { get; set; }
+    }
+
+    [RoleMarkerNamed(TypeValue = typeof(IdentityRole<Guid>))]
+    internal sealed class FixtureNamedAttributeArgumentExposure;
+
+    [AttributeUsage(AttributeTargets.All)]
+    internal sealed class RoleMarkerArrayAttribute(params Type[] markers) : Attribute
+    {
+        public Type[] Markers { get; } = markers;
+    }
+
+    [RoleMarkerArray(typeof(string), typeof(IdentityRole<Guid>))]
+    internal sealed class FixtureArrayAttributeArgumentExposure;
+
+    internal sealed class FixtureByRefExposure
+    {
+        public void Consume(ref IdentityRole<Guid> role) => _ = role;
+    }
+
+    internal sealed class FixtureArrayFieldExposure
+    {
+        public IdentityRole<Guid>[]? Roles = null;
+    }
+
+    internal sealed class FixtureDeepGenericExposure
+    {
+        public List<Dictionary<string, IdentityRole<Guid>[]>>? Deep { get; set; }
     }
 }
 
@@ -177,11 +273,32 @@ internal static class RoleSurfaceScanner
             return null;
         }
 
+        try
+        {
+            return ScanCore(type, rootAssembly, visited, path);
+        }
+        catch (Exception exception)
+        {
+            // FAIL-CLOSED (§4, correction R2): surface i palexueshëm nuk
+            // kalon kurrë silent — raportohet si gjetje.
+            return $"{path} → SURFACE I PALEXUESHËM ({exception.GetType().Name})";
+        }
+    }
+
+    private static string? ScanCore(Type type, Assembly rootAssembly, HashSet<Type> visited, string path)
+    {
         var comparableName =
             (type.IsGenericType ? type.GetGenericTypeDefinition().FullName : type.FullName) ?? type.Name;
         if (ForbiddenMarkers.Any(marker => comparableName.StartsWith(marker, StringComparison.Ordinal)))
         {
             return $"{path} → {comparableName}";
+        }
+
+        // Element types: array / by-ref / pointer — GJITHMONË.
+        if (type.HasElementType
+            && Scan(type.GetElementType(), rootAssembly, visited, $"{path}/element") is { } elementFinding)
+        {
+            return elementFinding;
         }
 
         // Generic arguments — GJITHMONË (edhe për tipe framework-u).
@@ -193,7 +310,7 @@ internal static class RoleSurfaceScanner
             }
         }
 
-        // Generic parameter constraints.
+        // Generic parameter-at e TIPIT: constraints + attributes mbi ta.
         if (type.IsGenericTypeDefinition)
         {
             foreach (var parameter in type.GetGenericArguments())
@@ -204,6 +321,12 @@ internal static class RoleSurfaceScanner
                     {
                         return constraintFinding;
                     }
+                }
+
+                if (ScanAttributes(parameter.GetCustomAttributesData(), rootAssembly, visited,
+                        $"{path}/generic-param-attr:{parameter.Name}") is { } parameterAttributeFinding)
+                {
+                    return parameterAttributeFinding;
                 }
             }
         }
@@ -222,7 +345,16 @@ internal static class RoleSurfaceScanner
             }
         }
 
-        // Anëtarët — VETËM për tipet e assembly-t të rrënjës (kufizim i qëllimshëm).
+        // Attributes mbi vetë tipin — GJITHMONË.
+        if (ScanAttributes(type.GetCustomAttributesData(), rootAssembly, visited, $"{path}/attribute") is { } typeAttributeFinding)
+        {
+            return typeAttributeFinding;
+        }
+
+        // Anëtarët — VETËM për tipet e assembly-t të rrënjës (kufizim i
+        // qëllimshëm i dokumentuar: tipet e jashtme skanohen në nivel
+        // emri/base/interfaces/generics — mjafton për detektim pa e bërë
+        // traversal-in të pakufizuar; JO "universal reflection traversal").
         if (type.Assembly != rootAssembly)
         {
             return null;
@@ -234,6 +366,11 @@ internal static class RoleSurfaceScanner
             {
                 return fieldFinding;
             }
+
+            if (ScanAttributes(field.GetCustomAttributesData(), rootAssembly, visited, $"{path}/field-attr:{field.Name}") is { } fieldAttributeFinding)
+            {
+                return fieldAttributeFinding;
+            }
         }
 
         foreach (var property in type.GetProperties(AllDeclared))
@@ -242,15 +379,30 @@ internal static class RoleSurfaceScanner
             {
                 return propertyFinding;
             }
+
+            if (ScanAttributes(property.GetCustomAttributesData(), rootAssembly, visited, $"{path}/property-attr:{property.Name}") is { } propertyAttributeFinding)
+            {
+                return propertyAttributeFinding;
+            }
         }
 
         foreach (var constructor in type.GetConstructors(AllDeclared))
         {
+            if (ScanAttributes(constructor.GetCustomAttributesData(), rootAssembly, visited, $"{path}/ctor-attr") is { } constructorAttributeFinding)
+            {
+                return constructorAttributeFinding;
+            }
+
             foreach (var parameter in constructor.GetParameters())
             {
                 if (Scan(parameter.ParameterType, rootAssembly, visited, $"{path}/ctor-param:{parameter.Name}") is { } ctorFinding)
                 {
                     return ctorFinding;
+                }
+
+                if (ScanAttributes(parameter.GetCustomAttributesData(), rootAssembly, visited, $"{path}/ctor-param-attr:{parameter.Name}") is { } ctorParameterAttributeFinding)
+                {
+                    return ctorParameterAttributeFinding;
                 }
             }
         }
@@ -262,11 +414,47 @@ internal static class RoleSurfaceScanner
                 return returnFinding;
             }
 
+            if (ScanAttributes(method.GetCustomAttributesData(), rootAssembly, visited, $"{path}/method-attr:{method.Name}") is { } methodAttributeFinding)
+            {
+                return methodAttributeFinding;
+            }
+
+            if (ScanAttributes(method.ReturnParameter.GetCustomAttributesData(), rootAssembly, visited, $"{path}/return-attr:{method.Name}") is { } returnAttributeFinding)
+            {
+                return returnAttributeFinding;
+            }
+
+            // Generic parameter-at e METODËS: constraints + attributes.
+            if (method.IsGenericMethodDefinition)
+            {
+                foreach (var parameter in method.GetGenericArguments())
+                {
+                    foreach (var constraint in parameter.GetGenericParameterConstraints())
+                    {
+                        if (Scan(constraint, rootAssembly, visited, $"{path}/method-generic-constraint:{method.Name}") is { } methodConstraintFinding)
+                        {
+                            return methodConstraintFinding;
+                        }
+                    }
+
+                    if (ScanAttributes(parameter.GetCustomAttributesData(), rootAssembly, visited,
+                            $"{path}/method-generic-param-attr:{method.Name}") is { } methodGenericAttributeFinding)
+                    {
+                        return methodGenericAttributeFinding;
+                    }
+                }
+            }
+
             foreach (var parameter in method.GetParameters())
             {
                 if (Scan(parameter.ParameterType, rootAssembly, visited, $"{path}/param:{method.Name}.{parameter.Name}") is { } parameterFinding)
                 {
                     return parameterFinding;
+                }
+
+                if (ScanAttributes(parameter.GetCustomAttributesData(), rootAssembly, visited, $"{path}/param-attr:{method.Name}.{parameter.Name}") is { } parameterAttributeFinding)
+                {
+                    return parameterAttributeFinding;
                 }
             }
         }
@@ -277,22 +465,10 @@ internal static class RoleSurfaceScanner
             {
                 return eventFinding;
             }
-        }
 
-        foreach (var attribute in type.GetCustomAttributesData())
-        {
-            if (Scan(attribute.AttributeType, rootAssembly, visited, $"{path}/attribute") is { } attributeFinding)
+            if (ScanAttributes(eventInfo.GetCustomAttributesData(), rootAssembly, visited, $"{path}/event-attr:{eventInfo.Name}") is { } eventAttributeFinding)
             {
-                return attributeFinding;
-            }
-
-            foreach (var argument in attribute.ConstructorArguments)
-            {
-                if (argument.Value is Type argumentType
-                    && Scan(argumentType, rootAssembly, visited, $"{path}/attribute-arg") is { } argumentFinding)
-                {
-                    return argumentFinding;
-                }
+                return eventAttributeFinding;
             }
         }
 
@@ -301,6 +477,63 @@ internal static class RoleSurfaceScanner
             if (Scan(nested, rootAssembly, visited, $"{path}/nested:{nested.Name}") is { } nestedFinding)
             {
                 return nestedFinding;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Skanon një grup attributes: tipin e attribute-it + argumentet e
+    /// konstruktorit + NAMED arguments — përfshirë vlera Type të vetme dhe
+    /// arrays/collections/nested values që përmbajnë Type.
+    /// </summary>
+    private static string? ScanAttributes(
+        IEnumerable<CustomAttributeData> attributes, Assembly rootAssembly, HashSet<Type> visited, string path)
+    {
+        foreach (var attribute in attributes)
+        {
+            if (Scan(attribute.AttributeType, rootAssembly, visited, $"{path}/type") is { } attributeTypeFinding)
+            {
+                return attributeTypeFinding;
+            }
+
+            foreach (var argument in attribute.ConstructorArguments)
+            {
+                if (ScanAttributeValue(argument, rootAssembly, visited, $"{path}/ctor-arg") is { } argumentFinding)
+                {
+                    return argumentFinding;
+                }
+            }
+
+            foreach (var named in attribute.NamedArguments)
+            {
+                if (ScanAttributeValue(named.TypedValue, rootAssembly, visited, $"{path}/named-arg:{named.MemberName}") is { } namedFinding)
+                {
+                    return namedFinding;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ScanAttributeValue(
+        CustomAttributeTypedArgument argument, Assembly rootAssembly, HashSet<Type> visited, string path)
+    {
+        if (argument.Value is Type typeValue)
+        {
+            return Scan(typeValue, rootAssembly, visited, path);
+        }
+
+        if (argument.Value is IReadOnlyCollection<CustomAttributeTypedArgument> elements)
+        {
+            foreach (var element in elements)
+            {
+                if (ScanAttributeValue(element, rootAssembly, visited, $"{path}/element") is { } elementFinding)
+                {
+                    return elementFinding;
+                }
             }
         }
 
