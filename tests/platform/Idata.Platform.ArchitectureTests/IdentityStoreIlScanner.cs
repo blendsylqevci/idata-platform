@@ -10,12 +10,15 @@ namespace Idata.Platform.ArchitectureTests;
 /// autoriteti i kufirit identity-store (regex-i tekstual mbetet vetëm
 /// defense-in-depth). Përdor VETËM System.Reflection.Metadata të
 /// framework-ut (zero dependency e re). Rregullat:
-///  - në assemblies JO-owner: ndalohen TypeRef-et ndaj store records
-///    (UserAccountRecord/UserClaimRecord/IdentityUserLogin`1/
-///    IdentityUserToken`1 — mbulon edhe Set&lt;T&gt;(), typeof, generics),
-///    MemberRef-et ndaj DbSet-eve identity (Users/UserClaims/UserLogins/
-///    UserTokens mbi IdentityUserContext/PlatformDbContext) dhe emrat e
-///    records në blob-et e attributes (bypass me string);
+///  - në assemblies JO-owner: ndalohen TypeRef-et ndaj TË GJITHA entiteteve
+///    të modeluara në skemën `identity` (UserAccountRecord/UserClaimRecord/
+///    IdentityUserLogin`1/IdentityUserToken`1 + katër entitetet OpenIddict
+///    Application/Authorization/Scope/Token`1 — mbulon edhe Set&lt;T&gt;(),
+///    typeof, generics; barazia me modelin REAL imponohet nga meta-testi i
+///    plotësisë §5-R3), MemberRef-et ndaj DbSet-eve identity (Users/
+///    UserClaims/UserLogins/UserTokens/UserPasskeys mbi IdentityUserContext/
+///    PlatformDbContext) dhe emrat e records në blob-et e attributes
+///    (bypass me string);
 ///  - në TË GJITHA production assemblies (edhe owners): ndalohet çdo
 ///    call/reference ekzekutues ndaj getter/setter-it të inherited
 ///    `IdentityUserClaim&lt;TKey&gt;.Id` (int) — anëtari mbetet CLR-only,
@@ -26,15 +29,18 @@ internal static class IdentityStoreIlScanner
 {
     internal sealed record Finding(string Assembly, string Kind, string Detail);
 
-    private static readonly string[] ForbiddenRecordTypeNames =
+    internal static readonly string[] ForbiddenRecordTypeNames =
         ["UserAccountRecord", "UserClaimRecord"];
 
-    private static readonly string[] ForbiddenRecordTypePrefixes =
-        ["IdentityUserLogin`", "IdentityUserToken`"];
+    internal static readonly string[] ForbiddenRecordTypePrefixes =
+        ["IdentityUserLogin`", "IdentityUserToken`",
+         "OpenIddictEntityFrameworkCoreApplication`", "OpenIddictEntityFrameworkCoreAuthorization`",
+         "OpenIddictEntityFrameworkCoreScope`", "OpenIddictEntityFrameworkCoreToken`"];
 
-    private static readonly string[] IdentityDbSetAccessors =
+    internal static readonly string[] IdentityDbSetAccessors =
         ["get_Users", "set_Users", "get_UserClaims", "set_UserClaims",
-         "get_UserLogins", "set_UserLogins", "get_UserTokens", "set_UserTokens"];
+         "get_UserLogins", "set_UserLogins", "get_UserTokens", "set_UserTokens",
+         "get_UserPasskeys", "set_UserPasskeys"];
 
     internal static IReadOnlyList<Finding> Scan(string assemblyPath, bool isStoreOwner)
     {
@@ -73,7 +79,7 @@ internal static class IdentityStoreIlScanner
                         continue;
                     }
 
-                    foreach (var forbidden in ForbiddenRecordTypeNames)
+                    foreach (var forbidden in ForbiddenRecordTypeNames.Concat(ForbiddenRecordTypePrefixes))
                     {
                         if (text.Contains(forbidden, StringComparison.Ordinal))
                         {

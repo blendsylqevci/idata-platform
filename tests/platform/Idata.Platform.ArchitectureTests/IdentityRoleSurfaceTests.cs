@@ -6,34 +6,27 @@ using Xunit;
 namespace Idata.Platform.ArchitectureTests;
 
 /// <summary>
-/// ZERO Identity roles — imponim STRUKTUROR i PLOTË (correction pass PR #28,
-/// §9): traversal REKURSIV, cycle-safe, mbi TË GJITHA tipet e platformës
-/// (publike DHE jo-publike) — base types · interfaces · fields · properties ·
-/// constructors · method params/returns · events · generic arguments ·
-/// generic parameter constraints · attributes (tipi + argumentet Type) ·
-/// nested types. Fixtures diskriminuese në KËTË test assembly provojnë që
-/// skaneri kap SECILIN lloj ekspozimi — heqja e një dege të traversal-it e
-/// bën meta-testin përkatës RED.
+/// ZERO Identity roles — imponim STRUKTUROR (correction R3 i PR #28, §7):
+/// traversal REKURSIV, cycle-safe, mbi tipet e TË GJITHA assemblies
+/// production të derivuara nga katalogu kanonik (§3 — jo listë e hardcoded).
+/// Universi i markerëve të ndaluar derivohet MEKANIKISHT nga tipet publike
+/// role-specifike të framework-ut të pinuar (meta-test barazie më poshtë) +
+/// një shtesë e dokumentuar (IdentityDbContext — konteksti mbart-role).
+/// Mbulimi i pretenduar = vetëm ai i provuar nga fixtures diskriminuese me
+/// LOKATOR të synuar dege — property/event fixtures janë pa backing-fields
+/// që dega përkatëse të mos kalojë fshehurazi përmes degës së fields.
 /// </summary>
 public sealed class IdentityRoleSurfaceTests
 {
+    /// <summary>§3-R3: assemblies të DERIVUARA nga katalogu kanonik.</summary>
     private static readonly Assembly[] AllPlatformAssemblies =
-        [Assembly.Load("Idata.Platform.Modules.PlatformStatus.Domain"),
-         Assembly.Load("Idata.Platform.Modules.PlatformStatus.Application"),
-         Assembly.Load("Idata.Platform.Modules.PlatformStatus.Infrastructure"),
-         Assembly.Load("Idata.Platform.Modules.PlatformStatus.Presentation"),
-         Assembly.Load("Idata.Platform.Modules.AccessControl.Domain"),
-         Assembly.Load("Idata.Platform.Modules.AccessControl.Application"),
-         Assembly.Load("Idata.Platform.Modules.AccessControl.Infrastructure"),
-         Assembly.Load("Idata.Platform.Modules.AccessControl.Presentation"),
-         Assembly.Load("Idata.Platform.Modules.Identity.Infrastructure"),
-         Assembly.Load("Idata.Platform.Persistence"),
-         Assembly.Load("Idata.Platform.DbMigrator"),
-         Assembly.Load("Idata.Platform.Api")];
+        [.. PlatformProjectCatalog.DiscoverProduction()
+            .Select(entry => Assembly.Load(entry.AssemblyName))];
 
     [Fact]
     public void Zero_Identity_roles_ne_asnje_tip_te_platformes_traversal_rekursiv()
     {
+        Assert.NotEmpty(AllPlatformAssemblies);
         foreach (var assembly in AllPlatformAssemblies)
         {
             foreach (var type in assembly.GetTypes())
@@ -45,39 +38,110 @@ public sealed class IdentityRoleSurfaceTests
     }
 
     /// <summary>
-    /// Fixtures diskriminuese — SECILA degë kryesore e traversal-it provohet
-    /// veçmas; nëse dega hiqet nga skaneri, rasti përkatës bëhet RED.
+    /// Meta-testi i katalogut (§3-R3): seti i assemblies të skanuara ==
+    /// saktësisht seti i AssemblyName-ve të katalogut kanonik — zero
+    /// zëvendësim i heshtur në load.
+    /// </summary>
+    [Fact]
+    public void Assemblies_e_skanuara_perputhen_me_katalogun_kanonik()
+    {
+        var loaded = AllPlatformAssemblies
+            .Select(assembly => assembly.GetName().Name ?? string.Empty)
+            .Order(StringComparer.Ordinal).ToArray();
+        var catalog = PlatformProjectCatalog.DiscoverProduction()
+            .Select(entry => entry.AssemblyName)
+            .Order(StringComparer.Ordinal).ToArray();
+        Assert.Equal(catalog, loaded);
+        Assert.Equal(loaded.Length, loaded.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    /// <summary>
+    /// Meta-testi i PLOTËSISË së markerëve (§7-R3): universi role-specifik
+    /// derivohet MEKANIKISHT nga tipet publike me "Role" në emër të tre
+    /// assemblies të pinuara të store-it (Extensions.Identity.Core/.Stores +
+    /// AspNetCore.Identity.EntityFrameworkCore) dhe duhet të jetë saktësisht
+    /// markerët − shtesa e vetme e dokumentuar (IdentityDbContext). Tip i ri
+    /// role-specifik në framework OSE marker i vdekur = RED.
+    /// </summary>
+    [Fact]
+    public void Markeret_e_ndaluar_perputhen_me_universin_role_specifik_te_framework_ut()
+    {
+        Assembly[] pinnedFrameworkAssemblies =
+            [typeof(RoleManager<>).Assembly,
+             typeof(IdentityRole<>).Assembly,
+             typeof(RoleStore<,,>).Assembly];
+
+        var derived = pinnedFrameworkAssemblies
+            .Distinct()
+            .SelectMany(assembly => assembly.GetTypes())
+            .Where(type => type.IsPublic && type.Name.Contains("Role", StringComparison.Ordinal))
+            .Select(type => (type.FullName ?? type.Name).Split('`')[0])
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        string[] documentedExtras =
+            ["Microsoft.AspNetCore.Identity.EntityFrameworkCore.IdentityDbContext"];
+        var markers = RoleSurfaceScanner.ForbiddenMarkers
+            .Except(documentedExtras, StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(derived, markers);
+    }
+
+    /// <summary>
+    /// Fixtures diskriminuese — SECILA degë provohet me LOKATOR të synuar:
+    /// gjetja duhet të vijë nga dega e pretenduar, jo rastësisht nga një
+    /// degë tjetër (p.sh. backing-field në vend të property-t).
     /// </summary>
     [Theory]
-    [InlineData(typeof(FixtureBaseExposure), "base type")]
-    [InlineData(typeof(IFixtureInterfaceExposure), "interface")]
-    [InlineData(typeof(FixtureFieldExposure), "field")]
-    [InlineData(typeof(FixturePropertyExposure), "property")]
-    [InlineData(typeof(FixtureConstructorExposure), "constructor parameter")]
-    [InlineData(typeof(FixtureMethodParameterExposure), "method parameter")]
-    [InlineData(typeof(FixtureMethodReturnExposure), "method return")]
-    [InlineData(typeof(FixtureEventExposure), "event")]
-    [InlineData(typeof(FixtureGenericArgumentExposure), "generic argument")]
-    [InlineData(typeof(FixtureGenericConstraintExposure<>), "generic constraint")]
-    [InlineData(typeof(FixtureAttributeExposure), "attribute Type argument")]
-    [InlineData(typeof(FixtureNestedExposure), "nested type")]
-    [InlineData(typeof(FixtureMethodGenericConstraintExposure), "METHOD generic constraint")]
-    [InlineData(typeof(FixtureMethodAttributeExposure), "attribute mbi method")]
-    [InlineData(typeof(FixturePropertyAttributeExposure), "attribute mbi property")]
-    [InlineData(typeof(FixtureFieldAttributeExposure), "attribute mbi field")]
-    [InlineData(typeof(FixtureEventAttributeExposure), "attribute mbi event")]
-    [InlineData(typeof(FixtureParameterAttributeExposure), "attribute mbi parameter")]
-    [InlineData(typeof(FixtureReturnAttributeExposure), "attribute mbi return value")]
-    [InlineData(typeof(FixtureGenericParameterAttributeExposure<>), "attribute mbi generic parameter")]
-    [InlineData(typeof(FixtureNamedAttributeArgumentExposure), "named attribute argument")]
-    [InlineData(typeof(FixtureArrayAttributeArgumentExposure), "array attribute argument")]
-    [InlineData(typeof(FixtureByRefExposure), "by-ref parameter")]
-    [InlineData(typeof(FixtureArrayFieldExposure), "array element type")]
-    [InlineData(typeof(FixtureDeepGenericExposure), "deep generic nesting")]
-    public void Traversal_i_kap_te_gjitha_llojet_e_ekspozimit_fixtures(Type fixture, string branch)
+    [InlineData(typeof(FixtureBaseExposure), "base type", "/base")]
+    [InlineData(typeof(IFixtureInterfaceExposure), "interface", "/interface")]
+    [InlineData(typeof(FixtureFieldExposure), "field", "/field:manager")]
+    [InlineData(typeof(FixturePropertyExposure), "property", "/property:Store")]
+    [InlineData(typeof(FixtureConstructorExposure), "constructor parameter", "/ctor-param:manager")]
+    [InlineData(typeof(FixtureMethodParameterExposure), "method parameter", "/param:Consume.link")]
+    [InlineData(typeof(FixtureMethodReturnExposure), "method return", "/return:Produce")]
+    [InlineData(typeof(FixtureEventExposure), "event", "/event:Changed")]
+    [InlineData(typeof(FixtureGenericArgumentExposure), "generic argument", "/property:Items/generic-arg")]
+    [InlineData(typeof(FixtureGenericConstraintExposure<>), "generic constraint", "/generic-constraint")]
+    [InlineData(typeof(FixtureAttributeExposure), "attribute Type argument", "/attribute/ctor-arg")]
+    [InlineData(typeof(FixtureNestedExposure), "nested type", "/nested:Inner")]
+    [InlineData(typeof(FixtureMethodGenericConstraintExposure), "METHOD generic constraint", "/method-generic-constraint:Consume")]
+    [InlineData(typeof(FixtureMethodAttributeExposure), "attribute mbi method", "/method-attr:Marked")]
+    [InlineData(typeof(FixturePropertyAttributeExposure), "attribute mbi property", "/property-attr:Value")]
+    [InlineData(typeof(FixtureFieldAttributeExposure), "attribute mbi field", "/field-attr:Field")]
+    [InlineData(typeof(FixtureEventAttributeExposure), "attribute mbi event", "/event-attr:Changed")]
+    [InlineData(typeof(FixtureParameterAttributeExposure), "attribute mbi parameter", "/param-attr:Consume.value")]
+    [InlineData(typeof(FixtureReturnAttributeExposure), "attribute mbi return value", "/return-attr:Produce")]
+    [InlineData(typeof(FixtureGenericParameterAttributeExposure<>), "attribute mbi generic parameter", "/generic-param-attr:T")]
+    [InlineData(typeof(FixtureNamedAttributeArgumentExposure), "named attribute argument", "/named-arg:TypeValue")]
+    [InlineData(typeof(FixtureArrayAttributeArgumentExposure), "array attribute argument", "/ctor-arg/element")]
+    [InlineData(typeof(FixtureByRefExposure), "by-ref parameter", "/param:Consume.role")]
+    [InlineData(typeof(FixtureArrayFieldExposure), "array element type", "/field:Roles")]
+    [InlineData(typeof(FixtureDeepGenericExposure), "deep generic nesting", "/property:Deep")]
+    [InlineData(typeof(FixtureRoleValidatorExposure), "IRoleValidator (§7-R3)", "/property:Validator")]
+    [InlineData(typeof(FixtureUserRoleStoreExposure), "IUserRoleStore (§7-R3)", "/field:store")]
+    public void Traversal_i_kap_te_gjitha_llojet_e_ekspozimit_fixtures(
+        Type fixture, string branch, string expectedLocator)
     {
         var finding = RoleSurfaceScanner.FindForbiddenSurface(fixture);
         Assert.False(finding is null, $"Dega '{branch}' NUK u kap nga traversal-i.");
+        Assert.Contains(expectedLocator, finding!, StringComparison.Ordinal);
+    }
+
+    /// <summary>Markerët e rinj §7-R3 raportohen me EMRIN e vet (jo rastësisht).</summary>
+    [Fact]
+    public void IRoleValidator_dhe_IUserRoleStore_raportohen_me_emrin_e_vet()
+    {
+        var validatorFinding = RoleSurfaceScanner.FindForbiddenSurface(typeof(FixtureRoleValidatorExposure));
+        Assert.NotNull(validatorFinding);
+        Assert.Contains("Microsoft.AspNetCore.Identity.IRoleValidator", validatorFinding, StringComparison.Ordinal);
+
+        var userRoleStoreFinding = RoleSurfaceScanner.FindForbiddenSurface(typeof(FixtureUserRoleStoreExposure));
+        Assert.NotNull(userRoleStoreFinding);
+        Assert.Contains("Microsoft.AspNetCore.Identity.IUserRoleStore", userRoleStoreFinding, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -92,6 +156,10 @@ public sealed class IdentityRoleSurfaceTests
     {
         public Guid Id { get; set; }
         public List<string> Values { get; } = [];
+
+        // Inverse §7-R3: user-store abstraksionet e lejuara të të njëjtit
+        // namespace NUK raportohen — nuk ndalohet krejt namespace-i.
+        public IUserClaimStore<IdentityUser<Guid>>? BenignUserStore => null;
     }
 
     internal class FixtureBaseExposure : IdentityRole<Guid>;
@@ -107,7 +175,8 @@ public sealed class IdentityRoleSurfaceTests
 
     internal sealed class FixturePropertyExposure
     {
-        public RoleStore<IdentityRole<Guid>, Microsoft.EntityFrameworkCore.DbContext, Guid>? Store { get; set; }
+        // Expression-bodied — ZERO backing field; dega e property-t e vetmja rrugë.
+        public RoleStore<IdentityRole<Guid>, Microsoft.EntityFrameworkCore.DbContext, Guid>? Store => null;
     }
 
     internal sealed class FixtureConstructorExposure
@@ -127,14 +196,17 @@ public sealed class IdentityRoleSurfaceTests
 
     internal sealed class FixtureEventExposure
     {
-        public event Action<IdentityRole<Guid>>? Changed;
-
-        public void Raise() => Changed?.Invoke(null!);
+        // Add/remove eksplicite — ZERO backing field; dega e event-it e vetmja rrugë.
+        public event Action<IdentityRole<Guid>>? Changed
+        {
+            add { }
+            remove { }
+        }
     }
 
     internal sealed class FixtureGenericArgumentExposure
     {
-        public List<IdentityRole<Guid>> Items { get; } = [];
+        public List<IdentityRole<Guid>> Items => [];
     }
 
     internal sealed class FixtureGenericConstraintExposure<TRole>
@@ -186,9 +258,11 @@ public sealed class IdentityRoleSurfaceTests
     internal sealed class FixtureEventAttributeExposure
     {
         [RoleMarker(typeof(IdentityRole<Guid>))]
-        public event Action? Changed;
-
-        public void Raise() => Changed?.Invoke();
+        public event Action? Changed
+        {
+            add { }
+            remove { }
+        }
     }
 
     internal sealed class FixtureParameterAttributeExposure
@@ -234,20 +308,38 @@ public sealed class IdentityRoleSurfaceTests
 
     internal sealed class FixtureDeepGenericExposure
     {
-        public List<Dictionary<string, IdentityRole<Guid>[]>>? Deep { get; set; }
+        public List<Dictionary<string, IdentityRole<Guid>[]>>? Deep => null;
+    }
+
+    // ── Fixtures §7-R3: markerët e shtuar nga derivimi i framework-ut ──
+
+    internal sealed class FixtureRoleValidatorExposure
+    {
+        // IRoleValidator<object>: asnjë marker tjetër në generic args — vetëm
+        // vetë IRoleValidator duhet ta prodhojë gjetjen (diskriminues).
+        public IRoleValidator<object>? Validator => null;
+    }
+
+    internal sealed class FixtureUserRoleStoreExposure
+    {
+#pragma warning disable CS0169 // fixture — fusha ekziston vetëm për t'u skanuar
+        private IUserRoleStore<IdentityUser<Guid>>? store;
+#pragma warning restore CS0169
     }
 }
 
 /// <summary>
 /// Skaneri rekursiv cycle-safe i sipërfaqes së tipeve për markerët e ndaluar
-/// të Identity roles. Anëtarët (fields/properties/ctors/methods/events/
+/// të Identity roles. Anëtarët (fields/properties/events/ctors/methods/
 /// attributes/nested) zgjerohen VETËM për tipet e deklaruara në assembly-n e
 /// rrënjës (tipet e framework-ut skanohen në nivel emri/generic args/base/
-/// interfaces — mjafton për detektim dhe mban traversal-in të kufizuar).
+/// interfaces — mjafton për detektim dhe mban traversal-in të kufizuar; JO
+/// "universal reflection traversal" — reflektimi dinamik mbetet kufi i hapur
+/// ENG-006). Markerët mbulohen nga meta-testi i derivimit të framework-ut.
 /// </summary>
 internal static class RoleSurfaceScanner
 {
-    private static readonly string[] ForbiddenMarkers =
+    internal static readonly string[] ForbiddenMarkers =
         ["Microsoft.AspNetCore.Identity.IdentityRole",
          "Microsoft.AspNetCore.Identity.IdentityUserRole",
          "Microsoft.AspNetCore.Identity.IdentityRoleClaim",
@@ -256,6 +348,9 @@ internal static class RoleSurfaceScanner
          "Microsoft.AspNetCore.Identity.IRoleStore",
          "Microsoft.AspNetCore.Identity.IRoleClaimStore",
          "Microsoft.AspNetCore.Identity.IQueryableRoleStore",
+         "Microsoft.AspNetCore.Identity.IRoleValidator",
+         "Microsoft.AspNetCore.Identity.IUserRoleStore",
+         "Microsoft.AspNetCore.Identity.RoleStoreBase",
          "Microsoft.AspNetCore.Identity.RoleValidator",
          "Microsoft.AspNetCore.Identity.EntityFrameworkCore.IdentityDbContext"];
 
@@ -386,6 +481,22 @@ internal static class RoleSurfaceScanner
             }
         }
 
+        // Events PARA metodave: ndryshe accessor-ët add_/remove_ (parametri i
+        // handler-it) do ta hijezonin degën e event-it në degën e metodave —
+        // lokatori i synuar duhet të jetë "/event:".
+        foreach (var eventInfo in type.GetEvents(AllDeclared))
+        {
+            if (Scan(eventInfo.EventHandlerType, rootAssembly, visited, $"{path}/event:{eventInfo.Name}") is { } eventFinding)
+            {
+                return eventFinding;
+            }
+
+            if (ScanAttributes(eventInfo.GetCustomAttributesData(), rootAssembly, visited, $"{path}/event-attr:{eventInfo.Name}") is { } eventAttributeFinding)
+            {
+                return eventAttributeFinding;
+            }
+        }
+
         foreach (var constructor in type.GetConstructors(AllDeclared))
         {
             if (ScanAttributes(constructor.GetCustomAttributesData(), rootAssembly, visited, $"{path}/ctor-attr") is { } constructorAttributeFinding)
@@ -456,19 +567,6 @@ internal static class RoleSurfaceScanner
                 {
                     return parameterAttributeFinding;
                 }
-            }
-        }
-
-        foreach (var eventInfo in type.GetEvents(AllDeclared))
-        {
-            if (Scan(eventInfo.EventHandlerType, rootAssembly, visited, $"{path}/event:{eventInfo.Name}") is { } eventFinding)
-            {
-                return eventFinding;
-            }
-
-            if (ScanAttributes(eventInfo.GetCustomAttributesData(), rootAssembly, visited, $"{path}/event-attr:{eventInfo.Name}") is { } eventAttributeFinding)
-            {
-                return eventAttributeFinding;
             }
         }
 

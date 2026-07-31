@@ -1,5 +1,7 @@
 using Idata.Platform.Persistence;
+using Microsoft.EntityFrameworkCore;
 using System.Reflection;
+using System.Reflection.Metadata;
 using Xunit;
 
 namespace Idata.Platform.ArchitectureTests;
@@ -91,27 +93,28 @@ public sealed class ConventionEnforcementTests
     [Fact]
     public void Identity_store_paketat_vetem_ne_csproj_et_e_aprovuara()
     {
-        string[] approvedSuffixes =
-            [Path.Combine("Idata.Platform.Persistence", "Idata.Platform.Persistence.csproj"),
-             Path.Combine("Infrastructure", "Idata.Platform.Modules.Identity.Infrastructure.csproj")];
         string[] storePackages =
             ["\"Microsoft.AspNetCore.Identity.EntityFrameworkCore\"", "\"OpenIddict.EntityFrameworkCore\""];
 
-        foreach (var project in AllProjectFiles())
+        // §3-R3: owner-at njihen VETËM me path kanonik nga katalogu — jo suffix/basename.
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        var catalog = PlatformProjectCatalog.DiscoverProduction();
+        foreach (var entry in catalog)
         {
-            var content = File.ReadAllText(project);
+            var content = File.ReadAllText(Path.Combine(repoRoot, entry.CanonicalPath.Replace('/', Path.DirectorySeparatorChar)));
             if (storePackages.Any(package => content.Contains(package, StringComparison.Ordinal)))
             {
-                Assert.Contains(approvedSuffixes, suffix => project.EndsWith(suffix, StringComparison.Ordinal));
+                Assert.True(PlatformProjectCatalog.IsStoreOwner(entry),
+                    $"Paketë store në csproj JO-owner: {entry.CanonicalPath}");
             }
         }
 
         // Të dyja paketat duhet të ekzistojnë realisht në të dy projektet e
         // aprovuara — allowlist-i nuk është i vdekur.
-        foreach (var suffix in approvedSuffixes)
+        foreach (var ownerPath in PlatformProjectCatalog.StoreOwnerCanonicalPaths)
         {
-            var project = Assert.Single(AllProjectFiles(), path => path.EndsWith(suffix, StringComparison.Ordinal));
-            var content = File.ReadAllText(project);
+            var entry = Assert.Single(catalog, candidate => candidate.CanonicalPath == ownerPath);
+            var content = File.ReadAllText(Path.Combine(repoRoot, entry.CanonicalPath.Replace('/', Path.DirectorySeparatorChar)));
             Assert.All(storePackages, package => Assert.Contains(package, content, StringComparison.Ordinal));
         }
     }
@@ -139,137 +142,66 @@ public sealed class ConventionEnforcementTests
         }
     }
 
-    private static readonly string[] SurveillancePrefixes =
-        ["Microsoft.AspNetCore.Identity", "Microsoft.Extensions.Identity", "OpenIddict",
-         "Microsoft.IdentityModel", "System.IdentityModel",
-         "Microsoft.AspNetCore.Authentication", "Microsoft.AspNetCore.DataProtection",
-         "Microsoft.Bcl.Cryptography", "IdentityServer", "Duende", "Auth0", "Okta"];
-
-    /// <summary>Registry autoritativ paketë→version (correction R2, §8).</summary>
-    private static readonly IReadOnlyDictionary<string, string> IdentityPackageRegistry =
-        new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["Microsoft.AspNetCore.Identity.EntityFrameworkCore"] = "10.0.10",
-            ["OpenIddict.EntityFrameworkCore"] = "7.6.0",
-            ["Microsoft.Extensions.Identity.Core"] = "10.0.10",
-            ["Microsoft.Extensions.Identity.Stores"] = "10.0.10",
-            ["Microsoft.IdentityModel.Abstractions"] = "8.19.2",
-            ["Microsoft.IdentityModel.Logging"] = "8.19.2",
-            ["Microsoft.IdentityModel.Tokens"] = "8.19.2",
-            ["Microsoft.Bcl.Cryptography"] = "10.0.2",
-            ["OpenIddict.Abstractions"] = "7.6.0",
-            ["OpenIddict.Core"] = "7.6.0",
-            ["OpenIddict.EntityFrameworkCore.Models"] = "7.6.0",
-        };
-
-    private static readonly string[] DirectStorePackages =
-        ["Microsoft.AspNetCore.Identity.EntityFrameworkCore", "OpenIddict.EntityFrameworkCore"];
-
-    private static readonly string[] StoreOwnerProjects =
-        ["Idata.Platform.Persistence", "Idata.Platform.Modules.Identity.Infrastructure"];
-
-    /// <summary>Zbulim DINAMIK: çdo csproj (src+tests) duhet të ketë lockfile ngjitur.</summary>
-    internal static (string Project, string? Lockfile)[] DiscoverLockfiles(params string[] roots)
-        => [.. roots
-            .SelectMany(root => Directory.GetFiles(root, "*.csproj", SearchOption.AllDirectories))
-            .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
-                && !path.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-            .Select(path =>
+    /// <summary>
+    /// Zbulim DINAMIK me identitet kanonik (§3-R3): çdo csproj nën rrënjët e
+    /// kërkimit — i identifikuar me path kanonik repo-relative përmes
+    /// <see cref="PlatformProjectCatalog"/> — duhet të ketë lockfile ngjitur.
+    /// </summary>
+    internal static (PlatformProjectCatalog.ProjectEntry Entry, string? Lockfile)[] DiscoverLockfiles(
+        string repoRoot, params string[] searchRoots)
+        => [.. searchRoots
+            .SelectMany(root => PlatformProjectCatalog.Discover(repoRoot, root))
+            .Select(entry =>
             {
-                var lockfile = Path.Combine(Path.GetDirectoryName(path)!, "packages.lock.json");
-                return (Path.GetFileNameWithoutExtension(path), File.Exists(lockfile) ? lockfile : null);
+                var lockfile = Path.Combine(
+                    repoRoot,
+                    Path.GetDirectoryName(entry.CanonicalPath.Replace('/', Path.DirectorySeparatorChar))!,
+                    "packages.lock.json");
+                return (entry, File.Exists(lockfile) ? lockfile : null);
             })];
 
     /// <summary>
-    /// Auditi FAIL-CLOSED i një lockfile-i: paketë e survejuar e panjohur =
-    /// gjetje; version i panjohur = gjetje; `Direct` lejohet VETËM për dy
-    /// paketat store te owner-at e aprovuar; lloj i panjohur = gjetje.
-    /// </summary>
-    internal static List<string> AuditLockfile(string projectName, System.Text.Json.JsonDocument document, bool isStoreOwner)
-    {
-        var findings = new List<string>();
-        foreach (var framework in document.RootElement.GetProperty("dependencies").EnumerateObject())
-        {
-            foreach (var dependency in framework.Value.EnumerateObject())
-            {
-                if (!SurveillancePrefixes.Any(prefix =>
-                        dependency.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
-                {
-                    continue;
-                }
-
-                if (!IdentityPackageRegistry.TryGetValue(dependency.Name, out var expectedVersion))
-                {
-                    findings.Add($"{projectName}: paketë identity/security e PA-inventarizuar '{dependency.Name}'");
-                    continue;
-                }
-
-                var resolved = dependency.Value.GetProperty("resolved").GetString();
-                if (resolved != expectedVersion)
-                {
-                    findings.Add($"{projectName}: version i panjohur {dependency.Name}={resolved} (pritej {expectedVersion})");
-                }
-
-                var dependencyType = dependency.Value.GetProperty("type").GetString();
-                switch (dependencyType)
-                {
-                    case "Direct" when !isStoreOwner || !DirectStorePackages.Contains(dependency.Name):
-                        findings.Add($"{projectName}: direct owner i PAAUTORIZUAR për {dependency.Name}");
-                        break;
-                    case "Direct" or "Transitive" or "CentralTransitive":
-                        break;
-                    default:
-                        findings.Add($"{projectName}: lloj i panjohur '{dependencyType}' për {dependency.Name}");
-                        break;
-                }
-            }
-        }
-
-        return findings;
-    }
-
-    /// <summary>
     /// Inventari FAIL-CLOSED mbi TË GJITHA lockfiles platform/test
-    /// (correction R2, §8 — zbulim dinamik, jo listë e hardcoded): çdo
-    /// csproj pa lockfile = FAIL; çdo paketë/version i panjohur = FAIL;
-    /// `Direct` vetëm te owner-at; owner-at përmbajnë rrënjët e pritura +
-    /// KREJT setin e registry-t (inventar jo i vdekur).
+    /// (§4-R3 — model CLOSURE deny-by-default, zero prefix-`continue`): çdo
+    /// csproj pa lockfile = FAIL; çdo shkelje closure/familjeje = FAIL;
+    /// owner-at (VETËM me path kanonik) mbajnë të dyja rrënjët Direct;
+    /// AssemblyName unik edhe në bashkimin src+tests.
     /// </summary>
     [Fact]
     public void Inventari_identity_security_i_TE_GJITHA_lockfiles_eshte_fail_closed()
     {
-        var repoRoot = Directory.GetParent(PlatformRoot)!.Parent!.FullName;
-        var discovered = DiscoverLockfiles(PlatformRoot, Path.Combine(repoRoot, "tests", "platform"));
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        var discovered = DiscoverLockfiles(
+            repoRoot, PlatformRoot, Path.Combine(repoRoot, "tests", "platform"));
 
         Assert.NotEmpty(discovered);
-        foreach (var (project, lockfile) in discovered)
+        var duplicateAssemblies = discovered.GroupBy(pair => pair.Entry.AssemblyName, StringComparer.Ordinal)
+            .Where(group => group.Count() > 1).Select(group => group.Key).ToArray();
+        Assert.True(duplicateAssemblies.Length == 0,
+            $"AssemblyName i dyfishtë në src+tests: {string.Join(", ", duplicateAssemblies)}");
+
+        foreach (var (entry, lockfile) in discovered)
         {
             // Projekt i ri pa lockfile nuk shpëton kurrë nga inventari.
-            Assert.True(lockfile is not null, $"csproj PA packages.lock.json: {project}");
+            Assert.True(lockfile is not null, $"csproj PA packages.lock.json: {entry.CanonicalPath}");
         }
 
         var audited = 0;
-        foreach (var (project, lockfile) in discovered)
+        foreach (var (entry, lockfile) in discovered)
         {
-            var isStoreOwner = StoreOwnerProjects.Contains(project);
             using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockfile!));
-            var findings = AuditLockfile(project, document, isStoreOwner);
+            var findings = IdentitySecurityDependencyInventory.Audit(entry.CanonicalPath, document);
             Assert.True(findings.Count == 0, string.Join(" · ", findings));
 
-            if (isStoreOwner)
+            if (PlatformProjectCatalog.IsStoreOwner(entry))
             {
-                // Owner-at: rrënjët Direct + KREJT seti i registry-t prezent.
-                var names = document.RootElement.GetProperty("dependencies").EnumerateObject()
-                    .SelectMany(framework => framework.Value.EnumerateObject())
-                    .Select(dependency => dependency.Name)
-                    .ToHashSet(StringComparer.Ordinal);
-                Assert.All(IdentityPackageRegistry.Keys, package => Assert.Contains(package, names));
-                foreach (var direct in DirectStorePackages)
+                // Owner-at: të dyja rrënjët e aprovuara prezente si Direct.
+                foreach (var root in IdentitySecurityDependencyInventory.ApprovedRoots.Keys)
                 {
-                    var entry = document.RootElement.GetProperty("dependencies").EnumerateObject()
+                    var dependency = document.RootElement.GetProperty("dependencies").EnumerateObject()
                         .SelectMany(framework => framework.Value.EnumerateObject())
-                        .Single(dependency => dependency.Name == direct);
-                    Assert.Equal("Direct", entry.Value.GetProperty("type").GetString());
+                        .Single(candidate => candidate.Name == root);
+                    Assert.Equal("Direct", dependency.Value.GetProperty("type").GetString());
                 }
             }
 
@@ -278,63 +210,189 @@ public sealed class ConventionEnforcementTests
 
         // Count i DERIVUAR: çdo lockfile i zbuluar u auditua; të dy owner-at u gjetën.
         Assert.Equal(discovered.Length, audited);
-        Assert.Equal(2, discovered.Count(pair => StoreOwnerProjects.Contains(pair.Project)));
+        Assert.Equal(2, discovered.Count(pair => PlatformProjectCatalog.IsStoreOwner(pair.Entry)));
     }
 
-    /// <summary>Prova DISKRIMINUESE e auditit (§8): çdo shkelje sintetike kapet.</summary>
+    /// <summary>
+    /// Meta-testi i PLOTËSISË së manifestit (§4-R3): closure-i REAL i
+    /// llogaritur nga të gjitha lockfiles = saktësisht çelësat e
+    /// <see cref="IdentitySecurityDependencyInventory.ClosureManifest"/>,
+    /// me versione identike. Paketë e re në closure OSE hyrje e vdekur në
+    /// manifest = RED — manifest-i s'mund të divergojë në heshtje.
+    /// </summary>
     [Fact]
-    public void Auditi_i_lockfile_kap_paketa_te_reja_versione_dhe_direct_te_paautorizuar()
+    public void Manifesti_i_closure_perputhet_saktesisht_me_closure_real()
     {
-        static System.Text.Json.JsonDocument Synthetic(string name, string version, string type)
-            => System.Text.Json.JsonDocument.Parse(
-                "{\"version\":2,\"dependencies\":{\"net10.0\":{\"" + name + "\":{\"type\":\"" + type
-                + "\",\"resolved\":\"" + version + "\",\"contentHash\":\"sintetik\"}}}}");
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        var discovered = DiscoverLockfiles(
+            repoRoot, PlatformRoot, Path.Combine(repoRoot, "tests", "platform"));
 
-        // Paketë e survejuar e RE (prefix Duende) → gjetje.
-        using (var document = Synthetic("Duende.AccessTokenManagement", "1.0.0", "Transitive"))
+        var realVersions = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        foreach (var (entry, lockfile) in discovered)
         {
-            Assert.NotEmpty(AuditLockfile("sintetik", document, isStoreOwner: false));
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockfile!));
+            var (closure, findings) = IdentitySecurityDependencyInventory.ComputeClosure(entry.CanonicalPath, document);
+            Assert.True(findings.Count == 0, string.Join(" · ", findings));
+            foreach (var framework in document.RootElement.GetProperty("dependencies").EnumerateObject())
+            {
+                foreach (var dependency in framework.Value.EnumerateObject())
+                {
+                    if (closure.Contains(dependency.Name)
+                        && dependency.Value.TryGetProperty("resolved", out var resolved)
+                        && resolved.GetString() is { } version)
+                    {
+                        realVersions.TryAdd(dependency.Name, new HashSet<string>(StringComparer.Ordinal));
+                        realVersions[dependency.Name].Add(version);
+                    }
+                }
+            }
         }
 
-        // Version i panjohur i paketës së njohur → gjetje.
-        using (var document = Synthetic("OpenIddict.Core", "9.9.9", "Transitive"))
+        // Barazi e DYANSHME: emrat realë == manifest-i; versionet identike.
+        Assert.Equal(
+            realVersions.Keys.Order(StringComparer.Ordinal).ToArray(),
+            IdentitySecurityDependencyInventory.ClosureManifest.Keys.Order(StringComparer.Ordinal).ToArray());
+        foreach (var (package, versions) in realVersions)
         {
-            Assert.NotEmpty(AuditLockfile("sintetik", document, isStoreOwner: false));
+            var version = Assert.Single(versions);
+            Assert.Equal(IdentitySecurityDependencyInventory.ClosureManifest[package], version);
+        }
+    }
+
+    private const string OwnerCanonicalPath =
+        "src/platform/Idata.Platform.Persistence/Idata.Platform.Persistence.csproj";
+
+    private const string NonOwnerCanonicalPath = "src/platform/Sintetik/Sintetik.csproj";
+
+    /// <summary>Lockfile sintetik: rrënjë e aprovuar me një edge drejt një pakete shtesë.</summary>
+    private static System.Text.Json.JsonDocument SyntheticWithRoot(
+        string extraName, string extraVersion, string extraType, string rootType = "Direct")
+        => System.Text.Json.JsonDocument.Parse(
+            "{\"version\":2,\"dependencies\":{\"net10.0\":{"
+            + "\"OpenIddict.EntityFrameworkCore\":{\"type\":\"" + rootType
+            + "\",\"resolved\":\"7.6.0\",\"contentHash\":\"sintetik\",\"dependencies\":{\"" + extraName + "\":\"" + extraVersion + "\"}},"
+            + "\"" + extraName + "\":{\"type\":\"" + extraType
+            + "\",\"resolved\":\"" + extraVersion + "\",\"contentHash\":\"sintetik\"}}}}");
+
+    private static System.Text.Json.JsonDocument SyntheticStandalone(string name, string version, string type)
+        => System.Text.Json.JsonDocument.Parse(
+            "{\"version\":2,\"dependencies\":{\"net10.0\":{\"" + name + "\":{\"type\":\"" + type
+            + "\",\"resolved\":\"" + version + "\",\"contentHash\":\"sintetik\"}}}}");
+
+    /// <summary>Prova DISKRIMINUESE e auditit closure (§4-R3): çdo shkelje sintetike kapet.</summary>
+    [Fact]
+    public void Auditi_i_closure_kap_cdo_shkelje_dhe_zero_false_positive_jashte_closure()
+    {
+        // Emër i PANJOHUR brenda closure (deny-by-default) → gjetje.
+        using (var document = SyntheticWithRoot("Evil.Identity.Backdoor", "1.0.0", "Transitive"))
+        {
+            Assert.NotEmpty(IdentitySecurityDependencyInventory.Audit(OwnerCanonicalPath, document));
         }
 
-        // Direct te një projekt JO-owner → gjetje.
-        using (var document = Synthetic("OpenIddict.EntityFrameworkCore", "7.6.0", "Direct"))
+        // Version ≠ manifest brenda closure → gjetje.
+        using (var document = SyntheticWithRoot("OpenIddict.Core", "9.9.9", "Transitive"))
         {
-            Assert.NotEmpty(AuditLockfile("sintetik", document, isStoreOwner: false));
+            Assert.NotEmpty(IdentitySecurityDependencyInventory.Audit(OwnerCanonicalPath, document));
         }
 
-        // Direct i paketës JO-store edhe te owner → gjetje.
-        using (var document = Synthetic("OpenIddict.Core", "7.6.0", "Direct"))
+        // Rrënjë Direct te path JO-owner → gjetje (edhe me basename owner-i s'do të ndihmonte —
+        // klasifikimi bëhet VETËM me path kanonik).
+        using (var document = SyntheticWithRoot("OpenIddict.Core", "7.6.0", "Transitive"))
         {
-            Assert.NotEmpty(AuditLockfile("sintetik", document, isStoreOwner: true));
+            Assert.NotEmpty(IdentitySecurityDependencyInventory.Audit(NonOwnerCanonicalPath, document));
         }
 
-        // Lloj i panjohur → gjetje.
-        using (var document = Synthetic("OpenIddict.Core", "7.6.0", "Project"))
+        // Direct i paketës JO-rrënjë brenda closure edhe te owner-i → gjetje.
+        using (var document = SyntheticWithRoot("OpenIddict.Core", "7.6.0", "Direct"))
         {
-            Assert.NotEmpty(AuditLockfile("sintetik", document, isStoreOwner: false));
+            Assert.NotEmpty(IdentitySecurityDependencyInventory.Audit(OwnerCanonicalPath, document));
         }
 
-        // Inverse të lejuara: zero gjetje.
-        using (var document = Synthetic("OpenIddict.EntityFrameworkCore", "7.6.0", "Direct"))
+        // Lloj i palejuar brenda closure → gjetje.
+        using (var document = SyntheticWithRoot("OpenIddict.Core", "7.6.0", "Project"))
         {
-            Assert.Empty(AuditLockfile("sintetik", document, isStoreOwner: true));
+            Assert.NotEmpty(IdentitySecurityDependencyInventory.Audit(OwnerCanonicalPath, document));
         }
 
-        using (var document = Synthetic("OpenIddict.Core", "7.6.0", "Transitive"))
+        // Metadata e palexueshme: edge drejt pakete që mungon nga lockfile → gjetje.
+        using (var document = System.Text.Json.JsonDocument.Parse(
+            "{\"version\":2,\"dependencies\":{\"net10.0\":{\"OpenIddict.EntityFrameworkCore\":"
+            + "{\"type\":\"Direct\",\"resolved\":\"7.6.0\",\"contentHash\":\"sintetik\","
+            + "\"dependencies\":{\"Paketa.Fantazme\":\"1.0.0\"}}}}}"))
         {
-            Assert.Empty(AuditLockfile("sintetik", document, isStoreOwner: false));
+            Assert.NotEmpty(IdentitySecurityDependencyInventory.Audit(OwnerCanonicalPath, document));
         }
 
-        using (var document = Synthetic("OpenIddict.EntityFrameworkCore", "7.6.0", "CentralTransitive"))
+        // Familje e ndaluar provider-i — edhe krejt JASHTË closure → gjetje.
+        using (var document = SyntheticStandalone("Duende.AccessTokenManagement", "1.0.0", "Transitive"))
         {
-            Assert.Empty(AuditLockfile("sintetik", document, isStoreOwner: false));
+            Assert.NotEmpty(IdentitySecurityDependencyInventory.Audit(NonOwnerCanonicalPath, document));
         }
+
+        // Inverse: rrënjë Direct te owner-i kanonik + closure konform → zero gjetje.
+        using (var document = SyntheticWithRoot("OpenIddict.Core", "7.6.0", "Transitive"))
+        {
+            Assert.Empty(IdentitySecurityDependencyInventory.Audit(OwnerCanonicalPath, document));
+        }
+
+        // Inverse: rrënjë CentralTransitive (downstream) te jo-owner → zero gjetje.
+        using (var document = SyntheticWithRoot("OpenIddict.Core", "7.6.0", "Transitive", rootType: "CentralTransitive"))
+        {
+            Assert.Empty(IdentitySecurityDependencyInventory.Audit(NonOwnerCanonicalPath, document));
+        }
+
+        // Inverse: paketë e PALIDHUR jashtë closure → zero false positive.
+        using (var document = SyntheticStandalone("Newtonsoft.Json", "13.0.3", "Transitive"))
+        {
+            Assert.Empty(IdentitySecurityDependencyInventory.Audit(NonOwnerCanonicalPath, document));
+        }
+
+        // Direct mbi paketë identity-SPECIFIKE jo-rrënjë (edhe te jo-owner) → gjetje.
+        using (var document = SyntheticWithRoot(
+            "Microsoft.Extensions.Identity.Core", "10.0.10", "Direct", rootType: "CentralTransitive"))
+        {
+            Assert.NotEmpty(IdentitySecurityDependencyInventory.Audit(NonOwnerCanonicalPath, document));
+        }
+
+        // Inverse: Direct mbi anëtar të PËRBASHKËT infra të closure (EF Core)
+        // te jo-owner → zero gjetje (qeveriset nga konventat e tjera).
+        using (var document = SyntheticWithRoot(
+            "Microsoft.EntityFrameworkCore", "10.0.10", "Direct", rootType: "CentralTransitive"))
+        {
+            Assert.Empty(IdentitySecurityDependencyInventory.Audit(NonOwnerCanonicalPath, document));
+        }
+    }
+
+    /// <summary>
+    /// Meta-testi i NDARJES së plotë (§4-R3): çdo anëtar i manifest-it
+    /// klasifikohet në mënyrë deterministe — familjet identity-specifike
+    /// përfshijnë të gjitha paketat identity/OpenIddict/kripto (përfshirë të
+    /// dyja rrënjët), dhe pjesa tjetër është vetëm infrastrukturë e
+    /// përbashkët EF/Extensions.
+    /// </summary>
+    [Fact]
+    public void Klasifikimi_identity_specifik_i_closure_eshte_i_plote_dhe_korrekt()
+    {
+        var manifest = IdentitySecurityDependencyInventory.ClosureManifest.Keys;
+        var specific = manifest.Where(IdentitySecurityDependencyInventory.IsIdentitySpecific)
+            .Order(StringComparer.Ordinal).ToArray();
+        var shared = manifest.Where(name => !IdentitySecurityDependencyInventory.IsIdentitySpecific(name))
+            .Order(StringComparer.Ordinal).ToArray();
+
+        // Rrënjët + Crypto/IdentityModel/Bcl janë specifike.
+        Assert.All(IdentitySecurityDependencyInventory.ApprovedRoots.Keys,
+            root => Assert.Contains(root, specific));
+        Assert.Contains("Microsoft.AspNetCore.Cryptography.Internal", specific);
+        Assert.Contains("Microsoft.AspNetCore.Cryptography.KeyDerivation", specific);
+        Assert.Contains("Microsoft.Bcl.Cryptography", specific);
+        Assert.All(specific, name => Assert.Matches(
+            "^(Microsoft\\.AspNetCore\\.Identity|Microsoft\\.Extensions\\.Identity|OpenIddict|"
+            + "Microsoft\\.IdentityModel|Microsoft\\.AspNetCore\\.Cryptography|Microsoft\\.Bcl\\.Cryptography)", name));
+
+        // Pjesa e përbashkët = VETËM EF Core / Extensions jo-Identity.
+        Assert.All(shared, name => Assert.Matches(
+            "^(Microsoft\\.EntityFrameworkCore|Microsoft\\.Extensions\\.)", name));
+        Assert.Equal(manifest.Count(), specific.Length + shared.Length);
     }
 
     /// <summary>Zbulimi dinamik kap projekt të ri PA lockfile (fail-closed).</summary>
@@ -345,15 +403,91 @@ public sealed class ConventionEnforcementTests
         try
         {
             File.WriteAllText(Path.Combine(temporary.FullName, "Sintetik.Projekt.csproj"), "<Project />");
-            var discovered = DiscoverLockfiles(temporary.FullName);
-            var entry = Assert.Single(discovered);
-            Assert.Equal("Sintetik.Projekt", entry.Project);
-            Assert.Null(entry.Lockfile);
+            var discovered = DiscoverLockfiles(temporary.FullName, temporary.FullName);
+            var pair = Assert.Single(discovered);
+            Assert.Equal("Sintetik.Projekt", pair.Entry.ProjectName);
+            Assert.Null(pair.Lockfile);
         }
         finally
         {
             temporary.Delete(recursive: true);
         }
+    }
+
+    /// <summary>
+    /// Identiteti kanonik i projekteve (§3-R3): basename-i NUK është KURRË
+    /// autoritet — spoof me të njëjtin basename në path tjetër ≠ owner;
+    /// AssemblyName i dyfishtë = FAIL; path jashtë rrënjës = FAIL; projekt i
+    /// zbuluar pa assembly të skanueshëm dështon receipt-in e kufirit IL.
+    /// </summary>
+    [Fact]
+    public void Identiteti_kanonik_i_projekteve_eshte_path_based_dhe_fail_closed()
+    {
+        var temporary = Directory.CreateTempSubdirectory("idata_catalog_guard_");
+        try
+        {
+            // (a) Spoof: i njëjti basename si owner-i real, path tjetër, AssemblyName
+            // eksplicit i ndryshëm (ndryshe zbulohet si duplikat) → NUK është owner.
+            var spoofDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "evil"));
+            File.WriteAllText(Path.Combine(spoofDirectory.FullName, "Idata.Platform.Persistence.csproj"),
+                "<Project><PropertyGroup><AssemblyName>Evil.Spoof</AssemblyName></PropertyGroup></Project>");
+            var spoofed = PlatformProjectCatalog.Discover(temporary.FullName, temporary.FullName);
+            var spoofEntry = Assert.Single(spoofed);
+            Assert.Equal("Idata.Platform.Persistence", spoofEntry.ProjectName);
+            Assert.Equal("Evil.Spoof", spoofEntry.AssemblyName);
+            Assert.False(PlatformProjectCatalog.IsStoreOwner(spoofEntry),
+                "Spoof me basename owner-i u klasifikua si owner — basename po përdoret si autoritet.");
+
+            // (b) Dy csproj me të njëjtin basename (default AssemblyName identik)
+            // në path-e të ndryshëm → FAIL i qartë, jo klasifikim i heshtur.
+            var duplicateDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "dy"));
+            File.WriteAllText(Path.Combine(duplicateDirectory.FullName, "Idata.Platform.Persistence.csproj"), "<Project />");
+            var secondDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "tre"));
+            File.WriteAllText(Path.Combine(secondDirectory.FullName, "Idata.Platform.Persistence.csproj"), "<Project />");
+            Assert.Throws<InvalidOperationException>(
+                () => PlatformProjectCatalog.Discover(temporary.FullName, temporary.FullName));
+
+            // (c) Rrënjë kërkimi jashtë rrënjës së repo-s (spoof/traversal) → FAIL.
+            var outside = Directory.CreateTempSubdirectory("idata_catalog_outside_");
+            try
+            {
+                File.WriteAllText(Path.Combine(outside.FullName, "Jashte.csproj"), "<Project />");
+                Assert.Throws<InvalidOperationException>(
+                    () => PlatformProjectCatalog.Discover(temporary.FullName, outside.FullName));
+            }
+            finally
+            {
+                outside.Delete(recursive: true);
+            }
+
+            // (d) Projekt i zbuluar PA assembly të skanueshëm → receipt-i i
+            // kufirit IL (File.Exists mbi AssemblyName real) dështon.
+            Assert.False(File.Exists(Path.Combine(AppContext.BaseDirectory, $"{spoofEntry.AssemblyName}.dll")),
+                "Assembly sintetik ekziston — receipt-i s'mund të provohet.");
+        }
+        finally
+        {
+            temporary.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>Katalogu production real: owner-at ekzaktë + unikësi e provuar.</summary>
+    [Fact]
+    public void Katalogu_production_permban_saktesisht_dy_owner_at_kanonike()
+    {
+        var catalog = PlatformProjectCatalog.DiscoverProduction();
+        Assert.NotEmpty(catalog);
+
+        foreach (var ownerPath in PlatformProjectCatalog.StoreOwnerCanonicalPaths)
+        {
+            var owner = Assert.Single(catalog, entry => entry.CanonicalPath == ownerPath);
+            // AssemblyName-i i pritur i owner-it — identiteti i plotë §3.
+            Assert.Equal(Path.GetFileNameWithoutExtension(ownerPath), owner.AssemblyName);
+        }
+
+        Assert.Equal(2, catalog.Count(PlatformProjectCatalog.IsStoreOwner));
+        // Unikësia e AssemblyName/path garantohet nga Discover (hedh në duplikat).
+        Assert.Equal(catalog.Length, catalog.Select(entry => entry.CanonicalPath).Distinct(StringComparer.Ordinal).Count());
     }
 
     /// <summary>
@@ -369,33 +503,29 @@ public sealed class ConventionEnforcementTests
     [Fact]
     public void Kufiri_identity_store_type_IL_mbi_te_gjitha_production_assemblies()
     {
-        string[] storeOwners =
-            ["Idata.Platform.Persistence", "Idata.Platform.Modules.Identity.Infrastructure"];
-
-        var productionProjects = AllProjectFiles()
-            .Select(Path.GetFileNameWithoutExtension)
-            .Select(name => name!)
-            .Order()
-            .ToArray();
-        Assert.NotEmpty(productionProjects);
-        Assert.All(storeOwners, owner => Assert.Contains(owner, productionProjects));
+        // §3-R3: autoriteti = katalogu kanonik (path + AssemblyName real),
+        // KURRË basename; owner-at njihen vetëm me path kanonik ekzakt.
+        var catalog = PlatformProjectCatalog.DiscoverProduction();
+        Assert.NotEmpty(catalog);
+        Assert.Equal(2, catalog.Count(PlatformProjectCatalog.IsStoreOwner));
 
         var scanned = 0;
-        foreach (var project in productionProjects)
+        foreach (var entry in catalog)
         {
-            var assemblyPath = Path.Combine(AppContext.BaseDirectory, $"{project}.dll");
+            var assemblyPath = Path.Combine(AppContext.BaseDirectory, $"{entry.AssemblyName}.dll");
             // Receipt fail-closed: projekt production pa assembly të skanuar = FAIL.
-            Assert.True(File.Exists(assemblyPath), $"Assembly i munguar për skanim IL: {project}");
+            Assert.True(File.Exists(assemblyPath),
+                $"Assembly i munguar për skanim IL: {entry.CanonicalPath} ({entry.AssemblyName})");
 
-            var isOwner = storeOwners.Contains(project);
-            var findings = IdentityStoreIlScanner.Scan(assemblyPath, isOwner);
+            var findings = IdentityStoreIlScanner.Scan(assemblyPath, PlatformProjectCatalog.IsStoreOwner(entry));
             Assert.True(findings.Count == 0,
-                $"{project}: {string.Join(" · ", findings.Select(finding => $"{finding.Kind}:{finding.Detail}"))}");
+                $"{entry.CanonicalPath}: {string.Join(" · ", findings.Select(finding => $"{finding.Kind}:{finding.Detail}"))}");
             scanned++;
         }
 
-        // Count i DERIVUAR (jo i hardcoded): çdo csproj production u skanua.
-        Assert.Equal(productionProjects.Length, scanned);
+        // Count i DERIVUAR (jo i hardcoded): çdo projekt production u skanua
+        // saktësisht një herë (path-et kanonike janë unike nga Discover).
+        Assert.Equal(catalog.Length, scanned);
     }
 
     /// <summary>
@@ -419,6 +549,12 @@ public sealed class ConventionEnforcementTests
                 && finding.Detail.StartsWith(accessor, StringComparison.Ordinal));
         }
 
+        // §5-R3: accessor-i UserPasskeys (i pranishëm në IdentityUserContext
+        // të .NET 10) kapet edhe pse entiteti s'është aktivizuar në modelin B.1.
+        Assert.Contains(findings, finding =>
+            finding.Kind == "identity-dbset-access"
+            && finding.Detail.StartsWith("get_UserPasskeys", StringComparison.Ordinal));
+
         Assert.Contains(findings, finding =>
             finding.Kind == "claim-id-access" && finding.Detail.StartsWith("get_Id", StringComparison.Ordinal));
         Assert.Contains(findings, finding =>
@@ -429,10 +565,133 @@ public sealed class ConventionEnforcementTests
             finding.Kind == "record-type-ref" && finding.Detail == "UserClaimRecord");
         Assert.Contains(findings, finding => finding.Kind == "record-attribute-string");
 
+        // §5-R3: KATËR entitetet OpenIddict kapen te jo-owner (Set<T> fixtures).
+        foreach (var prefix in (string[])
+            ["OpenIddictEntityFrameworkCoreApplication`", "OpenIddictEntityFrameworkCoreAuthorization`",
+             "OpenIddictEntityFrameworkCoreScope`", "OpenIddictEntityFrameworkCoreToken`"])
+        {
+            Assert.Contains(findings, finding =>
+                finding.Kind == "record-type-ref" && finding.Detail.StartsWith(prefix, StringComparison.Ordinal));
+        }
+
         // Inverse: përdorimi i lejuar NUK gjenerohet si gjetje.
         Assert.DoesNotContain(findings, finding =>
             finding.Detail.Contains("PlatformAppUsers", StringComparison.Ordinal));
         Assert.DoesNotContain(findings, finding => finding.Kind.StartsWith("unreadable", StringComparison.Ordinal));
+
+        // Inverse e OWNER-it: për owner-in tipet e store-it janë të lejuara —
+        // i njëjti binar i skanuar si owner s'prodhon gjetje kufiri tipesh
+        // (rregulli claim-id mbetet i zbatuar mbi të gjithë — provohet veçmas).
+        var ownerFindings = IdentityStoreIlScanner.Scan(
+            Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"),
+            isStoreOwner: true);
+        Assert.DoesNotContain(ownerFindings, finding => finding.Kind == "record-type-ref");
+        Assert.DoesNotContain(ownerFindings, finding => finding.Kind == "record-attribute-string");
+        Assert.DoesNotContain(ownerFindings, finding => finding.Kind == "identity-dbset-access");
+    }
+
+    /// <summary>
+    /// Meta-testi i PLOTËSISË së universit të mbrojtur (§5-R3): entitetet CLR
+    /// të mapuara në skemën `identity` derivohen nga modeli REAL i
+    /// PlatformDbContext (pa kontakt DB) dhe duhet të përputhen SAKTËSISHT me
+    /// universin e skanerit IL. Entitet i ri në skemën identity pa mbrojtje
+    /// (ose hyrje e vdekur në skaner) = RED.
+    /// </summary>
+    [Fact]
+    public void Universi_i_mbrojtur_i_skanerit_perputhet_me_modelin_real_identity()
+    {
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<PlatformDbContext>()
+            .UseNpgsql("Host=localhost;Database=meta_probe;Username=meta_probe")
+            .Options;
+        using var context = new PlatformDbContext(options);
+
+        var modelIdentityEntities = context.Model.GetEntityTypes()
+            .Where(entity => entity.GetSchema() == "identity")
+            .Select(entity => entity.ClrType.Name)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        var scannerUniverse = IdentityStoreIlScanner.ForbiddenRecordTypeNames
+            .Concat(IdentityStoreIlScanner.ForbiddenRecordTypePrefixes.Select(prefix => $"{prefix}1"))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(modelIdentityEntities, scannerUniverse);
+    }
+
+    /// <summary>
+    /// Dispozicioni MEKANIK i UserPasskeys (§5-R3): accessor-i ekziston në
+    /// kontekst (IdentityUserContext i .NET 10) dhe tipi ekziston në
+    /// framework-un e pinuar, POR entiteti NUK është aktivizuar në modelin
+    /// B.1 — aktivizimi është gate i detyrueshëm i B.2 (dokumentuar në
+    /// B.1 Record); skaneri e mbulon accessor-in që tani (fixture më lart).
+    /// </summary>
+    [Fact]
+    public void UserPasskeys_accessor_ekziston_por_entiteti_nuk_eshte_ne_modelin_B1()
+    {
+        Assert.Contains(typeof(PlatformDbContext).GetProperties(),
+            property => property.Name == "UserPasskeys");
+        Assert.NotNull(typeof(Microsoft.AspNetCore.Identity.IdentityUser<Guid>).Assembly
+            .GetType("Microsoft.AspNetCore.Identity.IdentityUserPasskey`1"));
+
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<PlatformDbContext>()
+            .UseNpgsql("Host=localhost;Database=meta_probe;Username=meta_probe")
+            .Options;
+        using var context = new PlatformDbContext(options);
+        Assert.DoesNotContain(context.Model.GetEntityTypes(),
+            entity => entity.ClrType.Name.Contains("Passkey", StringComparison.OrdinalIgnoreCase));
+
+        // Mbulimi i accessor-it në inventarin e skanerit — jo listë e vdekur.
+        Assert.Contains("get_UserPasskeys", IdentityStoreIlScanner.IdentityDbSetAccessors);
+        Assert.Contains("set_UserPasskeys", IdentityStoreIlScanner.IdentityDbSetAccessors);
+    }
+
+    /// <summary>
+    /// Kufiri REZIDUAL i reflection-it (§6-R3, gate ENG-006 — OPEN): tipi i
+    /// store-it zgjidhet REALISHT në runtime nga string i ndërtuar copë-copë,
+    /// ndërsa trupi IL i PoC-së nuk përmban ASNJË token TypeRef drejt
+    /// records të ndaluara — pra sipërfaqet që skaneri lexon realisht
+    /// (TypeRefs/MemberRefs/attribute blobs) janë bosh për këtë bypass. Ky
+    /// test dokumenton mekanikisht limitin — NUK e mbyll gate-in; mbyllja e
+    /// ENG-006 kërkohet para merge-it të B.2 (Tracker).
+    /// </summary>
+    [Fact]
+    public void Reflection_dinamik_zgjidhet_ne_runtime_dhe_nuk_kapet_nga_skaneri_IL()
+    {
+        // Pjesa A: PoC REAL — zgjidhja runtime funksionon.
+        var resolved = IdentityBoundaryFixtures.DynamicReflectionResidualPoC() as Type;
+        Assert.NotNull(resolved);
+        Assert.Equal("UserClaimRecord", resolved!.Name);
+
+        // Pjesa B: prova mekanike — trupi IL i metodës PoC nuk përmban asnjë
+        // token TypeRef të records të ndaluara (ato ekzistojnë në assembly
+        // vetëm nga fixtures e tjera të qëllimshme).
+        using var stream = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"));
+        using var portableExecutable = new System.Reflection.PortableExecutable.PEReader(stream);
+        var reader = portableExecutable.GetMetadataReader();
+
+        var forbiddenTokens = reader.TypeReferences
+            .Where(handle =>
+            {
+                var name = reader.GetString(reader.GetTypeReference(handle).Name);
+                return IdentityStoreIlScanner.ForbiddenRecordTypeNames.Contains(name)
+                    || IdentityStoreIlScanner.ForbiddenRecordTypePrefixes.Any(prefix =>
+                        name.StartsWith(prefix, StringComparison.Ordinal));
+            })
+            .Select(handle => System.Reflection.Metadata.Ecma335.MetadataTokens.GetToken((EntityHandle)handle))
+            .ToArray();
+        Assert.NotEmpty(forbiddenTokens); // pozitivi: tokens ekzistojnë nga fixtures.
+
+        var pocMethod = reader.MethodDefinitions
+            .Select(reader.GetMethodDefinition)
+            .Single(method => reader.GetString(method.Name) == "DynamicReflectionResidualPoC");
+        var ilBytes = portableExecutable.GetMethodBody(pocMethod.RelativeVirtualAddress).GetILContent().ToArray();
+
+        for (var offset = 0; offset + 4 <= ilBytes.Length; offset++)
+        {
+            var window = BitConverter.ToInt32(ilBytes, offset);
+            Assert.DoesNotContain(window, forbiddenTokens);
+        }
     }
 
     /// <summary>
@@ -465,6 +724,30 @@ public sealed class ConventionEnforcementTests
         internal static int InheritedClaimIdGetBypass(UserClaimRecord claim) => claim.Id;
 
         internal static void InheritedClaimIdSetBypass(UserClaimRecord claim) => claim.Id = 5;
+
+        // §5-R3: bypass-et e katër entiteteve OpenIddict — Set<T> nga jo-owner.
+        internal static object OpenIddictApplicationBypass(PlatformDbContext context)
+            => context.Set<OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreApplication<Guid>>();
+
+        internal static object OpenIddictAuthorizationBypass(PlatformDbContext context)
+            => context.Set<OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreAuthorization<Guid>>();
+
+        internal static object OpenIddictScopeBypass(PlatformDbContext context)
+            => context.Set<OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreScope<Guid>>();
+
+        internal static object OpenIddictTokenBypass(PlatformDbContext context)
+            => context.Set<OpenIddict.EntityFrameworkCore.Models.OpenIddictEntityFrameworkCoreToken<Guid>>();
+
+        // §5-R3: accessor-i UserPasskeys (IdentityUserContext i .NET 10).
+        internal static object UserPasskeysBypass(PlatformDbContext context) => context.UserPasskeys;
+
+        // §6-R3 (ENG-006): PoC i reflection-it dinamik — emër i ndërtuar
+        // copë-copë; nuk lë TypeRef/MemberRef/attribute blob të skanueshëm.
+        internal static object? DynamicReflectionResidualPoC()
+        {
+            var constructedName = "Idata.Platform.Persistence." + "User" + "Claim" + "Record, Idata.Platform.Persistence";
+            return Type.GetType(constructedName);
+        }
 
         internal static object AllowedPlatformAppUsers(PlatformDbContext context) => context.PlatformAppUsers;
     }
@@ -586,17 +869,8 @@ public sealed class ConventionEnforcementTests
         }
     }
 
+    /// <summary>§3-R3: assemblies të DERIVUARA nga katalogu kanonik — jo listë e hardcoded.</summary>
     private static Assembly[] PlatformAssemblies() =>
-        [Assembly.Load("Idata.Platform.Modules.PlatformStatus.Domain"),
-         Assembly.Load("Idata.Platform.Modules.PlatformStatus.Application"),
-         Assembly.Load("Idata.Platform.Modules.PlatformStatus.Infrastructure"),
-         Assembly.Load("Idata.Platform.Modules.PlatformStatus.Presentation"),
-         Assembly.Load("Idata.Platform.Modules.AccessControl.Domain"),
-         Assembly.Load("Idata.Platform.Modules.AccessControl.Application"),
-         Assembly.Load("Idata.Platform.Modules.AccessControl.Infrastructure"),
-         Assembly.Load("Idata.Platform.Modules.AccessControl.Presentation"),
-         Assembly.Load("Idata.Platform.Modules.Identity.Infrastructure"),
-         Assembly.Load("Idata.Platform.Persistence"),
-         Assembly.Load("Idata.Platform.DbMigrator"),
-         Assembly.Load("Idata.Platform.Api")];
+        [.. PlatformProjectCatalog.DiscoverProduction()
+            .Select(entry => Assembly.Load(entry.AssemblyName))];
 }
