@@ -214,149 +214,316 @@ internal static class IdentitySecurityDependencyInventory
         new Dictionary<string, string>(StringComparer.Ordinal);
 
     /// <summary>
-    /// §2B-R5 — KLASIFIKIMI TOTAL i një lockfile-i (autoriteti kryesor; familjet
-    /// e §5-R4 mbeten defense-in-depth): çdo hyrje duhet të jetë saktësisht
-    /// (1) Direct i autorizuar nga <paramref name="directAuthority"/> me emër+
-    /// version, (2) referencë projekti (`Project` — drejtimi mbulohet nga
-    /// DependencyDirectionTests; edges të saj marrin pjesë në arritshmëri),
-    /// (3) Transitive/CentralTransitive i ARRITSHËM nga një Direct i
-    /// autorizuar ose referencë projekti, ose (4) përjashtim eksplicit
-    /// build-only me arsyetim. Direct i panjohur / hyrje autoriteti e vdekur /
-    /// e paarritshme / lloj a metadata e palexueshme / edge drejt node-i të
-    /// munguar = GJETJE. Zero fall-through i heshtur.
+    /// §4-R6 — GRAPH-i AUTORITATIV i projekteve për auditimin e një owner-i:
+    /// harta AssemblyName-i-VLERËSUAR → path kanonik (nga katalogu MSBuild —
+    /// JO basename), closure-i REAL i ProjectReference-ve të owner-it (i
+    /// derivuar nga MSBuild) dhe autoriteti direkt për çdo path. Seti që
+    /// auditohet nuk përdoret KURRË si burim autoriteti për vetveten.
     /// </summary>
+    internal sealed record ProjectGraphAuthority(
+        IReadOnlyDictionary<string, string> AssemblyNameToCanonicalPath,
+        IReadOnlySet<string> OwnerClosureCanonicalPaths,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> AuthorityByCanonicalPath);
+
+    internal static readonly ProjectGraphAuthority EmptyProjectGraph = new(
+        new Dictionary<string, string>(StringComparer.Ordinal),
+        new HashSet<string>(StringComparer.Ordinal),
+        new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal));
+
     internal static List<string> AuditPackagesTotal(
         string canonicalProjectPath, JsonDocument lockfile, IReadOnlyDictionary<string, string> directAuthority)
-        => AuditPackagesTotal(canonicalProjectPath, lockfile, directAuthority,
-            new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal));
+        => AuditPackagesTotal(canonicalProjectPath, lockfile, directAuthority, EmptyProjectGraph);
 
     /// <summary>
-    /// Varianti i plotë: <paramref name="knownProjectAuthorities"/> harton
-    /// emrat e projekteve platformë → autoriteti i tyre direkt — sepse në
-    /// lockfile-in e një konsumatori, referencat TRANZITIVE të projekteve
-    /// shfaqen vetëm si edges (pa node); zgjerimi bëhet me rrënjët e
-    /// AUTORIZUARA të atij projekti (autoritet i review-uar — JO graph-i
-    /// aktual, pra jo-tautologjik).
+    /// §2B-R5/§4-R6 — KLASIFIKIMI TOTAL fail-closed i një lockfile-i: çdo
+    /// hyrje duhet të jetë saktësisht Direct-i-autorizuar (resolved +
+    /// contentHash + version sipas autoritetit) · node projekti REAL i
+    /// ARRITSHËM në ProjectReference closure-in e owner-it (identiteti =
+    /// AssemblyName i vlerësuar → path kanonik; Ghost/known-por-i-paarritshëm
+    /// = GJETJE; dependencies e node-it NUK krijojnë authority — zgjerimi
+    /// bëhet VETËM me autoritetin e review-uar të atij projekti) ·
+    /// Transitive/CentralTransitive (resolved + contentHash) i ARRITSHËM ·
+    /// përjashtim eksplicit. Dead-authority kontrollohet EDHE kur
+    /// dependencies janë bosh/mungojnë. Metadata/type/edge malformed =
+    /// GJETJE deterministe, kurrë crash i pakontrolluar.
     /// </summary>
     internal static List<string> AuditPackagesTotal(
         string canonicalProjectPath, JsonDocument lockfile,
         IReadOnlyDictionary<string, string> directAuthority,
-        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> knownProjectAuthorities)
+        ProjectGraphAuthority projectGraph)
     {
         var findings = new List<string>();
-        foreach (var framework in lockfile.RootElement.GetProperty("dependencies").EnumerateObject())
+        var seenDirect = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (!lockfile.RootElement.TryGetProperty("dependencies", out var frameworks)
+            || frameworks.ValueKind != JsonValueKind.Object)
         {
-            var entries = framework.Value.EnumerateObject()
-                .ToDictionary(dependency => dependency.Name, dependency => dependency.Value, StringComparer.Ordinal);
-
-            var reachableRoots = new List<string>();
-            var seenDirect = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var (name, node) in entries)
+            findings.Add($"{canonicalProjectPath}: seksioni 'dependencies' mungon ose s'është objekt");
+        }
+        else
+        {
+            foreach (var framework in frameworks.EnumerateObject())
             {
-                if (!node.TryGetProperty("type", out var typeElement)
-                    || typeElement.GetString() is not { } entryType)
+                if (framework.Value.ValueKind != JsonValueKind.Object)
                 {
-                    findings.Add($"{canonicalProjectPath}: metadata e palexueshme — '{name}' pa 'type'");
+                    findings.Add($"{canonicalProjectPath}: framework '{framework.Name}' s'është objekt");
                     continue;
                 }
 
-                switch (entryType)
-                {
-                    case "Direct":
-                        seenDirect.Add(name);
-                        if (!directAuthority.TryGetValue(name, out var expectedVersion))
-                        {
-                            findings.Add($"{canonicalProjectPath}: package root DIREKT i PAAUTORIZUAR '{name}'");
-                            continue;
-                        }
-
-                        if (!node.TryGetProperty("resolved", out var resolvedElement)
-                            || resolvedElement.GetString() is not { } resolved)
-                        {
-                            findings.Add($"{canonicalProjectPath}: metadata e palexueshme — Direct '{name}' pa 'resolved'");
-                            continue;
-                        }
-
-                        if (resolved != expectedVersion)
-                        {
-                            findings.Add($"{canonicalProjectPath}: version i paautorizuar {name}={resolved} (autoriteti: {expectedVersion})");
-                        }
-
-                        reachableRoots.Add(name);
-                        break;
-                    case "Project":
-                        reachableRoots.Add(name);
-                        break;
-                    case "Transitive" or "CentralTransitive":
-                        break;
-                    default:
-                        findings.Add($"{canonicalProjectPath}: lloj i palejuar '{entryType}' për '{name}'");
-                        break;
-                }
+                AuditFramework(canonicalProjectPath, framework.Value, directAuthority, projectGraph, findings, seenDirect);
             }
+        }
 
-            // Hyrje autoriteti që s'ekziston më realisht = GJETJE (autoritet i vdekur).
-            foreach (var authorized in directAuthority.Keys)
+        // §4-R6: dead-authority EDHE kur dependencies/frameworks janë bosh.
+        foreach (var authorized in directAuthority.Keys)
+        {
+            if (!seenDirect.Contains(authorized))
             {
-                if (!seenDirect.Contains(authorized))
-                {
-                    findings.Add($"{canonicalProjectPath}: hyrje autoriteti E VDEKUR '{authorized}' (s'është më Direct real)");
-                }
-            }
-
-            // Arritshmëria BFS nga rrënjët e autorizuara + referencat e projekteve.
-            var reachable = new HashSet<string>(StringComparer.Ordinal);
-            var stack = new Stack<string>(reachableRoots);
-            while (stack.Count > 0)
-            {
-                var name = stack.Pop();
-                if (!reachable.Add(name))
-                {
-                    continue;
-                }
-
-                if (!entries.TryGetValue(name, out var node))
-                {
-                    // Referencë TRANZITIVE projekti (edge pa node): zgjerohet
-                    // me rrënjët e AUTORIZUARA të atij projekti; çdo emër
-                    // tjetër i munguar = GJETJE fail-closed.
-                    if (knownProjectAuthorities.TryGetValue(name, out var projectAuthority))
-                    {
-                        foreach (var authorizedRoot in projectAuthority.Keys)
-                        {
-                            stack.Push(authorizedRoot);
-                        }
-
-                        continue;
-                    }
-
-                    findings.Add($"{canonicalProjectPath}: edge drejt node-i të MUNGUAR '{name}'");
-                    continue;
-                }
-
-                if (node.TryGetProperty("dependencies", out var edges))
-                {
-                    foreach (var edge in edges.EnumerateObject())
-                    {
-                        stack.Push(edge.Name);
-                    }
-                }
-            }
-
-            // Klasifikimi total: asnjë hyrje pa kategori.
-            foreach (var (name, node) in entries)
-            {
-                if (node.TryGetProperty("type", out var typeElement)
-                    && typeElement.GetString() is "Transitive" or "CentralTransitive"
-                    && !reachable.Contains(name)
-                    && !BuildOnlyExemptions.ContainsKey(name))
-                {
-                    findings.Add($"{canonicalProjectPath}: paketë E PAARRITSHME nga rrënjët e autorizuara '{name}'");
-                }
+                findings.Add($"{canonicalProjectPath}: hyrje autoriteti E VDEKUR '{authorized}' (s'është më Direct real)");
             }
         }
 
         return findings;
+    }
+
+    /// <summary>Semantika NuGet: IDs krahasohen case-insensitive; kolizioni = GJETJE.</summary>
+    private static Dictionary<string, TValue> NuGetCaseInsensitive<TValue>(
+        string canonicalProjectPath, string what, IEnumerable<KeyValuePair<string, TValue>> source, List<string> findings)
+    {
+        var map = new Dictionary<string, TValue>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, value) in source)
+        {
+            if (!map.TryAdd(key, value))
+            {
+                findings.Add($"{canonicalProjectPath}: KOLIZION case-insensitive në {what}: '{key}'");
+            }
+        }
+
+        return map;
+    }
+
+    private static void AuditFramework(
+        string canonicalProjectPath, JsonElement framework,
+        IReadOnlyDictionary<string, string> directAuthorityExact,
+        ProjectGraphAuthority projectGraph,
+        List<string> findings, HashSet<string> seenDirect)
+    {
+        var entries = NuGetCaseInsensitive(canonicalProjectPath, "lockfile nodes",
+            framework.EnumerateObject().Select(d => new KeyValuePair<string, JsonElement>(d.Name, d.Value)), findings);
+        var directAuthority = NuGetCaseInsensitive(canonicalProjectPath, "autoritetin direkt", directAuthorityExact, findings);
+        var projectNameToPath = NuGetCaseInsensitive(canonicalProjectPath, "hartën e projekteve",
+            projectGraph.AssemblyNameToCanonicalPath, findings);
+
+        var expansionRoots = new List<string>();
+
+        static bool RequireString(JsonElement node, string property, out string value)
+        {
+            value = string.Empty;
+            if (!node.TryGetProperty(property, out var element) || element.ValueKind != JsonValueKind.String
+                || element.GetString() is not { Length: > 0 } text)
+            {
+                return false;
+            }
+
+            value = text;
+            return true;
+        }
+
+        // Faza 1: validimi type-aware i çdo node-i.
+        foreach (var (name, node) in entries)
+        {
+            if (node.ValueKind != JsonValueKind.Object)
+            {
+                findings.Add($"{canonicalProjectPath}: node '{name}' s'është objekt");
+                continue;
+            }
+
+            if (!RequireString(node, "type", out var entryType))
+            {
+                findings.Add($"{canonicalProjectPath}: metadata e palexueshme — '{name}' pa 'type'");
+                continue;
+            }
+
+            if (node.TryGetProperty("dependencies", out var edgeSet))
+            {
+                if (edgeSet.ValueKind != JsonValueKind.Object)
+                {
+                    findings.Add($"{canonicalProjectPath}: 'dependencies' e '{name}' s'është objekt");
+                }
+                else
+                {
+                    foreach (var edge in edgeSet.EnumerateObject())
+                    {
+                        if (edge.Value.ValueKind != JsonValueKind.String
+                            || string.IsNullOrEmpty(edge.Value.GetString()))
+                        {
+                            findings.Add($"{canonicalProjectPath}: edge malformed '{name}' → '{edge.Name}' (version bosh/jo-string)");
+                        }
+                    }
+                }
+            }
+
+            switch (entryType)
+            {
+                case "Direct":
+                    seenDirect.Add(name);
+                    if (!directAuthority.TryGetValue(name, out var expectedVersion))
+                    {
+                        findings.Add($"{canonicalProjectPath}: package root DIREKT i PAAUTORIZUAR '{name}'");
+                        continue;
+                    }
+
+                    if (!RequireString(node, "resolved", out var resolved))
+                    {
+                        findings.Add($"{canonicalProjectPath}: metadata e palexueshme — Direct '{name}' pa 'resolved'");
+                        continue;
+                    }
+
+                    if (!RequireString(node, "contentHash", out _))
+                    {
+                        findings.Add($"{canonicalProjectPath}: metadata e palexueshme — Direct '{name}' pa 'contentHash'");
+                        continue;
+                    }
+
+                    if (resolved != expectedVersion)
+                    {
+                        findings.Add($"{canonicalProjectPath}: version i paautorizuar {name}={resolved} (autoriteti: {expectedVersion})");
+                    }
+
+                    expansionRoots.Add(name);
+                    break;
+
+                case "Project":
+                    // §4-R6: node projekti = identitet REAL + arritshmëri REALE.
+                    if (!projectNameToPath.TryGetValue(name, out var projectPath))
+                    {
+                        findings.Add($"{canonicalProjectPath}: node projekti FANTAZMË '{name}' (s'mapon në asnjë projekt real)");
+                        continue;
+                    }
+
+                    if (!projectGraph.OwnerClosureCanonicalPaths.Contains(projectPath))
+                    {
+                        findings.Add($"{canonicalProjectPath}: projekt i PAARRITSHËM nga ProjectReference graph-i i owner-it: '{name}' ({projectPath})");
+                        continue;
+                    }
+
+                    expansionRoots.Add(name);
+                    break;
+
+                case "Transitive" or "CentralTransitive":
+                    if (!RequireString(node, "resolved", out _))
+                    {
+                        findings.Add($"{canonicalProjectPath}: metadata e palexueshme — {entryType} '{name}' pa 'resolved'");
+                    }
+
+                    if (!RequireString(node, "contentHash", out _))
+                    {
+                        findings.Add($"{canonicalProjectPath}: metadata e palexueshme — {entryType} '{name}' pa 'contentHash'");
+                    }
+
+                    break;
+
+                default:
+                    findings.Add($"{canonicalProjectPath}: lloj i palejuar '{entryType}' për '{name}'");
+                    break;
+            }
+        }
+
+        // Faza 2: arritshmëria. Dependencies e node-eve Project NUK krijojnë
+        // authority — për to zgjerohet VETËM autoriteti i review-uar i
+        // projektit përkatës; edges e paketave ndiqen normalisht.
+        var reachable = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var stack = new Stack<(string Name, bool FromAuthority)>(
+            expansionRoots.Select(root => (root, false)));
+        while (stack.Count > 0)
+        {
+            var (name, fromAuthority) = stack.Pop();
+            if (!reachable.Add(name))
+            {
+                continue;
+            }
+
+            var isProjectNode = entries.TryGetValue(name, out var currentNode)
+                && currentNode.TryGetProperty("type", out var currentType)
+                && currentType.ValueKind == JsonValueKind.String
+                && currentType.GetString() == "Project";
+            var isKnownProject = projectNameToPath.TryGetValue(name, out var mappedPath);
+
+            if (isProjectNode || (!entries.ContainsKey(name) && isKnownProject))
+            {
+                if (!isKnownProject)
+                {
+                    continue; // fantazma u raportua në fazën 1
+                }
+
+                if (!projectGraph.OwnerClosureCanonicalPaths.Contains(mappedPath!))
+                {
+                    if (!entries.ContainsKey(name))
+                    {
+                        findings.Add($"{canonicalProjectPath}: projekt i PAARRITSHËM nga ProjectReference graph-i i owner-it: '{name}' ({mappedPath})");
+                    }
+
+                    continue;
+                }
+
+                if (projectGraph.AuthorityByCanonicalPath.TryGetValue(mappedPath!, out var projectAuthority))
+                {
+                    foreach (var authorizedRoot in projectAuthority.Keys)
+                    {
+                        stack.Push((authorizedRoot, true));
+                    }
+                }
+
+                if (isProjectNode && currentNode.TryGetProperty("dependencies", out var projectEdges)
+                    && projectEdges.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var edge in projectEdges.EnumerateObject())
+                    {
+                        if (projectNameToPath.ContainsKey(edge.Name))
+                        {
+                            stack.Push((edge.Name, false));
+                        }
+                    }
+                }
+
+                continue;
+            }
+
+            if (!entries.TryGetValue(name, out var node))
+            {
+                // Kandidat autoriteti i një projekti tranzitiv MUND të mungojë
+                // te konsumatori (PrivateAssets/asset flow) — no-op; vetëm EDGE
+                // real i munguar = GJETJE.
+                if (!fromAuthority)
+                {
+                    findings.Add($"{canonicalProjectPath}: edge drejt node-i të MUNGUAR '{name}'");
+                }
+
+                continue;
+            }
+
+            if (node.TryGetProperty("dependencies", out var edges) && edges.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var edge in edges.EnumerateObject())
+                {
+                    stack.Push((edge.Name, false));
+                }
+            }
+        }
+
+        // Faza 3: totaliteti — asnjë hyrje paketë pa kategori.
+        foreach (var (name, node) in entries)
+        {
+            if (node.ValueKind == JsonValueKind.Object
+                && node.TryGetProperty("type", out var typeElement)
+                && typeElement.ValueKind == JsonValueKind.String
+                && typeElement.GetString() is "Transitive" or "CentralTransitive"
+                && !reachable.Contains(name)
+                && !BuildOnlyExemptions.ContainsKey(name))
+            {
+                findings.Add($"{canonicalProjectPath}: paketë E PAARRITSHME nga rrënjët e autorizuara '{name}'");
+            }
+        }
     }
 
     /// <summary>

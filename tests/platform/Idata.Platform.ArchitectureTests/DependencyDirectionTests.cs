@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using Xunit;
 
@@ -269,18 +270,258 @@ public sealed class DependencyDirectionTests
             Path.GetDirectoryName(typeof(object).Assembly.Location)!, "..", ".."));
 
     /// <summary>
-    /// Referenca eksplicite të aprovuara me identitet + arsyetim (§3-R5,
-    /// kategoria 4). E vetmja hyrje reale: assembly-ja `Mediator` shipped
-    /// nga paketa e APROVUAR `Mediator.Abstractions` 3.0.2 (id-ja e paketës
-    /// ≠ emri i assembly-t — verifikuar nga lib/ i paketës në cache-in NuGet;
-    /// paketa vetë është nën autoritetin §2 të PlatformStatus.Application/
-    /// Presentation). Çdo hyrje e ardhshme kërkon arsyetim + review.
+    /// §3D-R6: referencat eksplicite tani janë STRUKTURORE (owner + package
+    /// id + version ekzakt + asset-i i pritur + arsyetim) dhe sot BOSH —
+    /// aliasi i mëparshëm name-only `Mediator` u HOQ sepse provenance-ja
+    /// reale MSBuild e lidh MEKANIKISHT me Mediator.Abstractions 3.0.2
+    /// (NuGetPackageId/Version në ReferencePath). Çdo hyrje e ardhshme
+    /// kërkon arsyetim + review; meta-testi më poshtë e bën RED çdo hyrje
+    /// të vdekur/të paplotë/spoofed.
+    /// </summary>
+    internal sealed record ExplicitReferenceApproval(
+        string OwnerCanonicalPath, string PackageId, string PackageVersion, string ExpectedAssetFileName, string Rationale);
+
+    internal static readonly IReadOnlyDictionary<string, ExplicitReferenceApproval> ExplicitApprovedResolvedReferences =
+        new Dictionary<string, ExplicitReferenceApproval>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// §3-R6: shtresa NAME-BASED (klasifikuesi i R5) mbetet VETËM si
+    /// defense-in-depth — AUTORITETI tani është provenance-based
+    /// (`Cdo_ReferencePath_dhe_AssemblyRef_klasifikohet_nga_provenance_per_owner`).
+    /// Aliasi `Mediator` këtu është vetëm shtresa dytësore; në AUTORITET ai
+    /// lidhet MEKANIKISHT me Mediator.Abstractions 3.0.2 pa naked name
+    /// (shih `ExplicitApprovedResolvedReferences`, sot bosh).
     /// </summary>
     private static readonly IReadOnlyDictionary<string, string> ExplicitApprovedReferences =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
-            ["Mediator"] = "assembly i paketës së aprovuar Mediator.Abstractions 3.0.2 (package id ≠ assembly name)",
+            ["Mediator"] = "defense-in-depth: assembly i paketës së aprovuar Mediator.Abstractions 3.0.2 (autoriteti = provenance)",
         };
+
+    /// <summary>
+    /// §3D-R6 meta-test: çdo hyrje eksplicite duhet të lidhet me asset REAL
+    /// të paketës së deklaruar në autoritetin e owner-it — alias i vdekur,
+    /// i paplotë ose spoofed = RED. (Sot seti është bosh — testi provon
+    /// mekanizmin e validimit, jo një listë.)
+    /// </summary>
+    [Fact]
+    public void Referencat_eksplicite_jane_te_lidhura_me_asset_real_ose_boshe()
+    {
+        foreach (var (assemblyName, approval) in ExplicitApprovedResolvedReferences)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(approval.Rationale), $"Alias pa arsyetim: {assemblyName}");
+            Assert.True(
+                IdentitySecurityDependencyInventory.DirectPackageAuthority.TryGetValue(approval.OwnerCanonicalPath, out var authority)
+                && authority.TryGetValue(approval.PackageId, out var version)
+                && version == approval.PackageVersion,
+                $"Alias '{assemblyName}' jashtë autoritetit të owner-it: {approval.PackageId} {approval.PackageVersion}");
+        }
+
+        Assert.Empty(ExplicitApprovedResolvedReferences);
+    }
+
+    // ── §3-R6: PROVENANCE per-owner nga MSBuild reference resolution ──
+
+    /// <summary>Rrënja REALE e packs (reference-pack/shared-framework) e dotnet-it që po ekzekuton testet.</summary>
+    private static readonly string DotnetPacksRoot = DerivePacksRoot();
+
+    private static string DerivePacksRoot()
+    {
+        // dotnet root derivohet nga vendndodhja REALE e shared-framework-ut
+        // që po ekzekuton testet: <root>/shared/Microsoft.NETCore.App/<v>/
+        // System.Private.CoreLib.dll → <root>/packs.
+        var coreLib = typeof(object).Assembly.Location;
+        var dotnetRoot = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(coreLib)!, "..", "..", ".."));
+        var packs = Path.Combine(dotnetRoot, "packs");
+        return Directory.Exists(packs)
+            ? Path.GetFullPath(packs)
+            : throw new InvalidOperationException($"Rrënja e packs mungon: {packs}");
+    }
+
+    private static readonly string NuGetPackagesRoot =
+        Path.GetFullPath(Environment.GetEnvironmentVariable("NUGET_PACKAGES")
+            ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages"));
+
+    /// <summary>
+    /// §3-R6 — klasifikimi PER-OWNER i një reference të ZGJIDHUR realisht:
+    /// (1) platform: provenance ProjectReference me source csproj kanonik
+    /// REAL në katalog DHE në ProjectReference closure-in e owner-it, me
+    /// identitet FusionName == AssemblyName i vlerësuar i atij projekti;
+    /// (2) package: NuGetPackageId+Version të pranishme, çifti i APROVUAR
+    /// në closure-in e validuar TË ATIJ OWNER-I dhe path-i real nën
+    /// folder-in e paketës id/version (paketë e aprovuar në A nuk autorizon
+    /// B); (3) framework: FrameworkReferenceName e MSBuild-it + path real
+    /// nën packs-root; (4) alias eksplicit strukturor. Çdo gjë tjetër —
+    /// përfshirë HintPath custom me emra si Npgsql/Mediator/System.Runtime/
+    /// emra platforme — = null → GJETJE. Emri i assembly-t NUK është KURRË
+    /// autoritet.
+    /// </summary>
+    internal static string? ClassifyResolvedReference(
+        PlatformProjectCatalog.ResolvedReference reference,
+        string repoRoot,
+        IReadOnlyDictionary<string, PlatformProjectCatalog.ProjectEntry> catalogByCanonicalPath,
+        IReadOnlySet<string> ownerProjectClosure,
+        IReadOnlyDictionary<string, string> ownerApprovedPackages)
+    {
+        // (1) PLATFORM — provenance ProjectReference.
+        if (reference.ReferenceSourceTarget == "ProjectReference")
+        {
+            if (reference.SourceProjectFile is null)
+            {
+                return null;
+            }
+
+            var canonicalRepoRoot = Path.GetFullPath(repoRoot);
+            var sourceFull = Path.GetFullPath(reference.SourceProjectFile);
+            if (!sourceFull.StartsWith(canonicalRepoRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            var canonicalSource = Path.GetRelativePath(canonicalRepoRoot, sourceFull).Replace(Path.DirectorySeparatorChar, '/');
+            if (!catalogByCanonicalPath.TryGetValue(canonicalSource, out var entry)
+                || !ownerProjectClosure.Contains(canonicalSource)
+                || !string.Equals(entry.AssemblyName, reference.AssemblySimpleName, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            return "platform";
+        }
+
+        // (2) PACKAGE — provenance NuGet (id+version+path real i asset-it).
+        if (reference.NuGetPackageId is { } packageId && reference.FrameworkReferenceName is null)
+        {
+            if (reference.NuGetPackageVersion is not { } packageVersion)
+            {
+                return null;
+            }
+
+            if (!ownerApprovedPackages.TryGetValue(packageId, out var approvedVersion)
+                || !string.Equals(approvedVersion, packageVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            var expectedRoot = Path.GetFullPath(Path.Combine(
+                NuGetPackagesRoot, packageId.ToLowerInvariant(), packageVersion));
+            if (!reference.FullPath.StartsWith(expectedRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            return "package";
+        }
+
+        // (3) FRAMEWORK — reference-pack real.
+        if (reference.FrameworkReferenceName is not null)
+        {
+            return reference.FullPath.StartsWith(DotnetPacksRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+                ? "framework"
+                : null;
+        }
+
+        // (4) ALIAS EKSPLICIT strukturor.
+        if (ExplicitApprovedResolvedReferences.TryGetValue(reference.AssemblySimpleName, out var approval)
+            && ownerApprovedPackages.TryGetValue(approval.PackageId, out var aliasVersion)
+            && aliasVersion == approval.PackageVersion
+            && Path.GetFileName(reference.FullPath) == approval.ExpectedAssetFileName)
+        {
+            return "explicit";
+        }
+
+        return null;
+    }
+
+    /// <summary>Paketat e APROVUARA të NJË owner-i (nga lockfile-i i tij që kalon klasifikimin total §2).</summary>
+    private static Dictionary<string, string> OwnerApprovedPackages(
+        string repoRoot, string ownerCanonicalPath,
+        IReadOnlyDictionary<string, string> assemblyNameToPath)
+    {
+        var lockfilePath = Path.Combine(
+            repoRoot,
+            Path.GetDirectoryName(ownerCanonicalPath.Replace('/', Path.DirectorySeparatorChar))!,
+            "packages.lock.json");
+        using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockfilePath));
+        var projectGraph = new IdentitySecurityDependencyInventory.ProjectGraphAuthority(
+            assemblyNameToPath,
+            PlatformProjectCatalog.ProjectReferenceClosure(repoRoot, ownerCanonicalPath),
+            IdentitySecurityDependencyInventory.DirectPackageAuthority);
+        var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
+            ownerCanonicalPath, document,
+            IdentitySecurityDependencyInventory.DirectPackageAuthority[ownerCanonicalPath],
+            projectGraph);
+        Assert.True(findings.Count == 0,
+            $"Lockfile me gjetje s'aprovon asnjë paketë për {ownerCanonicalPath}: {string.Join(" · ", findings)}");
+
+        var approved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var framework in document.RootElement.GetProperty("dependencies").EnumerateObject())
+        {
+            foreach (var dependency in framework.Value.EnumerateObject())
+            {
+                if (dependency.Value.TryGetProperty("type", out var typeElement)
+                    && typeElement.GetString() is "Direct" or "Transitive" or "CentralTransitive"
+                    && dependency.Value.TryGetProperty("resolved", out var resolved)
+                    && resolved.GetString() is { } version)
+                {
+                    approved[dependency.Name] = version;
+                }
+            }
+        }
+
+        return approved;
+    }
+
+    /// <summary>
+    /// §3-R6 — AUTORITETI: ÇDO ReferencePath i ZGJIDHUR realisht i ÇDO
+    /// projekti production klasifikohet nga PROVENANCE per-owner; dhe ÇDO
+    /// AssemblyRef i emetuar nga binari duhet të mapojë në SAKTËSISHT NJË
+    /// referencë të zgjidhur (missing/ambiguous = GJETJE). Zero fallback te
+    /// emri; referencat e papërdorura auditohen njëlloj.
+    /// </summary>
+    [Fact]
+    public void Cdo_ReferencePath_dhe_AssemblyRef_klasifikohet_nga_provenance_per_owner()
+    {
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        var catalog = PlatformProjectCatalog.DiscoverProduction();
+        var catalogByPath = catalog.ToDictionary(entry => entry.CanonicalPath, StringComparer.Ordinal);
+        var discovered = ConventionEnforcementTests.DiscoverLockfiles(
+            repoRoot, Path.Combine(repoRoot, "src", "platform"), Path.Combine(repoRoot, "tests", "platform"));
+        var assemblyNameToPath = discovered.ToDictionary(
+            pair => pair.Entry.AssemblyName, pair => pair.Entry.CanonicalPath, StringComparer.Ordinal);
+
+        var findings = new List<string>();
+        foreach (var entry in catalog)
+        {
+            var closure = PlatformProjectCatalog.ProjectReferenceClosure(repoRoot, entry.CanonicalPath);
+            var approvedPackages = OwnerApprovedPackages(repoRoot, entry.CanonicalPath, assemblyNameToPath);
+            var resolved = PlatformProjectCatalog.EvaluateResolvedReferences(repoRoot, entry.CanonicalPath);
+
+            foreach (var reference in resolved)
+            {
+                if (ClassifyResolvedReference(reference, repoRoot, catalogByPath, closure, approvedPackages) is null)
+                {
+                    findings.Add($"{entry.CanonicalPath} → referencë e PAKLASIFIKUESHME nga provenance: "
+                        + $"{reference.AssemblySimpleName} ({reference.ResolvedFrom})");
+                }
+            }
+
+            // TOTALITETI: çdo AssemblyRef i emetuar ↔ saktësisht një resolved.
+            var loaded = PlatformProjectCatalog.LoadVerified(entry);
+            foreach (var emitted in loaded.GetReferencedAssemblies())
+            {
+                var name = emitted.Name ?? string.Empty;
+                var matches = resolved.Count(candidate =>
+                    string.Equals(candidate.AssemblySimpleName, name, StringComparison.Ordinal));
+                if (matches != 1)
+                {
+                    findings.Add($"{entry.CanonicalPath} → AssemblyRef '{name}' mapon në {matches} referenca të zgjidhura (pritej 1)");
+                }
+            }
+        }
+
+        Assert.True(findings.Count == 0, string.Join(" · ", findings));
+    }
 
     /// <summary>
     /// §3-R5: çdo AssemblyRef duhet të jetë SAKTËSISHT njëra nga: (1) assembly
@@ -344,19 +585,21 @@ public sealed class DependencyDirectionTests
             repoRoot,
             Path.Combine(repoRoot, "src", "platform"),
             Path.Combine(repoRoot, "tests", "platform"));
-        var knownProjectAuthorities = discovered.ToDictionary(
-            pair => pair.Entry.AssemblyName,
-            pair => IdentitySecurityDependencyInventory.DirectPackageAuthority[pair.Entry.CanonicalPath],
-            StringComparer.Ordinal);
+        var assemblyNameToPath = discovered.ToDictionary(
+            pair => pair.Entry.AssemblyName, pair => pair.Entry.CanonicalPath, StringComparer.Ordinal);
 
         var approved = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (entry, lockfile) in discovered)
         {
+            var projectGraph = new IdentitySecurityDependencyInventory.ProjectGraphAuthority(
+                assemblyNameToPath,
+                PlatformProjectCatalog.ProjectReferenceClosure(repoRoot, entry.CanonicalPath),
+                IdentitySecurityDependencyInventory.DirectPackageAuthority);
             using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockfile!));
             var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
                 entry.CanonicalPath, document,
                 IdentitySecurityDependencyInventory.DirectPackageAuthority[entry.CanonicalPath],
-                knownProjectAuthorities);
+                projectGraph);
             if (findings.Count > 0)
             {
                 continue; // fail-closed: lockfile me gjetje s'aprovon asnjë id.
@@ -453,6 +696,185 @@ public sealed class DependencyDirectionTests
         => [.. PlatformProjectCatalog.StoreOwnerCanonicalPaths
             .Select(path => PlatformProjectCatalog.DiscoverProduction()
                 .Single(entry => entry.CanonicalPath == path).AssemblyName)];
+
+    /// <summary>
+    /// §2A/§6-R6 — fixture END-TO-END: një DLL sintetike me AssemblyName=Npgsql
+    /// referencohet nga një projekt konsumator me `<Reference><HintPath>` REAL
+    /// (jashtë folder-it të paketës NuGet) + TypeRef real; resolution-i REAL i
+    /// MSBuild-it e zgjidh, dhe klasifikuesi i provenance-s e refuzon EDHE pse
+    /// (a) emri i thjeshtë është 'Npgsql' dhe (b) 'Npgsql' është në setin e
+    /// paketave të aprovuara — sepse path-i nuk është nën folder-in id/version
+    /// të paketës reale. Emri/versioni ≠ autoritet; path/provenance vendos.
+    /// </summary>
+    [Fact]
+    public void Provenance_end_to_end_HintPath_Npgsql_custom_eshte_gjetje()
+    {
+        var temporary = Directory.CreateTempSubdirectory("idata_prov_e2e_");
+        try
+        {
+            // (1) DLL sintetike me identitet assembly = 'Npgsql'.
+            var fakeDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "fake")).FullName;
+            File.WriteAllText(Path.Combine(fakeDirectory, "Fake.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework>"
+                + "<AssemblyName>Npgsql</AssemblyName><AssemblyVersion>1.0.0.0</AssemblyVersion>"
+                + "<Deterministic>true</Deterministic></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(fakeDirectory, "Marker.cs"),
+                "namespace Npgsql { public sealed class SyntheticMarker { } }");
+            RunDotnet(fakeDirectory, ["build", "-c", "Debug", "-nodeReuse:false"]);
+            var fakeDll = Path.Combine(fakeDirectory, "bin", "Debug", "net10.0", "Npgsql.dll");
+            Assert.True(File.Exists(fakeDll), "DLL-ja sintetike Npgsql nuk u ndërtua.");
+
+            // (2) Konsumator me HintPath REAL drejt DLL-së custom + TypeRef real.
+            var consumerDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "consumer")).FullName;
+            File.WriteAllText(Path.Combine(consumerDirectory, "Consumer.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup>"
+                + "<ItemGroup><Reference Include=\"Npgsql\"><HintPath>" + fakeDll + "</HintPath></Reference></ItemGroup></Project>");
+            File.WriteAllText(Path.Combine(consumerDirectory, "Use.cs"),
+                "public static class Use { public static object M() => new Npgsql.SyntheticMarker(); }");
+
+            // (3) Resolution REAL i MSBuild-it.
+            var resolved = ResolveConsumerReferences(Path.Combine(consumerDirectory, "Consumer.csproj"));
+            var npgsql = Assert.Single(resolved, reference =>
+                string.Equals(reference.AssemblySimpleName, "Npgsql", StringComparison.Ordinal));
+            Assert.Equal(fakeDll, npgsql.FullPath); // provenance = HintPath custom, jo NuGet.
+
+            // (4) Klasifikimi: refuzohet edhe me emër+version 'të aprovuar'.
+            var repoRoot = PlatformProjectCatalog.RepoRoot();
+            var catalogByPath = PlatformProjectCatalog.DiscoverProduction()
+                .ToDictionary(entry => entry.CanonicalPath, StringComparer.Ordinal);
+            var approvedWithNpgsql = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["Npgsql"] = "1.0.0" };
+            Assert.Null(ClassifyResolvedReference(
+                npgsql, repoRoot, catalogByPath,
+                new HashSet<string>(StringComparer.Ordinal), approvedWithNpgsql));
+        }
+        finally
+        {
+            temporary.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// §2A/§6-R6 — fixtures diskriminuese PURE mbi provenance (records
+    /// sintetikë): Mediator nga HintPath jashtë asset-it real, framework nga
+    /// path jashtë packs-root, dhe platform decoy me source-project jo-real
+    /// = të gjitha GJETJE; inverse GREEN provohen nga testi i autoritetit real.
+    /// </summary>
+    [Fact]
+    public void ClassifyResolvedReference_refuzon_provenance_te_rreme()
+    {
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        var catalogByPath = PlatformProjectCatalog.DiscoverProduction()
+            .ToDictionary(entry => entry.CanonicalPath, StringComparer.Ordinal);
+        var emptyClosure = new HashSet<string>(StringComparer.Ordinal);
+        var approved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Mediator.Abstractions"] = "3.0.2",
+            ["Npgsql"] = "10.0.3",
+        };
+        // Path sintetik "custom" i ndërtuar në runtime (zero literal absolut në burim).
+        static string Custom(string fileName) => Path.Combine(Path.GetTempPath(), "idata-syn-custom", fileName);
+
+        // Mediator nga HintPath custom (jo NuGetPackageId) → null.
+        Assert.Null(ClassifyResolvedReference(
+            new PlatformProjectCatalog.ResolvedReference(
+                Custom("Mediator.dll"), "Mediator", "Mediator, Version=3.0.0.0",
+                "ResolveAssemblyReference", "{HintPathFromItem}", null, null, null, null, Custom("Mediator.dll")),
+            repoRoot, catalogByPath, emptyClosure, approved));
+
+        // System.Runtime nga path jashtë packs-root → null.
+        Assert.Null(ClassifyResolvedReference(
+            new PlatformProjectCatalog.ResolvedReference(
+                Custom("System.Runtime.dll"), "System.Runtime", "System.Runtime, Version=10.0.0.0",
+                "ResolveAssemblyReference", "{RawFileName}", null, null, null, "Microsoft.NETCore.App", Custom("System.Runtime.dll")),
+            repoRoot, catalogByPath, emptyClosure, approved));
+
+        // Platform decoy: ProjectReference me source-project që s'ekziston në katalog → null.
+        Assert.Null(ClassifyResolvedReference(
+            new PlatformProjectCatalog.ResolvedReference(
+                Path.Combine(repoRoot, "src", "platform", "Idata.Platform.Persistence", "bin", "Debug", "net10.0", "Idata.Platform.Persistence.dll"),
+                "Idata.Platform.Persistence", "Idata.Platform.Persistence, Version=1.0.0.0",
+                "ProjectReference", null, Path.Combine(repoRoot, "src", "platform", "Fake", "Fake.csproj"),
+                null, null, null, null),
+            repoRoot, catalogByPath, emptyClosure, approved));
+
+        // Package i aprovuar me emër+version por PATH jashtë folder-it të paketës → null.
+        Assert.Null(ClassifyResolvedReference(
+            new PlatformProjectCatalog.ResolvedReference(
+                Custom("Npgsql.dll"), "Npgsql", "Npgsql, Version=10.0.3.0",
+                "ResolveAssemblyReference", "{HintPathFromItem}", null, "Npgsql", "10.0.3", null, Custom("Npgsql.dll")),
+            repoRoot, catalogByPath, emptyClosure, approved));
+    }
+
+    /// <summary>Ndërton një projekt sintetik në disk (jashtë repo-s) me `dotnet build`, node-reuse OFF.</summary>
+    private static void RunDotnet(string workingDirectory, string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            WorkingDirectory = workingDirectory,
+        };
+        startInfo.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        startInfo.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = new Process { StartInfo = startInfo };
+        Assert.True(process.Start(), "dotnet nuk u nis dot.");
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        Assert.True(process.WaitForExit(180_000), "dotnet timeout (180s).");
+        Assert.True(process.ExitCode == 0,
+            $"dotnet {string.Join(' ', arguments)} exit {process.ExitCode}: {stdout.GetAwaiter().GetResult()} {stderr.GetAwaiter().GetResult()}");
+    }
+
+    /// <summary>Resolution REAL i referencave për një csproj sintetik (jashtë repo-s), node-reuse OFF.</summary>
+    private static PlatformProjectCatalog.ResolvedReference[] ResolveConsumerReferences(string absoluteCsprojPath)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            WorkingDirectory = Path.GetDirectoryName(absoluteCsprojPath)!,
+        };
+        startInfo.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        startInfo.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
+        foreach (var argument in (string[])
+            ["msbuild", "-nodeReuse:false", absoluteCsprojPath, "-nologo", "-restore",
+             "-t:ResolveReferences", "-getItem:ReferencePath", "-p:Configuration=Debug"])
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = new Process { StartInfo = startInfo };
+        Assert.True(process.Start(), "dotnet msbuild nuk u nis dot.");
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        Assert.True(process.WaitForExit(180_000), "dotnet msbuild timeout (180s).");
+        var output = stdout.GetAwaiter().GetResult();
+        Assert.True(process.ExitCode == 0, $"msbuild exit {process.ExitCode}: {stderr.GetAwaiter().GetResult()}");
+
+        using var document = System.Text.Json.JsonDocument.Parse(output);
+        return [.. document.RootElement.GetProperty("Items").GetProperty("ReferencePath").EnumerateArray()
+            .Select(item =>
+            {
+                string? Meta(string name) => item.TryGetProperty(name, out var value)
+                    && value.ValueKind == System.Text.Json.JsonValueKind.String
+                    && value.GetString() is { Length: > 0 } text ? text : null;
+                var fusion = Meta("FusionName");
+                return new PlatformProjectCatalog.ResolvedReference(
+                    Path.GetFullPath(item.GetProperty("Identity").GetString()!),
+                    fusion?.Split(',')[0].Trim() ?? Path.GetFileNameWithoutExtension(item.GetProperty("Identity").GetString()!),
+                    fusion, Meta("ReferenceSourceTarget"), Meta("ResolvedFrom"), Meta("MSBuildSourceProjectFile"),
+                    Meta("NuGetPackageId"), Meta("NuGetPackageVersion"), Meta("FrameworkReferenceName"), Meta("OriginalItemSpec"));
+            })];
+    }
 
     [Fact]
     public void Owner_assemblies_derivohen_nga_katalogu_pa_literale()

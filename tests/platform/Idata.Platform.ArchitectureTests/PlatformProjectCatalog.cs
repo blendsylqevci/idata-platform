@@ -64,7 +64,11 @@ internal static class PlatformProjectCatalog
         return entries;
     });
 
-    internal static ProjectEntry[] DiscoverProduction() => ProductionCatalog.Value;
+    /// <summary>
+    /// §5B-R6: kthehet gjithmonë KOPJE e re — mutimi nga thirrësi nuk mund
+    /// të helmojë thirrjet pasuese (vlerësimi mbetet një-për-proces në Lazy).
+    /// </summary>
+    internal static ProjectEntry[] DiscoverProduction() => [.. ProductionCatalog.Value];
 
     /// <summary>
     /// Zbulim + vlerësim MSBuild + validim fail-closed mbi një pemë arbitrare
@@ -226,8 +230,15 @@ internal static class PlatformProjectCatalog
     /// — output JSON i strukturuar; ekzekutim pa shell; working dir = rrënja e
     /// repo-s (global.json i pin-uar vendos SDK-në); timeout me kill tree.
     /// </summary>
-    private static (string AssemblyName, string TargetPath) EvaluateWithMsBuild(
-        string repoRoot, string absoluteProjectPath, string canonicalPath)
+    /// <summary>
+    /// §R6 fix — çaktivizim i node-reuse + MSBuild-server për çdo thirrje
+    /// fëmijë: kur `dotnet msbuild` ekzekutohet nga BRENDA test-host-it me
+    /// ridrejtim stdout/stderr, node-i worker i shkëputur (reuse) TRASHËGON
+    /// handle-t e pipe-it dhe, edhe pasi procesi kryesor del, e mban të hapur
+    /// skajin e shkrimit — `ReadToEnd` s'merr kurrë EOF dhe procesi ngec me
+    /// CPU~0. Çaktivizimi i reuse-it + serverit e zgjidh në rrënjë.
+    /// </summary>
+    private static ProcessStartInfo NewMsBuildStartInfo(string repoRoot)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -237,7 +248,17 @@ internal static class PlatformProjectCatalog
             RedirectStandardError = true,
             WorkingDirectory = repoRoot,
         };
+        startInfo.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        startInfo.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
+        return startInfo;
+    }
+
+    private static (string AssemblyName, string TargetPath) EvaluateWithMsBuild(
+        string repoRoot, string absoluteProjectPath, string canonicalPath)
+    {
+        var startInfo = NewMsBuildStartInfo(repoRoot);
         startInfo.ArgumentList.Add("msbuild");
+        startInfo.ArgumentList.Add("-nodeReuse:false");
         startInfo.ArgumentList.Add(absoluteProjectPath);
         startInfo.ArgumentList.Add("-nologo");
         startInfo.ArgumentList.Add("-getProperty:AssemblyName,TargetPath");
@@ -290,15 +311,9 @@ internal static class PlatformProjectCatalog
     {
         var absoluteProjectPath = Path.Combine(
             Path.GetFullPath(repoRoot), canonicalCsprojPath.Replace('/', Path.DirectorySeparatorChar));
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "dotnet",
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            WorkingDirectory = Path.GetFullPath(repoRoot),
-        };
+        var startInfo = NewMsBuildStartInfo(Path.GetFullPath(repoRoot));
         startInfo.ArgumentList.Add("msbuild");
+        startInfo.ArgumentList.Add("-nodeReuse:false");
         startInfo.ArgumentList.Add(absoluteProjectPath);
         startInfo.ArgumentList.Add("-nologo");
         startInfo.ArgumentList.Add("-getItem:PackageReference");
@@ -344,6 +359,214 @@ internal static class PlatformProjectCatalog
         {
             throw new InvalidOperationException(
                 $"Output MSBuild PackageReference bosh/malformed për {canonicalCsprojPath} ({exception.GetType().Name})");
+        }
+    }
+
+    /// <summary>
+    /// §4-R6: edges REALE të ProjectReference të një csproj (vlerësim MSBuild
+    /// `-getItem:ProjectReference`) → path-e kanonike repo-relative; path
+    /// jashtë rrënjës = FAIL.
+    /// </summary>
+    /// <summary>
+    /// Memoizim VETËM per-proces dhe VETËM për path-et nën rrënjën REALE të
+    /// repo-s (i njëjti përjashtim i dokumentuar si <see cref="ProductionCatalog"/>:
+    /// pema production nuk ndryshon gjatë një test-run-i). Pemët sintetike
+    /// nuk kalojnë kurrë këtej — ato thërrasin Discover(...) të freskët.
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string[]> ProductionProjectRefsMemo = new(StringComparer.Ordinal);
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, ResolvedReference[]> ProductionResolvedRefsMemo = new(StringComparer.Ordinal);
+
+    internal static string[] EvaluateProjectReferences(string repoRoot, string canonicalCsprojPath)
+    {
+        if (Path.GetFullPath(repoRoot) == Path.GetFullPath(RepoRoot()))
+        {
+            return [.. ProductionProjectRefsMemo.GetOrAdd(canonicalCsprojPath,
+                path => EvaluateProjectReferencesCore(repoRoot, path))];
+        }
+
+        return EvaluateProjectReferencesCore(repoRoot, canonicalCsprojPath);
+    }
+
+    private static string[] EvaluateProjectReferencesCore(string repoRoot, string canonicalCsprojPath)
+    {
+        var canonicalRepoRoot = Path.GetFullPath(repoRoot);
+        var absoluteProjectPath = Path.Combine(
+            canonicalRepoRoot, canonicalCsprojPath.Replace('/', Path.DirectorySeparatorChar));
+        var projectDirectory = Path.GetDirectoryName(absoluteProjectPath)!;
+
+        using var document = RunMsBuildGetJson(canonicalRepoRoot, canonicalCsprojPath,
+            ["msbuild", absoluteProjectPath, "-nologo", "-getItem:ProjectReference", $"-p:Configuration={BuildConfiguration}"]);
+        if (!document.RootElement.TryGetProperty("Items", out var items)
+            || !items.TryGetProperty("ProjectReference", out var references))
+        {
+            return [];
+        }
+
+        return [.. references.EnumerateArray()
+            .Select(item =>
+            {
+                var identity = item.GetProperty("Identity").GetString()
+                    ?? throw new InvalidOperationException($"ProjectReference pa Identity: {canonicalCsprojPath}");
+                var full = Path.GetFullPath(Path.IsPathRooted(identity)
+                    ? identity
+                    : Path.Combine(projectDirectory, identity));
+                if (!full.StartsWith(canonicalRepoRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        $"ProjectReference jashtë rrënjës së repo-s: {canonicalCsprojPath} → {identity}");
+                }
+
+                return Relative(canonicalRepoRoot, full);
+            })
+            .Order(StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// §4-R6: closure-i TRANZITIV real i ProjectReference-ve të një owner-i
+    /// (BFS mbi edges e vlerësuara nga MSBuild; NUK e përfshin vetë owner-in).
+    /// </summary>
+    internal static IReadOnlySet<string> ProjectReferenceClosure(string repoRoot, string ownerCanonicalPath)
+    {
+        var closure = new HashSet<string>(StringComparer.Ordinal);
+        var queue = new Queue<string>(EvaluateProjectReferences(repoRoot, ownerCanonicalPath));
+        while (queue.Count > 0)
+        {
+            var path = queue.Dequeue();
+            if (!closure.Add(path))
+            {
+                continue;
+            }
+
+            foreach (var edge in EvaluateProjectReferences(repoRoot, path))
+            {
+                queue.Enqueue(edge);
+            }
+        }
+
+        return closure;
+    }
+
+    /// <summary>
+    /// §3-R6: referencë e ZGJIDHUR realisht nga MSBuild reference resolution
+    /// (pas target-it `ResolveReferences`) — provenance e plotë strukturore.
+    /// </summary>
+    internal sealed record ResolvedReference(
+        string FullPath,
+        string AssemblySimpleName,
+        string? FusionName,
+        string? ReferenceSourceTarget,
+        string? ResolvedFrom,
+        string? SourceProjectFile,
+        string? NuGetPackageId,
+        string? NuGetPackageVersion,
+        string? FrameworkReferenceName,
+        string? OriginalItemSpec);
+
+    /// <summary>
+    /// §3-R6: seti REAL i ReferencePath-eve të një csproj, i marrë PAS
+    /// target-it `ResolveReferences` (pa target items janë BOSH — verifikuar
+    /// empirikisht; komanda dështon fail-closed në çdo devijim). Emri i
+    /// thjeshtë i assembly-t merret nga FusionName (identiteti real), jo nga
+    /// basename-i i file-it.
+    /// </summary>
+    internal static ResolvedReference[] EvaluateResolvedReferences(string repoRoot, string canonicalCsprojPath)
+    {
+        if (Path.GetFullPath(repoRoot) == Path.GetFullPath(RepoRoot()))
+        {
+            return [.. ProductionResolvedRefsMemo.GetOrAdd(canonicalCsprojPath,
+                path => EvaluateResolvedReferencesCore(repoRoot, path))];
+        }
+
+        return EvaluateResolvedReferencesCore(repoRoot, canonicalCsprojPath);
+    }
+
+    private static ResolvedReference[] EvaluateResolvedReferencesCore(string repoRoot, string canonicalCsprojPath)
+    {
+        var canonicalRepoRoot = Path.GetFullPath(repoRoot);
+        var absoluteProjectPath = Path.Combine(
+            canonicalRepoRoot, canonicalCsprojPath.Replace('/', Path.DirectorySeparatorChar));
+
+        using var document = RunMsBuildGetJson(canonicalRepoRoot, canonicalCsprojPath,
+            ["msbuild", absoluteProjectPath, "-nologo", "-t:ResolveReferences",
+             "-getItem:ReferencePath", $"-p:Configuration={BuildConfiguration}"]);
+        if (!document.RootElement.TryGetProperty("Items", out var items)
+            || !items.TryGetProperty("ReferencePath", out var references)
+            || references.GetArrayLength() == 0)
+        {
+            throw new InvalidOperationException(
+                $"ReferencePath BOSH pas ResolveReferences për: {canonicalCsprojPath} (target-i s'u ekzekutua?)");
+        }
+
+        static string? Metadata(JsonElement item, string name)
+            => item.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
+                && value.GetString() is { Length: > 0 } text ? text : null;
+
+        return [.. references.EnumerateArray().Select(item =>
+        {
+            var fullPath = item.GetProperty("Identity").GetString()
+                ?? throw new InvalidOperationException($"ReferencePath pa Identity: {canonicalCsprojPath}");
+            var fusion = Metadata(item, "FusionName");
+            var simpleName = fusion?.Split(',')[0].Trim()
+                ?? throw new InvalidOperationException(
+                    $"ReferencePath pa FusionName (identitet i paverifikueshëm): {canonicalCsprojPath} → {Path.GetFileName(fullPath)}");
+            return new ResolvedReference(
+                Path.GetFullPath(fullPath),
+                simpleName,
+                fusion,
+                Metadata(item, "ReferenceSourceTarget"),
+                Metadata(item, "ResolvedFrom"),
+                Metadata(item, "MSBuildSourceProjectFile"),
+                Metadata(item, "NuGetPackageId"),
+                Metadata(item, "NuGetPackageVersion"),
+                Metadata(item, "FrameworkReferenceName"),
+                Metadata(item, "OriginalItemSpec"));
+        })];
+    }
+
+    /// <summary>Motori i përbashkët i thirrjeve MSBuild me output JSON (fail-closed).</summary>
+    private static JsonDocument RunMsBuildGetJson(string repoRoot, string canonicalCsprojPath, string[] arguments)
+    {
+        var startInfo = NewMsBuildStartInfo(repoRoot);
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+            if (argument == "msbuild")
+            {
+                startInfo.ArgumentList.Add("-nodeReuse:false");
+            }
+        }
+
+        using var process = new Process { StartInfo = startInfo };
+        if (!process.Start())
+        {
+            throw new InvalidOperationException($"MSBuild nuk u nis dot për: {canonicalCsprojPath}");
+        }
+
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(TimeSpan.FromSeconds(180)))
+        {
+            process.Kill(entireProcessTree: true);
+            throw new InvalidOperationException($"MSBuild timeout (180s) për: {canonicalCsprojPath}");
+        }
+
+        var output = stdout.GetAwaiter().GetResult();
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"MSBuild exit {process.ExitCode} për {canonicalCsprojPath}: "
+                + Sanitize(repoRoot, stderr.GetAwaiter().GetResult(), output));
+        }
+
+        try
+        {
+            return JsonDocument.Parse(output);
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidOperationException(
+                $"Output MSBuild bosh/malformed për {canonicalCsprojPath} ({exception.GetType().Name})");
         }
     }
 

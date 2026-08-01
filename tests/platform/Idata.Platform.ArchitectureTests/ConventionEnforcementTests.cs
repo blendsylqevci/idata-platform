@@ -487,23 +487,27 @@ public sealed class ConventionEnforcementTests
             repoRoot, PlatformRoot, Path.Combine(repoRoot, "tests", "platform"));
         Assert.NotEmpty(discovered);
 
-        // Harta emër-projekti → autoriteti i tij (për edges tranzitive projektesh).
-        var knownProjectAuthorities = discovered.ToDictionary(
-            pair => pair.Entry.AssemblyName,
-            pair => IdentitySecurityDependencyInventory.DirectPackageAuthority[pair.Entry.CanonicalPath],
-            StringComparer.Ordinal);
+        // §4-R6: graph-i AUTORITATIV — identiteti emër-i-vlerësuar → path
+        // kanonik (nga katalogu MSBuild) + closure REAL ProjectReference
+        // per-owner (i derivuar nga MSBuild, JO nga lockfile-i që auditohet).
+        var assemblyNameToPath = discovered.ToDictionary(
+            pair => pair.Entry.AssemblyName, pair => pair.Entry.CanonicalPath, StringComparer.Ordinal);
 
         foreach (var (entry, lockfile) in discovered)
         {
             Assert.True(
                 IdentitySecurityDependencyInventory.DirectPackageAuthority.ContainsKey(entry.CanonicalPath),
                 $"Projekt real PA hyrje autoriteti: {entry.CanonicalPath}");
+            var projectGraph = new IdentitySecurityDependencyInventory.ProjectGraphAuthority(
+                assemblyNameToPath,
+                PlatformProjectCatalog.ProjectReferenceClosure(repoRoot, entry.CanonicalPath),
+                IdentitySecurityDependencyInventory.DirectPackageAuthority);
             using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockfile!));
             var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
                 entry.CanonicalPath,
                 document,
                 IdentitySecurityDependencyInventory.DirectPackageAuthority[entry.CanonicalPath],
-                knownProjectAuthorities);
+                projectGraph);
             Assert.True(findings.Count == 0, string.Join(" · ", findings));
         }
     }
@@ -591,6 +595,42 @@ public sealed class ConventionEnforcementTests
         }
     }
 
+    /// <summary>§4-R6: Ghost.Project (s'mapon në projekt real) NUK krijon authority; subtree = GJETJE.</summary>
+    [Fact]
+    public void Ghost_project_nuk_krijon_authority()
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(
+            "{\"version\":2,\"dependencies\":{\"net10.0\":{"
+            + "\"Ghost.Project\":{\"type\":\"Project\",\"dependencies\":{\"Evil.Security.Lib\":\"1.0.0\"}},"
+            + "\"Evil.Security.Lib\":{\"type\":\"CentralTransitive\",\"resolved\":\"1.0.0\",\"contentHash\":\"s\"}}}}");
+        var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
+            NonOwnerCanonicalPath, document, new Dictionary<string, string>(StringComparer.Ordinal));
+        Assert.NotEmpty(findings);
+    }
+
+    /// <summary>§4-R6: Direct pa contentHash (metadata e paplotë) = GJETJE fail-closed.</summary>
+    [Fact]
+    public void Direct_pa_contentHash_eshte_gjetje()
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(
+            "{\"version\":2,\"dependencies\":{\"net10.0\":{\"Rrenja.Ok\":{\"type\":\"Direct\",\"resolved\":\"1.0.0\"}}}}");
+        var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
+            NonOwnerCanonicalPath, document,
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["Rrenja.Ok"] = "1.0.0" });
+        Assert.NotEmpty(findings);
+    }
+
+    /// <summary>§4-R6: dead-authority kapet EDHE kur 'dependencies' është krejt bosh.</summary>
+    [Fact]
+    public void Dead_authority_kapet_edhe_me_dependencies_bosh()
+    {
+        using var document = System.Text.Json.JsonDocument.Parse("{\"version\":2,\"dependencies\":{}}");
+        var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
+            NonOwnerCanonicalPath, document,
+            new Dictionary<string, string>(StringComparer.Ordinal) { ["E.Vdekur"] = "1.0.0" });
+        Assert.NotEmpty(findings);
+    }
+
     /// <summary>Lockfile sintetik me rrënjë të EMËRTUAR + një varësi të saj.</summary>
     private static System.Text.Json.JsonDocument SyntheticWithRootNamed(
         string rootName, string rootVersion, string rootType,
@@ -601,6 +641,30 @@ public sealed class ConventionEnforcementTests
             + "\",\"contentHash\":\"s\",\"dependencies\":{\"" + childName + "\":\"" + childVersion + "\"}},"
             + "\"" + childName + "\":{\"type\":\"" + childType + "\",\"resolved\":\"" + childVersion
             + "\",\"contentHash\":\"s\"}}}}");
+
+    /// <summary>
+    /// §5B-R6 — IMMUTABILITETI i katalogut production: mutimi i array-t të
+    /// kthyer nga `DiscoverProduction()` NUK helmon thirrjen pasuese (kthehet
+    /// kopje e re çdo herë; vlerësimi mbetet një-për-proces në Lazy).
+    /// </summary>
+    [Fact]
+    public void DiscoverProduction_nuk_ndikohet_nga_mutimi_i_caller_it()
+    {
+        var first = PlatformProjectCatalog.DiscoverProduction();
+        var originalLength = first.Length;
+        Assert.NotEmpty(first);
+        var sentinel = first[0];
+
+        // Mutim armiqësor i rezultatit të thirrjes së parë.
+        first[0] = null!;
+        Array.Clear(first);
+
+        var second = PlatformProjectCatalog.DiscoverProduction();
+        Assert.Equal(originalLength, second.Length);
+        Assert.All(second, entry => Assert.NotNull(entry));
+        Assert.Contains(second, entry => entry.CanonicalPath == sentinel.CanonicalPath);
+        Assert.NotSame(first, second);
+    }
 
     /// <summary>
     /// §4-R5 — FRESHNESS i Discover(): mbi TË NJËJTIN temp-root, add/change/
