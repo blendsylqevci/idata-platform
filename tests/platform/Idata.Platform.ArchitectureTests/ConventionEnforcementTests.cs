@@ -262,6 +262,23 @@ public sealed class ConventionEnforcementTests
     private const string OwnerCanonicalPath =
         "src/platform/Idata.Platform.Persistence/Idata.Platform.Persistence.csproj";
 
+    /// <summary>
+    /// §4-R7: adjacency DIREKTE reale e ProjectReference-ve për çdo projekt
+    /// të njohur (e vlerësuar nga MSBuild — jo closure, jo lockfile).
+    /// </summary>
+    internal static IReadOnlyDictionary<string, IReadOnlySet<string>> DirectProjectReferenceMap(
+        string repoRoot, IEnumerable<string> canonicalProjectPaths)
+    {
+        var map = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
+        foreach (var canonicalPath in canonicalProjectPaths.Distinct(StringComparer.Ordinal))
+        {
+            map[canonicalPath] = PlatformProjectCatalog.EvaluateProjectReferences(repoRoot, canonicalPath)
+                .ToHashSet(StringComparer.Ordinal);
+        }
+
+        return map;
+    }
+
     private const string NonOwnerCanonicalPath = "src/platform/Sintetik/Sintetik.csproj";
 
     /// <summary>Lockfile sintetik: rrënjë e aprovuar me një edge drejt një pakete shtesë.</summary>
@@ -501,7 +518,8 @@ public sealed class ConventionEnforcementTests
             var projectGraph = new IdentitySecurityDependencyInventory.ProjectGraphAuthority(
                 assemblyNameToPath,
                 PlatformProjectCatalog.ProjectReferenceClosure(repoRoot, entry.CanonicalPath),
-                IdentitySecurityDependencyInventory.DirectPackageAuthority);
+                IdentitySecurityDependencyInventory.DirectPackageAuthority,
+                DirectProjectReferenceMap(repoRoot, assemblyNameToPath.Values));
             using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockfile!));
             var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
                 entry.CanonicalPath,
@@ -629,6 +647,126 @@ public sealed class ConventionEnforcementTests
             NonOwnerCanonicalPath, document,
             new Dictionary<string, string>(StringComparer.Ordinal) { ["E.Vdekur"] = "1.0.0" });
         Assert.NotEmpty(findings);
+    }
+
+    /// <summary>
+    /// §4-R7 — 7 fixtures të detyrueshme mbi Project-node edges, versione,
+    /// arritshmëri dhe schema; secila me graph autoritativ SINTETIK (adjacency
+    /// direkte + autoritet direkt paketash të injektuara veçmas nga lockfile-i
+    /// që auditohet).
+    /// </summary>
+    [Fact]
+    public void Project_node_edges_dhe_schema_validohen_fail_closed()
+    {
+        const string alfa = "src/platform/Sintetik/Alfa/Alfa.csproj";
+        const string beta = "src/platform/Sintetik/Beta/Beta.csproj";
+        var names = new Dictionary<string, string>(StringComparer.Ordinal) { ["Alfa"] = alfa, ["Beta"] = beta };
+        var authority = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal)
+        {
+            [NonOwnerCanonicalPath] = new Dictionary<string, string>(StringComparer.Ordinal),
+            [alfa] = new Dictionary<string, string>(StringComparer.Ordinal) { ["Npgsql"] = "10.0.3" },
+            [beta] = new Dictionary<string, string>(StringComparer.Ordinal),
+        };
+        var closure = new HashSet<string>(StringComparer.Ordinal) { alfa, beta };
+        IReadOnlySet<string> AlfaRefs(params string[] refs) => refs.ToHashSet(StringComparer.Ordinal);
+
+        IdentitySecurityDependencyInventory.ProjectGraphAuthority Graph(
+            IReadOnlySet<string> alfaDirectRefs, IReadOnlySet<string>? closureOverride = null)
+            => new(names, closureOverride ?? closure, authority,
+                new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal)
+                {
+                    [alfa] = alfaDirectRefs,
+                    [beta] = AlfaRefs(),
+                });
+
+        static System.Text.Json.JsonDocument Lock(string body, string version = "\"version\":2,")
+            => System.Text.Json.JsonDocument.Parse("{" + version + "\"dependencies\":{\"net10.0\":{" + body + "}}}");
+
+        var emptyAuthority = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        // (1) Npgsql authority 10.0.3 + resolved 9.9.9 → GJETJE.
+        using (var document = Lock(
+            "\"Alfa\":{\"type\":\"Project\",\"dependencies\":{\"Npgsql\":\"10.0.3\"}},"
+            + "\"Npgsql\":{\"type\":\"CentralTransitive\",\"resolved\":\"9.9.9\",\"contentHash\":\"s\"}"))
+        {
+            Assert.Contains(IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                NonOwnerCanonicalPath, document, emptyAuthority, Graph(AlfaRefs())),
+                finding => finding.Contains("resolved=9.9.9", StringComparison.Ordinal));
+        }
+
+        // (2) project package-edge drejt node-i të MUNGUAR → GJETJE.
+        using (var document = Lock("\"Alfa\":{\"type\":\"Project\",\"dependencies\":{\"Npgsql\":\"10.0.3\"}}"))
+        {
+            Assert.Contains(IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                NonOwnerCanonicalPath, document, emptyAuthority, Graph(AlfaRefs())),
+                finding => finding.Contains("node-i të MUNGUAR", StringComparison.Ordinal));
+        }
+
+        // (3) package edge i PAAUTORIZUAR → GJETJE.
+        using (var document = Lock(
+            "\"Alfa\":{\"type\":\"Project\",\"dependencies\":{\"Evil.Pkg\":\"1.0.0\"}},"
+            + "\"Evil.Pkg\":{\"type\":\"CentralTransitive\",\"resolved\":\"1.0.0\",\"contentHash\":\"s\"}"))
+        {
+            Assert.Contains(IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                NonOwnerCanonicalPath, document, emptyAuthority, Graph(AlfaRefs())),
+                finding => finding.Contains("edge pakete të PAAUTORIZUAR", StringComparison.Ordinal));
+        }
+
+        // (4) project edge FALS drejt projekti tjetër brenda closure-it → GJETJE.
+        using (var document = Lock(
+            "\"Alfa\":{\"type\":\"Project\",\"dependencies\":{\"Beta\":\"1.0.0\"}},"
+            + "\"Beta\":{\"type\":\"Project\"}"))
+        {
+            Assert.Contains(IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                NonOwnerCanonicalPath, document, emptyAuthority, Graph(AlfaRefs())),
+                finding => finding.Contains("NUK është ProjectReference DIREKT", StringComparison.Ordinal));
+        }
+
+        // (5) projekt real i njohur, POR jashtë closure-it → GJETJE.
+        using (var document = Lock("\"Alfa\":{\"type\":\"Project\"}"))
+        {
+            Assert.Contains(IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                NonOwnerCanonicalPath, document, emptyAuthority,
+                Graph(AlfaRefs(), new HashSet<string>(StringComparer.Ordinal) { beta })),
+                finding => finding.Contains("PAARRITSHËM", StringComparison.Ordinal));
+        }
+
+        // (6) schema version missing / string / e pambështetur → GJETJE.
+        foreach (var variant in (string[])["", "\"version\":\"2\",", "\"version\":3,"])
+        {
+            using var document = Lock("\"Alfa\":{\"type\":\"Project\"}", variant);
+            Assert.Contains(IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                NonOwnerCanonicalPath, document, emptyAuthority, Graph(AlfaRefs())),
+                finding => finding.Contains("version", StringComparison.OrdinalIgnoreCase));
+        }
+
+        // (7) INVERSE GREEN: graph real valid (edge projekti direkt + edge pakete
+        // e autorizuar me range e resolved korrekte).
+        using (var document = Lock(
+            "\"Alfa\":{\"type\":\"Project\",\"dependencies\":{\"Beta\":\"1.0.0\",\"Npgsql\":\"[10.0.3, )\"}},"
+            + "\"Beta\":{\"type\":\"Project\"},"
+            + "\"Npgsql\":{\"type\":\"CentralTransitive\",\"resolved\":\"10.0.3\",\"contentHash\":\"s\"}"))
+        {
+            Assert.Empty(IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                NonOwnerCanonicalPath, document, emptyAuthority, Graph(AlfaRefs(beta))));
+        }
+    }
+
+    /// <summary>§4-R7: parser-i i range-ve mbulon VETËM formatet e deklaruara; tjetra = i pambështetur.</summary>
+    [Theory]
+    [InlineData("10.0.3", true, false)]
+    [InlineData("[10.0.3, )", true, false)]
+    [InlineData("[10.0.3,)", true, false)]
+    [InlineData("[10.0.3]", true, false)]
+    [InlineData("9.9.9", false, false)]
+    [InlineData("[9.9.9]", false, false)]
+    [InlineData("(10.0.3, 11.0.0)", false, true)]
+    [InlineData("[10.0.3, 11.0.0]", false, true)]
+    public void Range_parser_mbulon_vetem_formatet_e_deklaruara(string range, bool contains, bool expectedUnsupported)
+    {
+        var result = IdentitySecurityDependencyInventory.RangeContainsAuthorizedVersion(range, "10.0.3", out var unsupported);
+        Assert.Equal(contains, result);
+        Assert.Equal(expectedUnsupported, unsupported);
     }
 
     /// <summary>Lockfile sintetik me rrënjë të EMËRTUAR + një varësi të saj.</summary>

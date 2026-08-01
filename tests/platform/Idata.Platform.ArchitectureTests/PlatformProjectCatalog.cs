@@ -524,6 +524,170 @@ internal static class PlatformProjectCatalog
         })];
     }
 
+    /// <summary>
+    /// §3-R7 — ASSET-SET-i AUTORITATIV i paketave për një owner/TFM, i
+    /// derivuar nga autoriteti i RESTORE-it (`obj/project.assets.json`):
+    /// për çdo hyrje `targets/&lt;tfm&gt;/&lt;id&gt;/&lt;version&gt;` me `type=package`,
+    /// path-et e `compile`/`runtime` zgjidhen kundër `packageFolders`.
+    /// Seti ndërtohet VEÇMAS nga kandidati që klasifikohet; asnjë shkrim në
+    /// cache-in global. Assets-file i munguar/malformed = përjashtim
+    /// fail-closed. Kthen path-e absolute kanonike.
+    /// </summary>
+    internal static IReadOnlySet<string> EvaluatePackageAssetAuthority(string repoRoot, string canonicalCsprojPath)
+    {
+        var canonicalRepoRoot = Path.GetFullPath(repoRoot);
+        var projectDirectory = Path.GetDirectoryName(Path.Combine(
+            canonicalRepoRoot, canonicalCsprojPath.Replace('/', Path.DirectorySeparatorChar)))!;
+        var assetsPath = Path.Combine(projectDirectory, "obj", "project.assets.json");
+        if (!File.Exists(assetsPath))
+        {
+            throw new InvalidOperationException(
+                $"project.assets.json mungon (restore i munguar?): {canonicalCsprojPath}");
+        }
+
+        var assets = new HashSet<string>(StringComparer.Ordinal);
+        var declaredPackageLibraries = 0;
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(assetsPath));
+            var folders = document.RootElement.GetProperty("packageFolders").EnumerateObject()
+                .Select(folder => Path.GetFullPath(folder.Name))
+                .ToArray();
+            if (folders.Length == 0)
+            {
+                throw new InvalidOperationException($"packageFolders bosh: {canonicalCsprojPath}");
+            }
+
+            foreach (var target in document.RootElement.GetProperty("targets").EnumerateObject())
+            {
+                foreach (var library in target.Value.EnumerateObject())
+                {
+                    if (!library.Value.TryGetProperty("type", out var type)
+                        || type.GetString() != "package")
+                    {
+                        continue;
+                    }
+
+                    declaredPackageLibraries++;
+                    var identity = library.Name.Split('/');
+                    if (identity.Length != 2)
+                    {
+                        throw new InvalidOperationException(
+                            $"Identitet biblioteke i pavlefshëm '{library.Name}' në assets: {canonicalCsprojPath}");
+                    }
+
+                    foreach (var section in (string[])["compile", "runtime"])
+                    {
+                        if (!library.Value.TryGetProperty(section, out var items)
+                            || items.ValueKind != JsonValueKind.Object)
+                        {
+                            continue;
+                        }
+
+                        foreach (var item in items.EnumerateObject())
+                        {
+                            if (item.Name.EndsWith("_._", StringComparison.Ordinal))
+                            {
+                                continue; // placeholder i NuGet-it, jo asset real
+                            }
+
+                            foreach (var folder in folders)
+                            {
+                                var candidate = Path.GetFullPath(Path.Combine(
+                                    folder, identity[0].ToLowerInvariant(), identity[1],
+                                    item.Name.Replace('/', Path.DirectorySeparatorChar)));
+                                if (File.Exists(candidate))
+                                {
+                                    assets.Add(candidate);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidOperationException(
+                $"project.assets.json malformed për {canonicalCsprojPath} ({exception.GetType().Name})");
+        }
+
+        // Projekt pa asnjë paketë (vetëm ProjectReference) → set legjitimisht
+        // bosh; POR paketa të deklaruara ME zero assets të zgjidhura =
+        // fail-closed (restore i korruptuar/asset-e të munguara në disk).
+        if (declaredPackageLibraries > 0 && assets.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"Asset-set BOSH megjithëse assets deklaron {declaredPackageLibraries} paketa: {canonicalCsprojPath}");
+        }
+
+        return assets;
+    }
+
+    /// <summary>
+    /// §3-R7 — ASSET-SET-i AUTORITATIV i framework-ut për një owner: nga
+    /// `ResolvedTargetingPack` (evaluated per-owner) merret direktoria e
+    /// targeting pack-ut dhe si autoritet merren VETËM reference assemblies
+    /// nën `ref/&lt;tfm&gt;` — jo çdo file nën packs-root (analyzers/data janë
+    /// jashtë). Zero ResolvedTargetingPack / direktori e munguar = fail-closed.
+    /// </summary>
+    internal static IReadOnlySet<string> EvaluateFrameworkAssetAuthority(string repoRoot, string canonicalCsprojPath)
+    {
+        var canonicalRepoRoot = Path.GetFullPath(repoRoot);
+        var absoluteProjectPath = Path.Combine(
+            canonicalRepoRoot, canonicalCsprojPath.Replace('/', Path.DirectorySeparatorChar));
+
+        using var document = RunMsBuildGetJson(canonicalRepoRoot, canonicalCsprojPath,
+            ["msbuild", absoluteProjectPath, "-nologo", "-t:ResolveReferences",
+             "-getItem:ResolvedTargetingPack", $"-p:Configuration={BuildConfiguration}"]);
+        if (!document.RootElement.TryGetProperty("Items", out var items)
+            || !items.TryGetProperty("ResolvedTargetingPack", out var packs)
+            || packs.GetArrayLength() == 0)
+        {
+            throw new InvalidOperationException(
+                $"ResolvedTargetingPack BOSH për: {canonicalCsprojPath} (framework authority e paderivueshme)");
+        }
+
+        var assets = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var pack in packs.EnumerateArray())
+        {
+            if (!pack.TryGetProperty("PackageDirectory", out var directoryElement)
+                || directoryElement.GetString() is not { Length: > 0 } packDirectory)
+            {
+                throw new InvalidOperationException(
+                    $"ResolvedTargetingPack pa PackageDirectory: {canonicalCsprojPath}");
+            }
+
+            var referenceRoot = Path.Combine(Path.GetFullPath(packDirectory), "ref");
+            if (!Directory.Exists(referenceRoot))
+            {
+                throw new InvalidOperationException(
+                    $"Targeting pack pa direktori 'ref': {canonicalCsprojPath} → {pack.GetProperty("Identity").GetString()}");
+            }
+
+            foreach (var assembly in Directory.EnumerateFiles(referenceRoot, "*.dll", SearchOption.AllDirectories))
+            {
+                assets.Add(Path.GetFullPath(assembly));
+            }
+        }
+
+        if (assets.Count == 0)
+        {
+            throw new InvalidOperationException($"Asset-set i framework-ut BOSH: {canonicalCsprojPath}");
+        }
+
+        return assets;
+    }
+
+    /// <summary>§2-R7: MVID i një file-i assembly (fail-closed në lexim të pamundur).</summary>
+    internal static Guid ReadMvid(string assemblyPath)
+    {
+        using var stream = File.OpenRead(assemblyPath);
+        using var portableExecutable = new System.Reflection.PortableExecutable.PEReader(stream);
+        var reader = System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(portableExecutable);
+        return reader.GetGuid(reader.GetModuleDefinition().Mvid);
+    }
+
     /// <summary>Motori i përbashkët i thirrjeve MSBuild me output JSON (fail-closed).</summary>
     private static JsonDocument RunMsBuildGetJson(string repoRoot, string canonicalCsprojPath, string[] arguments)
     {

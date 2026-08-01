@@ -223,12 +223,14 @@ internal static class IdentitySecurityDependencyInventory
     internal sealed record ProjectGraphAuthority(
         IReadOnlyDictionary<string, string> AssemblyNameToCanonicalPath,
         IReadOnlySet<string> OwnerClosureCanonicalPaths,
-        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> AuthorityByCanonicalPath);
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> AuthorityByCanonicalPath,
+        IReadOnlyDictionary<string, IReadOnlySet<string>> DirectProjectReferencesByCanonicalPath);
 
     internal static readonly ProjectGraphAuthority EmptyProjectGraph = new(
         new Dictionary<string, string>(StringComparer.Ordinal),
         new HashSet<string>(StringComparer.Ordinal),
-        new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal));
+        new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal),
+        new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal));
 
     internal static List<string> AuditPackagesTotal(
         string canonicalProjectPath, JsonDocument lockfile, IReadOnlyDictionary<string, string> directAuthority)
@@ -254,6 +256,26 @@ internal static class IdentitySecurityDependencyInventory
     {
         var findings = new List<string>();
         var seenDirect = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // §4-R7: validim i SCHEMA-s së lockfile-it (root object + version=2).
+        if (lockfile.RootElement.ValueKind != JsonValueKind.Object)
+        {
+            findings.Add($"{canonicalProjectPath}: root i lockfile-it s'është objekt");
+            return findings;
+        }
+
+        if (!lockfile.RootElement.TryGetProperty("version", out var schemaVersion))
+        {
+            findings.Add($"{canonicalProjectPath}: 'version' e lockfile-it MUNGON");
+        }
+        else if (schemaVersion.ValueKind != JsonValueKind.Number)
+        {
+            findings.Add($"{canonicalProjectPath}: 'version' e lockfile-it s'është number");
+        }
+        else if (!schemaVersion.TryGetInt32(out var schemaNumber) || schemaNumber != 2)
+        {
+            findings.Add($"{canonicalProjectPath}: version i palejuar i lockfile-it '{schemaVersion}' (mbështetet vetëm 2)");
+        }
 
         if (!lockfile.RootElement.TryGetProperty("dependencies", out var frameworks)
             || frameworks.ValueKind != JsonValueKind.Object)
@@ -284,6 +306,133 @@ internal static class IdentitySecurityDependencyInventory
         }
 
         return findings;
+    }
+
+    /// <summary>
+    /// §4-R7 — validimi i EDGE-ve të një node-i `Project`: çdo edge duhet të
+    /// jetë (a) **ProjectReference DIREKT real** i atij source-project-i
+    /// (adjacency e vlerësuar nga MSBuild; "diku në closure" NUK mjafton) me
+    /// node/path ekzistues, ose (b) **paketë në autoritetin DIREKT** të atij
+    /// projekti, me range që përmban versionin e autorizuar, node ekzistues
+    /// dhe `resolved` == versioni i autorizuar. Çdo devijim = GJETJE.
+    /// </summary>
+    private static void ValidateProjectNodeEdges(
+        string canonicalProjectPath, string projectNodeName, string projectCanonicalPath,
+        JsonElement node, IReadOnlyDictionary<string, JsonElement> entries,
+        IReadOnlyDictionary<string, string> projectNameToPath,
+        ProjectGraphAuthority projectGraph, List<string> findings)
+    {
+        if (!node.TryGetProperty("dependencies", out var edges) || edges.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        projectGraph.DirectProjectReferencesByCanonicalPath.TryGetValue(projectCanonicalPath, out var directProjectRefs);
+        projectGraph.AuthorityByCanonicalPath.TryGetValue(projectCanonicalPath, out var directPackages);
+
+        foreach (var edge in edges.EnumerateObject())
+        {
+            if (projectNameToPath.TryGetValue(edge.Name, out var edgeProjectPath))
+            {
+                // (a) EDGE PROJEKTI — duhet adjacency DIREKTE reale.
+                if (directProjectRefs is null || !directProjectRefs.Contains(edgeProjectPath))
+                {
+                    findings.Add($"{canonicalProjectPath}: node '{projectNodeName}' deklaron edge projekti '{edge.Name}' "
+                        + "që NUK është ProjectReference DIREKT real i tij");
+                    continue;
+                }
+
+                if (!entries.ContainsKey(edge.Name) && !projectNameToPath.ContainsKey(edge.Name))
+                {
+                    findings.Add($"{canonicalProjectPath}: node '{projectNodeName}' → edge projekti '{edge.Name}' pa node/path");
+                }
+
+                continue;
+            }
+
+            // (b) EDGE PAKETE — duhet autoritet DIREKT i atij projekti.
+            if (directPackages is null || !directPackages.TryGetValue(edge.Name, out var authorizedVersion))
+            {
+                findings.Add($"{canonicalProjectPath}: node '{projectNodeName}' deklaron edge pakete të PAAUTORIZUAR '{edge.Name}'");
+                continue;
+            }
+
+            if (edge.Value.ValueKind != JsonValueKind.String
+                || edge.Value.GetString() is not { Length: > 0 } range)
+            {
+                findings.Add($"{canonicalProjectPath}: node '{projectNodeName}' → edge '{edge.Name}' me range bosh/jo-string");
+                continue;
+            }
+
+            if (!RangeContainsAuthorizedVersion(range, authorizedVersion, out var unsupported))
+            {
+                findings.Add(unsupported
+                    ? $"{canonicalProjectPath}: node '{projectNodeName}' → range i PAMBËSHTETUR '{range}' për '{edge.Name}'"
+                    : $"{canonicalProjectPath}: node '{projectNodeName}' → range '{range}' s'përmban versionin e autorizuar {authorizedVersion} për '{edge.Name}'");
+                continue;
+            }
+
+            if (!entries.TryGetValue(edge.Name, out var packageNode))
+            {
+                findings.Add($"{canonicalProjectPath}: node '{projectNodeName}' → edge pakete drejt node-i të MUNGUAR '{edge.Name}'");
+                continue;
+            }
+
+            if (!packageNode.TryGetProperty("resolved", out var resolvedElement)
+                || resolvedElement.GetString() is not { Length: > 0 } resolvedVersion)
+            {
+                findings.Add($"{canonicalProjectPath}: node '{edge.Name}' pa 'resolved' (edge nga '{projectNodeName}')");
+                continue;
+            }
+
+            if (!string.Equals(resolvedVersion, authorizedVersion, StringComparison.OrdinalIgnoreCase))
+            {
+                findings.Add($"{canonicalProjectPath}: '{edge.Name}' resolved={resolvedVersion} ≠ autoriteti {authorizedVersion} "
+                    + $"(edge nga '{projectNodeName}')");
+            }
+        }
+    }
+
+    /// <summary>
+    /// §4-R7 — mbështetje MINIMALE dhe e deklaruar e formateve reale të
+    /// lockfile v2: `X`, `[X, )`, `[X,)`, `[X]`. Çdo format tjetër =
+    /// i pambështetur → GJETJE (kurrë pranim i heshtur).
+    /// </summary>
+    internal static bool RangeContainsAuthorizedVersion(string range, string authorizedVersion, out bool unsupported)
+    {
+        unsupported = false;
+        var trimmed = range.Trim();
+
+        if (!trimmed.StartsWith('[') && !trimmed.StartsWith('('))
+        {
+            // Formë e thjeshtë "X" = minimum-inclusive; pranohet vetëm barazia.
+            return string.Equals(trimmed, authorizedVersion, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (trimmed.StartsWith('[') && trimmed.EndsWith(']'))
+        {
+            var inner = trimmed[1..^1].Trim();
+            if (inner.Contains(',', StringComparison.Ordinal))
+            {
+                unsupported = true; // interval me kufi të sipërm — i pambështetur
+                return false;
+            }
+
+            return string.Equals(inner, authorizedVersion, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (trimmed.StartsWith('[') && trimmed.EndsWith(')'))
+        {
+            var inner = trimmed[1..^1];
+            var parts = inner.Split(',');
+            if (parts.Length == 2 && parts[1].Trim().Length == 0)
+            {
+                return string.Equals(parts[0].Trim(), authorizedVersion, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        unsupported = true;
+        return false;
     }
 
     /// <summary>Semantika NuGet: IDs krahasohen case-insensitive; kolizioni = GJETJE.</summary>
@@ -406,6 +555,12 @@ internal static class IdentitySecurityDependencyInventory
                         findings.Add($"{canonicalProjectPath}: projekt i PAARRITSHËM nga ProjectReference graph-i i owner-it: '{name}' ({projectPath})");
                         continue;
                     }
+
+                    // §4-R7: çdo edge i një node-i Project validohet kundër
+                    // ADJACENCY-s DIREKTE reale (projekt) ose autoritetit
+                    // DIREKT të paketave (paketë) të ATIJ projekti.
+                    ValidateProjectNodeEdges(
+                        canonicalProjectPath, name, projectPath, node, entries, projectNameToPath, projectGraph, findings);
 
                     expansionRoots.Add(name);
                     break;
