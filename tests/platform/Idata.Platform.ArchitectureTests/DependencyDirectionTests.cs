@@ -340,7 +340,7 @@ public sealed class DependencyDirectionTests
         // (d) asset i munguar/gabuar → GJETJE.
         Assert.Contains(ValidateExplicitApproval(
             new ExplicitReferenceApproval(statusApplication, "Mediator.Abstractions", "3.0.2", "Nuk.Ekziston.dll", "arsye"),
-            authority), finding => finding.Contains("jashtë asset-set-it real", StringComparison.Ordinal));
+            authority), finding => finding.Contains("jashtë asset-set-it të tuple-s", StringComparison.Ordinal));
 
         // (e) arsyetim bosh → GJETJE.
         Assert.Contains(ValidateExplicitApproval(
@@ -408,7 +408,7 @@ public sealed class DependencyDirectionTests
         IReadOnlyDictionary<string, PlatformProjectCatalog.ProjectEntry> CatalogByCanonicalPath,
         IReadOnlySet<string> ProjectClosure,
         IReadOnlyDictionary<string, string> ApprovedPackages,
-        IReadOnlySet<string> PackageAssetSet,
+        PlatformProjectCatalog.PackageAssetAuthority PackageAssets,
         IReadOnlySet<string> FrameworkAssetSet,
         IReadOnlyDictionary<string, (string AbsoluteTargetPath, Guid Mvid)> PlatformOutputs);
 
@@ -491,7 +491,11 @@ public sealed class DependencyDirectionTests
                 return null;
             }
 
-            return authority.PackageAssetSet.Contains(candidatePath) ? "package" : null;
+            // §3-R8: anëtarësi EKZAKTE në asset-set-in e TUPLE-s
+            // (packageId+resolvedVersion) — jo në unionin e sheshtë të owner-it.
+            return authority.PackageAssets.ContainsForTuple(packageId, packageVersion, candidatePath)
+                ? "package"
+                : null;
         }
 
         // (3) FRAMEWORK — anëtarësi EKZAKT në ref-set-in e targeting pack-ut.
@@ -504,7 +508,7 @@ public sealed class DependencyDirectionTests
         if (ExplicitApprovedResolvedReferences.TryGetValue(reference.AssemblySimpleName, out var approval)
             && ValidateExplicitApproval(approval, authority).Count == 0
             && Path.GetFileName(candidatePath) == approval.ExpectedAssetFileName
-            && authority.PackageAssetSet.Contains(candidatePath))
+            && authority.PackageAssets.ContainsForTuple(approval.PackageId, approval.PackageVersion, candidatePath))
         {
             return "explicit";
         }
@@ -544,11 +548,14 @@ public sealed class DependencyDirectionTests
             findings.Add($"alias '{approval.PackageId}': version {approval.PackageVersion} ≠ autoriteti {authorizedVersion}");
         }
 
+        // §3-R8: asset-i duhet të ekzistojë BRENDA asset-set-it të TUPLE-s
+        // (packageId+version) të vetë approval-it — jo diku në unionin e owner-it.
         if (string.IsNullOrWhiteSpace(approval.ExpectedAssetFileName)
-            || !authority.PackageAssetSet.Any(asset =>
-                string.Equals(Path.GetFileName(asset), approval.ExpectedAssetFileName, StringComparison.Ordinal)))
+            || !authority.PackageAssets.ContainsFileNameForTuple(
+                approval.PackageId, approval.PackageVersion, approval.ExpectedAssetFileName))
         {
-            findings.Add($"alias '{approval.PackageId}': asset '{approval.ExpectedAssetFileName}' jashtë asset-set-it real");
+            findings.Add($"alias '{approval.PackageId}': asset '{approval.ExpectedAssetFileName}' jashtë "
+                + $"asset-set-it të tuple-s {approval.PackageId}/{approval.PackageVersion}");
         }
 
         return findings;
@@ -916,14 +923,16 @@ public sealed class DependencyDirectionTests
         IReadOnlyDictionary<string, PlatformProjectCatalog.ProjectEntry> catalogByPath,
         IReadOnlySet<string>? closure = null,
         IReadOnlyDictionary<string, string>? approvedPackages = null,
-        IReadOnlySet<string>? packageAssets = null,
+        PlatformProjectCatalog.PackageAssetAuthority? packageAssets = null,
         IReadOnlySet<string>? frameworkAssets = null,
         IReadOnlyDictionary<string, (string AbsoluteTargetPath, Guid Mvid)>? platformOutputs = null)
         => new(
             catalogByPath,
             closure ?? new HashSet<string>(StringComparer.Ordinal),
             approvedPackages ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-            packageAssets ?? new HashSet<string>(StringComparer.Ordinal),
+            packageAssets ?? new PlatformProjectCatalog.PackageAssetAuthority(
+                new Dictionary<(string, string), IReadOnlySet<string>>(),
+                new Dictionary<string, (string, string)>(StringComparer.Ordinal)),
             frameworkAssets ?? new HashSet<string>(StringComparer.Ordinal),
             platformOutputs ?? new Dictionary<string, (string, Guid)>(StringComparer.Ordinal));
 
@@ -963,6 +972,96 @@ public sealed class DependencyDirectionTests
             repoRoot, authority));
     }
 
+    /// <summary>
+    /// §2/§4A-R8 — CROSS-PACKAGE SWAP: metadata e paketës A (Npgsql/10.0.3)
+    /// e kombinuar me asset-in REAL të paketës B (Microsoft.EntityFrameworkCore.dll)
+    /// TË TË NJËJTIT owner. Të dyja pjesët janë individualisht reale, POR
+    /// tuple-ja (packageId+version → asset) është e rreme → duhet GJETJE.
+    /// Inverse: i njëjti metadata me asset-in e VET → "package".
+    /// </summary>
+    [Fact]
+    public void Cross_package_swap_refuzohet_sipas_tuple_s_packageId_version()
+    {
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        var catalogByPath = PlatformProjectCatalog.DiscoverProduction()
+            .ToDictionary(entry => entry.CanonicalPath, StringComparer.Ordinal);
+        const string persistence = "src/platform/Idata.Platform.Persistence/Idata.Platform.Persistence.csproj";
+        var approved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Npgsql"] = "10.0.3",
+            ["Microsoft.EntityFrameworkCore"] = "10.0.10",
+        };
+        var assets = PlatformProjectCatalog.EvaluatePackageAssetAuthority(repoRoot, persistence);
+        var authority = SyntheticAuthority(catalogByPath, approvedPackages: approved, packageAssets: assets);
+
+        // Asset REAL i paketës TJETËR (EF Core) — i pranishëm në asset-set-in e owner-it.
+        var efAsset = assets.Assets.First(asset =>
+            asset.EndsWith($"{Path.DirectorySeparatorChar}Microsoft.EntityFrameworkCore.dll", StringComparison.Ordinal));
+        var npgsqlAsset = assets.Assets.First(asset =>
+            asset.EndsWith($"{Path.DirectorySeparatorChar}Npgsql.dll", StringComparison.Ordinal));
+
+        // (a) SWAP: metadata Npgsql/10.0.3 + asset EF Core → GJETJE.
+        Assert.Null(ClassifyResolvedReference(
+            new PlatformProjectCatalog.ResolvedReference(
+                efAsset, "Microsoft.EntityFrameworkCore", "Microsoft.EntityFrameworkCore, Version=10.0.0.0",
+                "ResolveAssemblyReference", "{HintPathFromItem}", null, "Npgsql", "10.0.3", null, efAsset),
+            repoRoot, authority));
+
+        // (b) SWAP i kundërt: metadata EF Core/10.0.10 + asset Npgsql → GJETJE.
+        Assert.Null(ClassifyResolvedReference(
+            new PlatformProjectCatalog.ResolvedReference(
+                npgsqlAsset, "Npgsql", "Npgsql, Version=10.0.3.0",
+                "ResolveAssemblyReference", "{HintPathFromItem}", null, "Microsoft.EntityFrameworkCore", "10.0.10", null, npgsqlAsset),
+            repoRoot, authority));
+
+        // (c) VERSION SWAP: paketë e saktë, version i pa-autorizuar për atë asset → GJETJE.
+        Assert.Null(ClassifyResolvedReference(
+            new PlatformProjectCatalog.ResolvedReference(
+                npgsqlAsset, "Npgsql", "Npgsql, Version=9.9.9.0",
+                "ResolveAssemblyReference", "{HintPathFromItem}", null, "Npgsql", "9.9.9", null, npgsqlAsset),
+            repoRoot, authority));
+
+        // (d) INVERSE GREEN: tuple e saktë (Npgsql/10.0.3 → Npgsql.dll).
+        Assert.Equal("package", ClassifyResolvedReference(
+            new PlatformProjectCatalog.ResolvedReference(
+                npgsqlAsset, "Npgsql", "Npgsql, Version=10.0.3.0",
+                "ResolveAssemblyReference", "{HintPathFromItem}", null, "Npgsql", "10.0.3", null, npgsqlAsset),
+            repoRoot, authority));
+
+        // (e) INVERSE GREEN: tuple e saktë e paketës tjetër.
+        Assert.Equal("package", ClassifyResolvedReference(
+            new PlatformProjectCatalog.ResolvedReference(
+                efAsset, "Microsoft.EntityFrameworkCore", "Microsoft.EntityFrameworkCore, Version=10.0.0.0",
+                "ResolveAssemblyReference", "{HintPathFromItem}", null, "Microsoft.EntityFrameworkCore", "10.0.10", null, efAsset),
+            repoRoot, authority));
+    }
+
+    /// <summary>
+    /// §4B-R8 (W-2) — approval-i duhet lidhur me tuple-n EKZAKTE: asset i
+    /// paketës TJETËR (edhe pse real dhe i të njëjtit owner) = GJETJE.
+    /// </summary>
+    [Fact]
+    public void Explicit_approval_lidhet_me_asset_in_e_tuple_s_se_vet()
+    {
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        var catalogByPath = PlatformProjectCatalog.DiscoverProduction()
+            .ToDictionary(entry => entry.CanonicalPath, StringComparer.Ordinal);
+        const string persistence = "src/platform/Idata.Platform.Persistence/Idata.Platform.Persistence.csproj";
+        var assets = PlatformProjectCatalog.EvaluatePackageAssetAuthority(repoRoot, persistence);
+        var authority = SyntheticAuthority(catalogByPath, packageAssets: assets);
+
+        // (a) CROSS-SWAP: Npgsql/10.0.3 me asset të EF Core → GJETJE.
+        Assert.Contains(ValidateExplicitApproval(
+            new ExplicitReferenceApproval(persistence, "Npgsql", "10.0.3",
+                "Microsoft.EntityFrameworkCore.dll", "arsye sintetike"),
+            authority), finding => finding.Contains("asset", StringComparison.OrdinalIgnoreCase));
+
+        // (b) INVERSE GREEN: Npgsql/10.0.3 me asset-in e vet.
+        Assert.Empty(ValidateExplicitApproval(
+            new ExplicitReferenceApproval(persistence, "Npgsql", "10.0.3", "Npgsql.dll", "arsye sintetike"),
+            authority));
+    }
+
     [Fact]
     public void R7_RED_package_asset_jashte_compile_set_por_brenda_package_root()
     {
@@ -984,7 +1083,7 @@ public sealed class DependencyDirectionTests
             repoRoot, authority));
 
         // INVERSE GREEN: asset REAL i compile-set-it.
-        var realAsset = assetSet.First(asset =>
+        var realAsset = assetSet.Assets.First(asset =>
             asset.Contains($"{Path.DirectorySeparatorChar}npgsql{Path.DirectorySeparatorChar}10.0.3{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
             && asset.EndsWith("Npgsql.dll", StringComparison.Ordinal));
         Assert.Equal("package", ClassifyResolvedReference(

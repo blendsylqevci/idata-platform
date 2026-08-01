@@ -533,7 +533,32 @@ internal static class PlatformProjectCatalog
     /// cache-in global. Assets-file i munguar/malformed = përjashtim
     /// fail-closed. Kthen path-e absolute kanonike.
     /// </summary>
-    internal static IReadOnlySet<string> EvaluatePackageAssetAuthority(string repoRoot, string canonicalCsprojPath)
+    /// <summary>
+    /// §3-R8 — AUTORITETI TUPLE-BOUND i asset-eve: harta
+    /// (packageId i normalizuar, resolvedVersion) → set-i EKZAKT i asset-eve
+    /// të ASAJ pakete/versioni, plus harta inverse asset → tuple. Unioni i
+    /// sheshtë (<see cref="Assets"/>) ekziston vetëm për diagnostikë; ai NUK
+    /// përdoret më si autoritet — ndryshe metadata e paketës A mund të
+    /// kombinohej me asset-in real të paketës B.
+    /// </summary>
+    internal sealed record PackageAssetAuthority(
+        IReadOnlyDictionary<(string PackageId, string Version), IReadOnlySet<string>> AssetsByTuple,
+        IReadOnlyDictionary<string, (string PackageId, string Version)> TupleByAsset)
+    {
+        internal IReadOnlySet<string> Assets => TupleByAsset.Keys.ToHashSet(StringComparer.Ordinal);
+
+        /// <summary>Anëtarësi EKZAKTE në asset-set-in e TUPLE-s (id case-insensitive, version ekzakt).</summary>
+        internal bool ContainsForTuple(string packageId, string version, string canonicalAssetPath)
+            => AssetsByTuple.TryGetValue((packageId.ToLowerInvariant(), version), out var set)
+               && set.Contains(canonicalAssetPath);
+
+        /// <summary>A ekziston një asset me këtë emër file-i BRENDA tuple-s së dhënë?</summary>
+        internal bool ContainsFileNameForTuple(string packageId, string version, string assetFileName)
+            => AssetsByTuple.TryGetValue((packageId.ToLowerInvariant(), version), out var set)
+               && set.Any(asset => string.Equals(Path.GetFileName(asset), assetFileName, StringComparison.Ordinal));
+    }
+
+    internal static PackageAssetAuthority EvaluatePackageAssetAuthority(string repoRoot, string canonicalCsprojPath)
     {
         var canonicalRepoRoot = Path.GetFullPath(repoRoot);
         var projectDirectory = Path.GetDirectoryName(Path.Combine(
@@ -545,7 +570,8 @@ internal static class PlatformProjectCatalog
                 $"project.assets.json mungon (restore i munguar?): {canonicalCsprojPath}");
         }
 
-        var assets = new HashSet<string>(StringComparer.Ordinal);
+        var assetsByTuple = new Dictionary<(string, string), HashSet<string>>();
+        var tupleByAsset = new Dictionary<string, (string, string)>(StringComparer.Ordinal);
         var declaredPackageLibraries = 0;
         try
         {
@@ -596,10 +622,30 @@ internal static class PlatformProjectCatalog
                                 var candidate = Path.GetFullPath(Path.Combine(
                                     folder, identity[0].ToLowerInvariant(), identity[1],
                                     item.Name.Replace('/', Path.DirectorySeparatorChar)));
-                                if (File.Exists(candidate))
+                                if (!File.Exists(candidate))
                                 {
-                                    assets.Add(candidate);
+                                    continue;
                                 }
+
+                                var tuple = (identity[0].ToLowerInvariant(), identity[1]);
+                                if (!assetsByTuple.TryGetValue(tuple, out var set))
+                                {
+                                    set = new HashSet<string>(StringComparer.Ordinal);
+                                    assetsByTuple[tuple] = set;
+                                }
+
+                                set.Add(candidate);
+
+                                // Membership i PAQARTË (i njëjti path te dy tuple) = fail-closed.
+                                if (tupleByAsset.TryGetValue(candidate, out var existing)
+                                    && existing != tuple)
+                                {
+                                    throw new InvalidOperationException(
+                                        $"Asset i PAQARTË '{Path.GetFileName(candidate)}' i pretenduar nga "
+                                        + $"{existing.Item1}/{existing.Item2} dhe {tuple.Item1}/{tuple.Item2}: {canonicalCsprojPath}");
+                                }
+
+                                tupleByAsset[candidate] = tuple;
                             }
                         }
                     }
@@ -615,13 +661,17 @@ internal static class PlatformProjectCatalog
         // Projekt pa asnjë paketë (vetëm ProjectReference) → set legjitimisht
         // bosh; POR paketa të deklaruara ME zero assets të zgjidhura =
         // fail-closed (restore i korruptuar/asset-e të munguara në disk).
-        if (declaredPackageLibraries > 0 && assets.Count == 0)
+        if (declaredPackageLibraries > 0 && tupleByAsset.Count == 0)
         {
             throw new InvalidOperationException(
                 $"Asset-set BOSH megjithëse assets deklaron {declaredPackageLibraries} paketa: {canonicalCsprojPath}");
         }
 
-        return assets;
+        return new PackageAssetAuthority(
+            assetsByTuple.ToDictionary(
+                pair => pair.Key,
+                pair => (IReadOnlySet<string>)pair.Value),
+            tupleByAsset);
     }
 
     /// <summary>
