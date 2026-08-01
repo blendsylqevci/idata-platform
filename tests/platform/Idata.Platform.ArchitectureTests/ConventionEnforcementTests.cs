@@ -364,6 +364,54 @@ public sealed class ConventionEnforcementTests
     }
 
     /// <summary>
+    /// RENDI NORMATIV §5-R4 — prova diskriminuese: e ndaluara fiton mbi
+    /// closure/manifest; asnjë paketë security/identity/auth nuk kapërcehet
+    /// pa klasifikim (ReviewRequired jashtë aprovimit = gjetje); kufiri i
+    /// përputhjes është me PIKË (emra të ngjashëm NUK kapen gabimisht).
+    /// </summary>
+    [Fact]
+    public void Rendi_normativ_i_klasifikimit_te_paketave_eshte_fail_closed()
+    {
+        // (1) E NDALUAR edhe BRENDA closure-it (edge nga rrënja) — gjetja
+        //     është e familjes së ndaluar, jo thjesht "e pa-inventarizuar".
+        using (var document = SyntheticWithRoot("OpenIddict.Server", "7.6.0", "Transitive"))
+        {
+            var findings = IdentitySecurityDependencyInventory.Audit(OwnerCanonicalPath, document);
+            Assert.Contains(findings, finding =>
+                finding.Contains("familje provider-i e ndaluar", StringComparison.Ordinal)
+                && finding.Contains("OpenIddict.Server", StringComparison.Ordinal));
+        }
+
+        // (2) ReviewRequired STANDALONE jashtë closure → gjetje (kurrë skip i heshtur).
+        foreach (var package in (string[])
+            ["OpenIddict.Core", "Microsoft.Extensions.Identity.Core",
+             "Microsoft.AspNetCore.Authentication.JwtBearer",
+             "Microsoft.AspNetCore.DataProtection.Extensions",
+             "System.IdentityModel.Tokens.Jwt"])
+        {
+            using var document = SyntheticStandalone(package, "9.9.9", "Transitive");
+            var findings = IdentitySecurityDependencyInventory.Audit(NonOwnerCanonicalPath, document);
+            Assert.Contains(findings, finding =>
+                finding.Contains("JASHTË aprovimit", StringComparison.Ordinal)
+                && finding.Contains(package, StringComparison.Ordinal));
+        }
+
+        // (3) Inverse KUFIRI ME PIKË: emra të ngjashëm suffix-i NUK kapen.
+        foreach (var package in (string[])
+            ["Microsoft.AspNetCore.CryptographyFake", "OpenIddictFake.Core", "System.IdentityModelX"])
+        {
+            using var document = SyntheticStandalone(package, "1.0.0", "Transitive");
+            Assert.Empty(IdentitySecurityDependencyInventory.Audit(NonOwnerCanonicalPath, document));
+        }
+
+        // (4) Inverse: paketë realisht e palidhur → zero gjetje (pas klasifikimit).
+        using (var document = SyntheticStandalone("Serilog.Sinks.Console", "6.0.0", "Transitive"))
+        {
+            Assert.Empty(IdentitySecurityDependencyInventory.Audit(NonOwnerCanonicalPath, document));
+        }
+    }
+
+    /// <summary>
     /// Meta-testi i NDARJES së plotë (§4-R3): çdo anëtar i manifest-it
     /// klasifikohet në mënyrë deterministe — familjet identity-specifike
     /// përfshijnë të gjitha paketat identity/OpenIddict/kripto (përfshirë të
@@ -402,7 +450,7 @@ public sealed class ConventionEnforcementTests
         var temporary = Directory.CreateTempSubdirectory("idata_lockfile_guard_");
         try
         {
-            File.WriteAllText(Path.Combine(temporary.FullName, "Sintetik.Projekt.csproj"), "<Project />");
+            File.WriteAllText(Path.Combine(temporary.FullName, "Sintetik.Projekt.csproj"), SdkProjectXml);
             var discovered = DiscoverLockfiles(temporary.FullName, temporary.FullName);
             var pair = Assert.Single(discovered);
             Assert.Equal("Sintetik.Projekt", pair.Entry.ProjectName);
@@ -414,44 +462,54 @@ public sealed class ConventionEnforcementTests
         }
     }
 
+    private const string SdkProjectXml =
+        "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework></PropertyGroup></Project>";
+
+    private static string SdkProjectXmlWith(string extraProperties)
+        => "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><TargetFramework>net10.0</TargetFramework>"
+           + extraProperties + "</PropertyGroup></Project>";
+
     /// <summary>
-    /// Identiteti kanonik i projekteve (§3-R3): basename-i NUK është KURRË
-    /// autoritet — spoof me të njëjtin basename në path tjetër ≠ owner;
-    /// AssemblyName i dyfishtë = FAIL; path jashtë rrënjës = FAIL; projekt i
-    /// zbuluar pa assembly të skanueshëm dështon receipt-in e kufirit IL.
+    /// Identiteti kanonik i projekteve (§2-R4 — MSBuild REAL): basename/XML
+    /// raw NUK janë KURRË autoritet — spoof me basename owner-i ≠ owner;
+    /// identitet i vlerësuar i dyfishtë = FAIL; path jashtë rrënjës = FAIL;
+    /// projekt pa assembly të ndërtuar dështon receipt-in e verifikimit.
     /// </summary>
     [Fact]
-    public void Identiteti_kanonik_i_projekteve_eshte_path_based_dhe_fail_closed()
+    public void Identiteti_kanonik_i_projekteve_eshte_msbuild_evaluated_dhe_fail_closed()
     {
         var temporary = Directory.CreateTempSubdirectory("idata_catalog_guard_");
         try
         {
             // (a) Spoof: i njëjti basename si owner-i real, path tjetër, AssemblyName
-            // eksplicit i ndryshëm (ndryshe zbulohet si duplikat) → NUK është owner.
+            // eksplicit i ndryshëm (i VLERËSUAR nga MSBuild) → NUK është owner.
             var spoofDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "evil"));
             File.WriteAllText(Path.Combine(spoofDirectory.FullName, "Idata.Platform.Persistence.csproj"),
-                "<Project><PropertyGroup><AssemblyName>Evil.Spoof</AssemblyName></PropertyGroup></Project>");
-            var spoofed = PlatformProjectCatalog.Discover(temporary.FullName, temporary.FullName);
+                SdkProjectXmlWith("<AssemblyName>Evil.Spoof</AssemblyName>"));
+            var spoofed = PlatformProjectCatalog.Discover(temporary.FullName, spoofDirectory.FullName);
             var spoofEntry = Assert.Single(spoofed);
             Assert.Equal("Idata.Platform.Persistence", spoofEntry.ProjectName);
             Assert.Equal("Evil.Spoof", spoofEntry.AssemblyName);
             Assert.False(PlatformProjectCatalog.IsStoreOwner(spoofEntry),
                 "Spoof me basename owner-i u klasifikua si owner — basename po përdoret si autoritet.");
 
-            // (b) Dy csproj me të njëjtin basename (default AssemblyName identik)
+            // (b) Dy csproj me të njëjtin basename (AssemblyName i vlerësuar identik)
             // në path-e të ndryshëm → FAIL i qartë, jo klasifikim i heshtur.
-            var duplicateDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "dy"));
-            File.WriteAllText(Path.Combine(duplicateDirectory.FullName, "Idata.Platform.Persistence.csproj"), "<Project />");
-            var secondDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "tre"));
-            File.WriteAllText(Path.Combine(secondDirectory.FullName, "Idata.Platform.Persistence.csproj"), "<Project />");
+            var duplicateRoot = Directory.CreateDirectory(Path.Combine(temporary.FullName, "duplikat")).FullName;
+            File.WriteAllText(
+                Path.Combine(Directory.CreateDirectory(Path.Combine(duplicateRoot, "dy")).FullName, "Njejte.csproj"),
+                SdkProjectXml);
+            File.WriteAllText(
+                Path.Combine(Directory.CreateDirectory(Path.Combine(duplicateRoot, "tre")).FullName, "Njejte.csproj"),
+                SdkProjectXml);
             Assert.Throws<InvalidOperationException>(
-                () => PlatformProjectCatalog.Discover(temporary.FullName, temporary.FullName));
+                () => PlatformProjectCatalog.Discover(temporary.FullName, duplicateRoot));
 
             // (c) Rrënjë kërkimi jashtë rrënjës së repo-s (spoof/traversal) → FAIL.
             var outside = Directory.CreateTempSubdirectory("idata_catalog_outside_");
             try
             {
-                File.WriteAllText(Path.Combine(outside.FullName, "Jashte.csproj"), "<Project />");
+                File.WriteAllText(Path.Combine(outside.FullName, "Jashte.csproj"), SdkProjectXml);
                 Assert.Throws<InvalidOperationException>(
                     () => PlatformProjectCatalog.Discover(temporary.FullName, outside.FullName));
             }
@@ -460,10 +518,95 @@ public sealed class ConventionEnforcementTests
                 outside.Delete(recursive: true);
             }
 
-            // (d) Projekt i zbuluar PA assembly të skanueshëm → receipt-i i
-            // kufirit IL (File.Exists mbi AssemblyName real) dështon.
-            Assert.False(File.Exists(Path.Combine(AppContext.BaseDirectory, $"{spoofEntry.AssemblyName}.dll")),
-                "Assembly sintetik ekziston — receipt-i s'mund të provohet.");
+            // (d) Projekt i zbuluar PA assembly të ndërtuar → receipt-i i
+            // verifikimit (TargetPath ekzakt) dështon fail-closed.
+            Assert.Throws<InvalidOperationException>(() =>
+                PlatformProjectCatalog.VerifyTargetAssembly(temporary.FullName, spoofEntry, "evil"));
+        }
+        finally
+        {
+            temporary.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// §2-R4: identiteti vjen nga VLERËSIMI MSBuild, jo nga XML raw — decoy
+    /// XML i pa-vlerësuar injorohet; AssemblyName conditional dhe i importuar
+    /// (Directory.Build.props) vlerësohen saktë; XML i pavlefshëm dhe
+    /// TargetPath jashtë rrënjës = FAIL; decoy DLL me emër të pritur por
+    /// identitet tjetër të brendshëm = FAIL.
+    /// </summary>
+    [Fact]
+    public void Vleresimi_msbuild_kap_conditional_import_decoy_dhe_identitet_te_rreme()
+    {
+        var temporary = Directory.CreateTempSubdirectory("idata_msbuild_guard_");
+        try
+        {
+            // (a) Decoy XML: AssemblyName me Condition false + vlera reale me
+            // property expansion — regex/XML raw do të lexonte decoy-n; MSBuild
+            // kthen vlerën REALE të vlerësuar.
+            var decoyDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "decoy"));
+            File.WriteAllText(Path.Combine(decoyDirectory.FullName, "Decoy.csproj"),
+                "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup>"
+                + "<TargetFramework>net10.0</TargetFramework>"
+                + "<AssemblyName Condition=\"'false'=='true'\">Decoy.NgaXml</AssemblyName>"
+                + "<Baza>Reale</Baza><AssemblyName>$(Baza).Vleresuar</AssemblyName>"
+                + "</PropertyGroup></Project>");
+            var decoyEntry = Assert.Single(PlatformProjectCatalog.Discover(temporary.FullName, decoyDirectory.FullName));
+            Assert.Equal("Reale.Vleresuar", decoyEntry.AssemblyName);
+
+            // (b) AssemblyName i IMPORTUAR nga Directory.Build.props — XML-i i
+            // csproj-it s'e përmban fare; vetëm vlerësimi real e sheh.
+            var importedDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "imported"));
+            File.WriteAllText(Path.Combine(importedDirectory.FullName, "Directory.Build.props"),
+                "<Project><PropertyGroup><AssemblyName>Nga.Importi</AssemblyName></PropertyGroup></Project>");
+            File.WriteAllText(Path.Combine(importedDirectory.FullName, "Imported.csproj"), SdkProjectXml);
+            var importedEntry = Assert.Single(PlatformProjectCatalog.Discover(temporary.FullName, importedDirectory.FullName));
+            Assert.Equal("Nga.Importi", importedEntry.AssemblyName);
+
+            // (c) XML i pavlefshëm → MSBuild exit ≠ 0 → FAIL (jo silent skip).
+            var malformedDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "malformed"));
+            File.WriteAllText(Path.Combine(malformedDirectory.FullName, "Keq.csproj"), "<Project><PA-MBYLLUR>");
+            Assert.Throws<InvalidOperationException>(
+                () => PlatformProjectCatalog.Discover(temporary.FullName, malformedDirectory.FullName));
+
+            // (d) Non-SDK pa TargetPath të vlerësueshëm → FAIL (zero fallback basename).
+            var emptyDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "bosh"));
+            File.WriteAllText(Path.Combine(emptyDirectory.FullName, "Bosh.csproj"), "<Project />");
+            Assert.Throws<InvalidOperationException>(
+                () => PlatformProjectCatalog.Discover(temporary.FullName, emptyDirectory.FullName));
+
+            // (e) TargetPath i vlerësuar JASHTË rrënjës së repo-s → FAIL.
+            var escapeDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "escape"));
+            var outsideOutput = Directory.CreateTempSubdirectory("idata_escape_out_");
+            try
+            {
+                File.WriteAllText(Path.Combine(escapeDirectory.FullName, "Escape.csproj"),
+                    SdkProjectXmlWith($"<OutputPath>{outsideOutput.FullName}/</OutputPath>"
+                        + "<AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>"));
+                Assert.Throws<InvalidOperationException>(
+                    () => PlatformProjectCatalog.Discover(temporary.FullName, escapeDirectory.FullName));
+            }
+            finally
+            {
+                outsideOutput.Delete(recursive: true);
+            }
+
+            // (f) Decoy DLL: file ekziston në TargetPath e pritur me EMRIN e
+            // pritur, por identiteti i brendshëm i binarit është tjetër → FAIL.
+            var decoyBinDirectory = Directory.CreateDirectory(
+                Path.Combine(decoyDirectory.FullName, "bin", "Debug", "net10.0"));
+            File.Copy(
+                Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"),
+                Path.Combine(decoyBinDirectory.FullName, "Reale.Vleresuar.dll"));
+            var mismatch = Assert.Throws<InvalidOperationException>(() =>
+                PlatformProjectCatalog.VerifyTargetAssembly(temporary.FullName, decoyEntry, "decoy"));
+            Assert.Contains("mismatch", mismatch.Message, StringComparison.OrdinalIgnoreCase);
+
+            // (g) File i palexueshëm si assembly në TargetPath → FAIL.
+            File.WriteAllText(Path.Combine(decoyBinDirectory.FullName, "Reale.Vleresuar.dll"), "jo-PE");
+            Assert.Throws<InvalidOperationException>(() =>
+                PlatformProjectCatalog.VerifyTargetAssembly(temporary.FullName, decoyEntry, "decoy"));
         }
         finally
         {
@@ -478,16 +621,27 @@ public sealed class ConventionEnforcementTests
         var catalog = PlatformProjectCatalog.DiscoverProduction();
         Assert.NotEmpty(catalog);
 
-        foreach (var ownerPath in PlatformProjectCatalog.StoreOwnerCanonicalPaths)
+        // Identiteti i PRITUR i owner-ëve (spec eksplicite — krahasohet me
+        // vlerën e VLERËSUAR nga MSBuild, jo me basename-in).
+        var expectedOwners = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["src/platform/Idata.Platform.Persistence/Idata.Platform.Persistence.csproj"]
+                = "Idata.Platform.Persistence",
+            ["src/platform/Modules/Identity/Infrastructure/Idata.Platform.Modules.Identity.Infrastructure.csproj"]
+                = "Idata.Platform.Modules.Identity.Infrastructure",
+        };
+        Assert.Equal(expectedOwners.Keys.Order(StringComparer.Ordinal),
+            PlatformProjectCatalog.StoreOwnerCanonicalPaths.Order(StringComparer.Ordinal));
+        foreach (var (ownerPath, expectedAssembly) in expectedOwners)
         {
             var owner = Assert.Single(catalog, entry => entry.CanonicalPath == ownerPath);
-            // AssemblyName-i i pritur i owner-it — identiteti i plotë §3.
-            Assert.Equal(Path.GetFileNameWithoutExtension(ownerPath), owner.AssemblyName);
+            Assert.Equal(expectedAssembly, owner.AssemblyName);
         }
 
         Assert.Equal(2, catalog.Count(PlatformProjectCatalog.IsStoreOwner));
-        // Unikësia e AssemblyName/path garantohet nga Discover (hedh në duplikat).
+        // Unikësia e AssemblyName/path/TargetPath garantohet nga Discover (hedh në duplikat).
         Assert.Equal(catalog.Length, catalog.Select(entry => entry.CanonicalPath).Distinct(StringComparer.Ordinal).Count());
+        Assert.Equal(catalog.Length, catalog.Select(entry => entry.CanonicalTargetPath).Distinct(StringComparer.Ordinal).Count());
     }
 
     /// <summary>
@@ -509,13 +663,15 @@ public sealed class ConventionEnforcementTests
         Assert.NotEmpty(catalog);
         Assert.Equal(2, catalog.Count(PlatformProjectCatalog.IsStoreOwner));
 
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
         var scanned = 0;
         foreach (var entry in catalog)
         {
-            var assemblyPath = Path.Combine(AppContext.BaseDirectory, $"{entry.AssemblyName}.dll");
-            // Receipt fail-closed: projekt production pa assembly të skanuar = FAIL.
-            Assert.True(File.Exists(assemblyPath),
-                $"Assembly i munguar për skanim IL: {entry.CanonicalPath} ({entry.AssemblyName})");
+            // §2-R4: skanohet EKZAKTËSISHT TargetPath-i i vlerësuar nga MSBuild
+            // (identiteti i binarit i verifikuar në DiscoverProduction) — zero
+            // lookup sipas basename-it në bin të testeve.
+            var assemblyPath = Path.Combine(
+                repoRoot, entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar));
 
             var findings = IdentityStoreIlScanner.Scan(assemblyPath, PlatformProjectCatalog.IsStoreOwner(entry));
             Assert.True(findings.Count == 0,
@@ -529,14 +685,16 @@ public sealed class ConventionEnforcementTests
     }
 
     /// <summary>
-    /// Prova DISKRIMINUESE e skanerit IL (fixtures në KËTË test assembly):
-    /// secili bypass i §5.3/§3.2/§3.3 kapet — Set&lt;record&gt;/typeof,
-    /// DbSet-et identity (përfshirë inherited `Users`), attribute-string,
-    /// getter DHE setter i inherited `IdentityUserClaim.Id`; inverse-t e
+    /// Prova DISKRIMINUESE e skanerit IL (fixtures në KËTË test assembly) —
+    /// mbulon SAKTËSISHT sipërfaqet e testuara (JO "çdo bypass"; reflektimi
+    /// dinamik = ENG-006 OPEN, untyped data access = ENG-007 OPEN):
+    /// Set&lt;record&gt;/typeof, DbSet-et identity (përfshirë inherited
+    /// `Users` + `UserPasskeys`, getter DHE setter), attribute-string,
+    /// getter/setter i inherited `IdentityUserClaim.Id`; inverse-t e
     /// lejuara (PlatformAppUsers) NUK raportohen.
     /// </summary>
     [Fact]
-    public void Skaneri_IL_kap_cdo_bypass_dhe_lejon_perdorimin_e_sakte()
+    public void Skaneri_IL_kap_bypass_et_e_mbuluara_dhe_lejon_perdorimin_e_sakte()
     {
         var findings = IdentityStoreIlScanner.Scan(
             Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"),
@@ -620,11 +778,73 @@ public sealed class ConventionEnforcementTests
     }
 
     /// <summary>
-    /// Dispozicioni MEKANIK i UserPasskeys (§5-R3): accessor-i ekziston në
+    /// AUTORITETI i accessor-ëve të DbSet-eve identity (§4-R4): derivohen
+    /// VETËM nga DbSet&lt;&gt; properties të deklaruara në zinxhirin
+    /// framework/base të closed IdentityUserContext&lt;...&gt; (public +
+    /// non-public instance) — properties e deklaruara nga PlatformDbContext
+    /// përjashtohen shprehimisht. Barazia e DYANSHME me inventarin e
+    /// skanerit: accessor i munguar OSE i vdekur = RED. UserPasskeys hyn
+    /// NATYRSHËM nga framework surface — jo nga listë manuale. Çdo accessor
+    /// i derivuar provohet me fixture te jo-owner (getter + setter).
+    /// </summary>
+    [Fact]
+    public void Accessoret_e_DbSet_identity_derivohen_nga_zinxhiri_framework_dhe_barazohen_me_skanerin()
+    {
+        var derived = new List<string>();
+        for (var type = typeof(PlatformDbContext).BaseType;
+             type is not null && type != typeof(DbContext);
+             type = type.BaseType)
+        {
+            foreach (var property in type.GetProperties(
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+            {
+                if (property.PropertyType.IsGenericType
+                    && property.PropertyType.GetGenericTypeDefinition() == typeof(Microsoft.EntityFrameworkCore.DbSet<>))
+                {
+                    if (property.GetMethod is not null)
+                    {
+                        derived.Add($"get_{property.Name}");
+                    }
+
+                    if (property.SetMethod is not null)
+                    {
+                        derived.Add($"set_{property.Name}");
+                    }
+                }
+            }
+        }
+
+        // Barazi e DYANSHME me inventarin e skanerit IL.
+        Assert.Equal(
+            derived.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray(),
+            IdentityStoreIlScanner.IdentityDbSetAccessors.Order(StringComparer.Ordinal).ToArray());
+
+        // UserPasskeys vjen natyrshëm nga framework surface (jo listë manuale).
+        Assert.Contains("get_UserPasskeys", derived);
+
+        // PlatformDbContext-only DbSets NUK hyjnë në këtë univers.
+        Assert.DoesNotContain(derived, accessor => accessor.Contains("PlatformAppUsers", StringComparison.Ordinal));
+        Assert.DoesNotContain(IdentityStoreIlScanner.IdentityDbSetAccessors,
+            accessor => accessor.Contains("PlatformAppUsers", StringComparison.Ordinal));
+
+        // ÇDO accessor i derivuar prodhon gjetje reale te jo-owner (fixtures
+        // getter + setter në IdentityBoundaryFixtures).
+        var findings = IdentityStoreIlScanner.Scan(
+            Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"),
+            isStoreOwner: false);
+        Assert.All(derived, accessor => Assert.Contains(findings, finding =>
+            finding.Kind == "identity-dbset-access"
+            && finding.Detail.StartsWith($"{accessor} ", StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// Dispozicioni MEKANIK i UserPasskeys (§4-R4): accessor-i ekziston në
     /// kontekst (IdentityUserContext i .NET 10) dhe tipi ekziston në
     /// framework-un e pinuar, POR entiteti NUK është aktivizuar në modelin
-    /// B.1 — aktivizimi është gate i detyrueshëm i B.2 (dokumentuar në
-    /// B.1 Record); skaneri e mbulon accessor-in që tani (fixture më lart).
+    /// B.1 — aktivizimi = B.2 CHANGE-CONTROL (scope + migrim + teste +
+    /// review i pavarur + Human Gate; meta-testi i plotësisë bëhet RED nëse
+    /// entiteti aktivizohet pa zgjerim të boundary); skaneri e mbulon
+    /// accessor-in që tani (fixtures më lart).
     /// </summary>
     [Fact]
     public void UserPasskeys_accessor_ekziston_por_entiteti_nuk_eshte_ne_modelin_B1()
@@ -692,6 +912,42 @@ public sealed class ConventionEnforcementTests
             var window = BitConverter.ToInt32(ilBytes, offset);
             Assert.DoesNotContain(window, forbiddenTokens);
         }
+
+        // Pjesa C (§7-R4): as USER-STRINGS e metodës së PoC-së nuk e përmbajnë
+        // emrin — ldstr (0x72) mbart token 0x70xxxxxx; mblidhen string-et reale
+        // të ngarkuara nga trupi dhe provohet që asnjëra s'përmban emrin e
+        // plotë të tipit dhe as fjalën e bashkuar "UserClaimRecord" (fragmentet
+        // e ndajnë brenda fjalës — bashkimi ndodh VETËM në runtime).
+        var loadedStrings = new List<string>();
+        for (var offset = 0; offset + 5 <= ilBytes.Length; offset++)
+        {
+            if (ilBytes[offset] != 0x72)
+            {
+                continue;
+            }
+
+            var stringToken = BitConverter.ToInt32(ilBytes, offset + 1);
+            if ((stringToken & 0x7F000000) != 0x70000000)
+            {
+                continue;
+            }
+
+            try
+            {
+                loadedStrings.Add(reader.GetUserString(
+                    System.Reflection.Metadata.Ecma335.MetadataTokens.UserStringHandle(stringToken & 0x00FFFFFF)));
+            }
+            catch (BadImageFormatException)
+            {
+                // Dritare false-positive e byte-scan-it — jo string real.
+            }
+        }
+
+        Assert.NotEmpty(loadedStrings); // pozitivi: fragmentet ekzistojnë si user-strings.
+        Assert.DoesNotContain(loadedStrings, value =>
+            value.Contains("Idata.Platform.Persistence.UserClaimRecord", StringComparison.Ordinal));
+        Assert.DoesNotContain(loadedStrings, value =>
+            value.Contains("UserClaimRecord", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -741,12 +997,29 @@ public sealed class ConventionEnforcementTests
         // §5-R3: accessor-i UserPasskeys (IdentityUserContext i .NET 10).
         internal static object UserPasskeysBypass(PlatformDbContext context) => context.UserPasskeys;
 
-        // §6-R3 (ENG-006): PoC i reflection-it dinamik — emër i ndërtuar
-        // copë-copë; nuk lë TypeRef/MemberRef/attribute blob të skanueshëm.
+        // §4-R4: SETTER-at e DbSet-eve identity — çdo accessor i derivuar nga
+        // zinxhiri framework duhet të prodhojë gjetje te jo-owner.
+        internal static void SetUsersBypass(PlatformDbContext context) => context.Users = null!;
+
+        internal static void SetUserClaimsBypass(PlatformDbContext context) => context.UserClaims = null!;
+
+        internal static void SetUserLoginsBypass(PlatformDbContext context) => context.UserLogins = null!;
+
+        internal static void SetUserTokensBypass(PlatformDbContext context) => context.UserTokens = null!;
+
+        internal static void SetUserPasskeysBypass(PlatformDbContext context) => context.UserPasskeys = null!;
+
+        // §7-R4 (ENG-006): PoC i reflection-it dinamik — emri ndërtohet
+        // VËRTET në runtime nga fragmente array + string.Concat (kompilatori
+        // NUK i palos dot në një literal të vetëm; edhe fjala "UserClaimRecord"
+        // është e ndarë në tre fragmente); zero TypeRef/MemberRef/attribute
+        // blob i skanueshëm drejt tipit.
         internal static object? DynamicReflectionResidualPoC()
         {
-            var constructedName = "Idata.Platform.Persistence." + "User" + "Claim" + "Record, Idata.Platform.Persistence";
-            return Type.GetType(constructedName);
+            string[] fragments =
+                ["Idata", ".Platform", ".Persistence", ".User", "Claim", "Record",
+                 ", Idata", ".Platform", ".Persistence"];
+            return Type.GetType(string.Concat(fragments));
         }
 
         internal static object AllowedPlatformAppUsers(PlatformDbContext context) => context.PlatformAppUsers;
@@ -869,8 +1142,10 @@ public sealed class ConventionEnforcementTests
         }
     }
 
-    /// <summary>§3-R3: assemblies të DERIVUARA nga katalogu kanonik — jo listë e hardcoded.</summary>
+    /// <summary>
+    /// §2-R4: assemblies të DERIVUARA nga katalogu kanonik dhe të ngarkuara me
+    /// identitet të VERIFIKUAR kundër TargetPath-it të vlerësuar (MVID match).
+    /// </summary>
     private static Assembly[] PlatformAssemblies() =>
-        [.. PlatformProjectCatalog.DiscoverProduction()
-            .Select(entry => Assembly.Load(entry.AssemblyName))];
+        [.. PlatformProjectCatalog.DiscoverProduction().Select(PlatformProjectCatalog.LoadVerified)];
 }

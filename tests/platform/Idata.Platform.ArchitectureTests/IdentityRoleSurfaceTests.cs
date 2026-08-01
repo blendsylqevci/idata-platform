@@ -1,6 +1,10 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using System.Collections.Immutable;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
+using System.Reflection.PortableExecutable;
 using Xunit;
 
 namespace Idata.Platform.ArchitectureTests;
@@ -18,10 +22,12 @@ namespace Idata.Platform.ArchitectureTests;
 /// </summary>
 public sealed class IdentityRoleSurfaceTests
 {
-    /// <summary>§3-R3: assemblies të DERIVUARA nga katalogu kanonik.</summary>
+    /// <summary>
+    /// §2-R4: assemblies të DERIVUARA nga katalogu kanonik (MSBuild real) dhe
+    /// të ngarkuara me identitet të VERIFIKUAR kundër TargetPath (MVID match).
+    /// </summary>
     private static readonly Assembly[] AllPlatformAssemblies =
-        [.. PlatformProjectCatalog.DiscoverProduction()
-            .Select(entry => Assembly.Load(entry.AssemblyName))];
+        [.. PlatformProjectCatalog.DiscoverProduction().Select(PlatformProjectCatalog.LoadVerified)];
 
     [Fact]
     public void Zero_Identity_roles_ne_asnje_tip_te_platformes_traversal_rekursiv()
@@ -148,6 +154,111 @@ public sealed class IdentityRoleSurfaceTests
     public void Traversal_nuk_jep_false_positive_mbi_tip_te_paster()
     {
         Assert.Null(RoleSurfaceScanner.FindForbiddenSurface(typeof(FixtureCleanType)));
+    }
+
+    // ── §6-R4: UNION — skanimi metadata assembly-wide i referencave
+    //    EKZEKUTUESE (edhe brenda trupave të metodave) ──
+
+    /// <summary>
+    /// §6-R4: ZERO referenca role në METADATA-t e plota të çdo assembly
+    /// production (TypeRef/TypeSpec/MemberRef/MethodSpec/StandaloneSig/
+    /// CustomAttribute të dekoduara strukturisht) — UNION me traversal-in e
+    /// deklaruar të reflection-it, JO zëvendësim i tij.
+    /// </summary>
+    [Fact]
+    public void Zero_role_referenca_ne_metadata_te_asnje_assembly_production()
+    {
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        var catalog = PlatformProjectCatalog.DiscoverProduction();
+        Assert.NotEmpty(catalog);
+        foreach (var entry in catalog)
+        {
+            var findings = RoleMetadataScanner.Scan(Path.Combine(
+                repoRoot, entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar)));
+            Assert.True(findings.Count == 0,
+                $"{entry.CanonicalPath}: {string.Join(" · ", findings.Select(f => $"{f.Table}[{f.Token}]:{f.Detail}"))}");
+        }
+    }
+
+    /// <summary>
+    /// §6-R4: fixtures BODY-ONLY — referenca role që jetojnë VETËM në trupin
+    /// e metodës (sipërfaqja e deklaruar është krejt benigne) kapen nga
+    /// tabela përkatëse e metadata-ve, me lokator determinist tabelë+token.
+    /// </summary>
+    [Theory]
+    [InlineData("TypeSpecification", "RoleManager`1")]
+    [InlineData("MethodSpecification", "IdentityRole`1")]
+    [InlineData("StandaloneSignature", "RoleManager`1")]
+    [InlineData("MemberReference", "get_Logger")]
+    [InlineData("TypeReference", "IdentityRole`1")]
+    [InlineData("CustomAttribute", "IdentityRole`1")]
+    public void Metadata_skan_kap_referencat_body_only_sipas_tabeles(string table, string detailFragment)
+    {
+        var findings = RoleMetadataScanner.Scan(
+            Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"));
+        Assert.Contains(findings, finding =>
+            finding.Table == table
+            && finding.Detail.Contains(detailFragment, StringComparison.Ordinal));
+        Assert.DoesNotContain(findings, finding => finding.Table.StartsWith("unreadable", StringComparison.Ordinal));
+    }
+
+    /// <summary>§6-R4: file i palexueshëm si PE/metadata = gjetje fail-closed, kurrë silent.</summary>
+    [Fact]
+    public void Metadata_skan_deshton_fail_closed_mbi_file_te_palexueshem()
+    {
+        var temporary = Path.Combine(Path.GetTempPath(), $"idata_jo_pe_{Guid.NewGuid():N}.dll");
+        try
+        {
+            File.WriteAllText(temporary, "kjo nuk eshte assembly");
+            var findings = RoleMetadataScanner.Scan(temporary);
+            Assert.Contains(findings, finding => finding.Table == "unreadable-assembly");
+        }
+        finally
+        {
+            File.Delete(temporary);
+        }
+    }
+
+    /// <summary>
+    /// §6-R4: matching-u i markerëve është arity-aware EKZAKT — emra që
+    /// thjesht fillojnë me markerin NUK kapen (jo loose StartsWith).
+    /// </summary>
+    [Fact]
+    public void Matching_i_markereve_eshte_arity_aware_jo_loose()
+    {
+        Assert.True(RoleMetadataScanner.IsRoleMarker("Microsoft.AspNetCore.Identity.IdentityRole"));
+        Assert.True(RoleMetadataScanner.IsRoleMarker("Microsoft.AspNetCore.Identity.IdentityRole`1"));
+        Assert.True(RoleMetadataScanner.IsRoleMarker("Microsoft.AspNetCore.Identity.RoleManager`1"));
+        Assert.False(RoleMetadataScanner.IsRoleMarker("Microsoft.AspNetCore.Identity.IdentityRoleX"));
+        Assert.False(RoleMetadataScanner.IsRoleMarker("Microsoft.AspNetCore.Identity.RoleManagerFactory"));
+        Assert.False(RoleMetadataScanner.IsRoleMarker("Microsoft.AspNetCore.Identity.IdentityRole`X"));
+    }
+
+    /// <summary>
+    /// Fixtures BODY-ONLY (§6-R4): sipërfaqja e deklaruar (parametra/return/
+    /// atribute) është krejt benigne — referenca role ekziston VETËM në IL
+    /// body → e padukshme për traversal-in e deklaruar, e kapshme VETËM nga
+    /// tabelat e metadata-ve.
+    /// </summary>
+    internal static class RoleBodyFixtures
+    {
+        internal static object BodyTypeOf()
+            => typeof(RoleManager<IdentityRole<Guid>>);
+
+        internal static IdentityBuilder BodyAddRoles(IdentityBuilder builder)
+            => builder.AddRoles<IdentityRole<Guid>>();
+
+        internal static void BodyLocalOnly()
+        {
+            RoleManager<IdentityRole<Guid>>? local = null;
+            _ = local;
+        }
+
+        internal static object? BodyMemberRefOnly()
+        {
+            RoleManager<IdentityRole<Guid>>? manager = null;
+            return manager?.Logger;
+        }
     }
 
     // ── Fixtures (VETËM në test assembly — jashtë platform assemblies) ──
@@ -636,5 +747,430 @@ internal static class RoleSurfaceScanner
         }
 
         return null;
+    }
+}
+
+/// <summary>
+/// Skaneri METADATA assembly-wide i referencave EKZEKUTUESE role (§6-R4) —
+/// UNION me RoleSurfaceScanner-in e deklaruar, JO zëvendësim. Iteron TË
+/// PLOTA (pa "kur janë relevante") tabelat: TypeReference · TypeSpecification
+/// · MemberReference (prind + firmë) · MethodSpecification ·
+/// StandaloneSignature (locals/firma metodash) · CustomAttribute (dekodim
+/// STRUKTUROR i vlerave — jo kërkim loose UTF-8). Matching-u i markerëve =
+/// EKZAKT ose arity-aware (kurrë StartsWith i lirshëm). Token/blob/firmë e
+/// palexueshme = gjetje fail-closed. Lokatori = tabela + tokeni metadata
+/// (determinist); dekodimi i IL bodies NUK është autoriteti i detektimit.
+/// </summary>
+internal static class RoleMetadataScanner
+{
+    internal sealed record MetadataFinding(string Assembly, string Table, string Token, string Detail);
+
+    internal static bool IsRoleMarker(string fullName)
+    {
+        // Emrat e serializuar të atributeve mbartin edhe assembly qualifier /
+        // argumente gjenerike — krahasohet vetëm pjesa emërore.
+        var comparable = fullName;
+        var cut = comparable.IndexOfAny([',', '[']);
+        if (cut >= 0)
+        {
+            comparable = comparable[..cut];
+        }
+
+        foreach (var marker in RoleSurfaceScanner.ForbiddenMarkers)
+        {
+            if (comparable.Equals(marker, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (comparable.Length > marker.Length + 1
+                && comparable[marker.Length] == '`'
+                && comparable.StartsWith(marker, StringComparison.Ordinal)
+                && comparable[(marker.Length + 1)..].All(char.IsAsciiDigit))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    internal static IReadOnlyList<MetadataFinding> Scan(string assemblyPath)
+    {
+        var assemblyName = Path.GetFileNameWithoutExtension(assemblyPath);
+        var findings = new List<MetadataFinding>();
+
+        try
+        {
+            using var stream = File.OpenRead(assemblyPath);
+            using var portableExecutable = new PEReader(stream);
+            var reader = portableExecutable.GetMetadataReader();
+            var collector = new CollectingTypeProvider(reader);
+
+            foreach (var handle in reader.TypeReferences)
+            {
+                var metadataToken = Token(handle);
+                try
+                {
+                    Report(findings, assemblyName, "TypeReference", metadataToken,
+                        FullNameOfReference(reader, handle));
+                }
+                catch (Exception exception)
+                {
+                    findings.Add(new(assemblyName, "unreadable-type-reference", metadataToken, exception.GetType().Name));
+                }
+            }
+
+            for (var row = 1; row <= reader.GetTableRowCount(TableIndex.TypeSpec); row++)
+            {
+                var handle = MetadataTokens.TypeSpecificationHandle(row);
+                var metadataToken = Token(handle);
+                try
+                {
+                    foreach (var name in collector.CollectTypeSpecification(handle))
+                    {
+                        Report(findings, assemblyName, "TypeSpecification", metadataToken, name);
+                    }
+                }
+                catch (Exception exception)
+                {
+                    findings.Add(new(assemblyName, "unreadable-type-specification", metadataToken, exception.GetType().Name));
+                }
+            }
+
+            foreach (var handle in reader.MemberReferences)
+            {
+                var metadataToken = Token(handle);
+                try
+                {
+                    var member = reader.GetMemberReference(handle);
+                    var memberName = reader.GetString(member.Name);
+                    var collected = new List<string>();
+                    collected.AddRange(collector.CollectParent(member.Parent));
+                    collected.AddRange(collector.CollectMemberSignature(member));
+                    foreach (var name in collected)
+                    {
+                        if (IsRoleMarker(name))
+                        {
+                            findings.Add(new(assemblyName, "MemberReference", metadataToken, $"{memberName} → {name}"));
+                        }
+                    }
+                }
+                catch (Exception exception)
+                {
+                    findings.Add(new(assemblyName, "unreadable-member-reference", metadataToken, exception.GetType().Name));
+                }
+            }
+
+            for (var row = 1; row <= reader.GetTableRowCount(TableIndex.MethodSpec); row++)
+            {
+                var handle = MetadataTokens.MethodSpecificationHandle(row);
+                var metadataToken = Token(handle);
+                try
+                {
+                    var specification = reader.GetMethodSpecification(handle);
+                    foreach (var name in collector.CollectMethodSpecification(specification))
+                    {
+                        Report(findings, assemblyName, "MethodSpecification", metadataToken, name);
+                    }
+                }
+                catch (Exception exception)
+                {
+                    findings.Add(new(assemblyName, "unreadable-method-specification", metadataToken, exception.GetType().Name));
+                }
+            }
+
+            for (var row = 1; row <= reader.GetTableRowCount(TableIndex.StandAloneSig); row++)
+            {
+                var handle = MetadataTokens.StandaloneSignatureHandle(row);
+                var metadataToken = $"0x{MetadataTokens.GetToken(handle):X8}";
+                try
+                {
+                    foreach (var name in collector.CollectStandaloneSignature(handle))
+                    {
+                        Report(findings, assemblyName, "StandaloneSignature", metadataToken, name);
+                    }
+                }
+                catch (Exception exception)
+                {
+                    findings.Add(new(assemblyName, "unreadable-standalone-signature", metadataToken, exception.GetType().Name));
+                }
+            }
+
+            foreach (var handle in reader.CustomAttributes)
+            {
+                var metadataToken = Token(handle);
+                try
+                {
+                    foreach (var name in collector.CollectCustomAttribute(handle))
+                    {
+                        Report(findings, assemblyName, "CustomAttribute", metadataToken, name);
+                    }
+                }
+                catch (Exception exception)
+                {
+                    findings.Add(new(assemblyName, "unreadable-custom-attribute", metadataToken, exception.GetType().Name));
+                }
+            }
+        }
+        catch (Exception exception)
+        {
+            findings.Add(new(assemblyName, "unreadable-assembly", "-", exception.GetType().Name));
+        }
+
+        return findings;
+    }
+
+    private static void Report(List<MetadataFinding> findings, string assembly, string table, string metadataToken, string name)
+    {
+        if (IsRoleMarker(name))
+        {
+            findings.Add(new(assembly, table, metadataToken, name));
+        }
+    }
+
+    private static string Token(EntityHandle handle) => $"0x{MetadataTokens.GetToken(handle):X8}";
+
+    private static string FullName(MetadataReader reader, StringHandle namespaceHandle, StringHandle nameHandle)
+    {
+        var typeNamespace = namespaceHandle.IsNil ? string.Empty : reader.GetString(namespaceHandle);
+        var typeName = reader.GetString(nameHandle);
+        return typeNamespace.Length == 0 ? typeName : $"{typeNamespace}.{typeName}";
+    }
+
+    /// <summary>Emri i plotë i një TypeRef me kompozim të tipeve NESTED (prind+fëmijë).</summary>
+    private static string FullNameOfReference(MetadataReader reader, TypeReferenceHandle handle)
+    {
+        var reference = reader.GetTypeReference(handle);
+        var name = FullName(reader, reference.Namespace, reference.Name);
+        return reference.ResolutionScope.Kind == HandleKind.TypeReference
+            ? $"{FullNameOfReference(reader, (TypeReferenceHandle)reference.ResolutionScope)}+{name}"
+            : name;
+    }
+
+    private static string FullNameOfDefinition(MetadataReader reader, TypeDefinitionHandle handle)
+    {
+        var definition = reader.GetTypeDefinition(handle);
+        var name = FullName(reader, definition.Namespace, definition.Name);
+        var declaring = definition.GetDeclaringType();
+        return declaring.IsNil ? name : $"{FullNameOfDefinition(reader, declaring)}+{name}";
+    }
+
+    /// <summary>
+    /// Provider MBLEDHËS: çdo TypeRef/TypeDef i hasur gjatë dekodimit të një
+    /// firme regjistrohet me emër të plotë — matching-u bëhet mbi setin e
+    /// mbledhur, jo mbi string-un e kompozuar (zero parsing i lirshëm).
+    /// </summary>
+    private sealed class CollectingTypeProvider(MetadataReader reader)
+        : ISignatureTypeProvider<string, object?>, ICustomAttributeTypeProvider<string>
+    {
+        private List<string>? currentCollection;
+
+        private List<string> Run(Action decode)
+        {
+            var collected = new List<string>();
+            currentCollection = collected;
+            try
+            {
+                decode();
+            }
+            finally
+            {
+                currentCollection = null;
+            }
+
+            return collected;
+        }
+
+        internal List<string> CollectTypeSpecification(TypeSpecificationHandle handle)
+            => Run(() =>
+            {
+                var blobReader = reader.GetBlobReader(reader.GetTypeSpecification(handle).Signature);
+                new SignatureDecoder<string, object?>(this, reader, genericContext: null).DecodeType(ref blobReader);
+            });
+
+        internal List<string> CollectParent(EntityHandle parent)
+            => Run(() =>
+            {
+                switch (parent.Kind)
+                {
+                    case HandleKind.TypeReference:
+                        Record(FullNameOfReference(reader, (TypeReferenceHandle)parent));
+                        break;
+                    case HandleKind.TypeDefinition:
+                        Record(FullNameOfDefinition(reader, (TypeDefinitionHandle)parent));
+                        break;
+                    case HandleKind.TypeSpecification:
+                        var blobReader = reader.GetBlobReader(
+                            reader.GetTypeSpecification((TypeSpecificationHandle)parent).Signature);
+                        new SignatureDecoder<string, object?>(this, reader, genericContext: null).DecodeType(ref blobReader);
+                        break;
+                }
+            });
+
+        internal List<string> CollectMemberSignature(MemberReference member)
+            => Run(() =>
+            {
+                switch (member.GetKind())
+                {
+                    case MemberReferenceKind.Method:
+                        member.DecodeMethodSignature(this, genericContext: null);
+                        break;
+                    case MemberReferenceKind.Field:
+                        member.DecodeFieldSignature(this, genericContext: null);
+                        break;
+                }
+            });
+
+        internal List<string> CollectMethodSpecification(MethodSpecification specification)
+            => Run(() => specification.DecodeSignature(this, genericContext: null));
+
+        internal List<string> CollectStandaloneSignature(StandaloneSignatureHandle handle)
+            => Run(() =>
+            {
+                var signature = reader.GetStandaloneSignature(handle);
+                if (signature.GetKind() == StandaloneSignatureKind.LocalVariables)
+                {
+                    signature.DecodeLocalSignature(this, genericContext: null);
+                }
+                else
+                {
+                    signature.DecodeMethodSignature(this, genericContext: null);
+                }
+            });
+
+        internal List<string> CollectCustomAttribute(CustomAttributeHandle handle)
+            => Run(() =>
+            {
+                var attribute = reader.GetCustomAttribute(handle);
+                var value = attribute.DecodeValue(this);
+                foreach (var argument in value.FixedArguments)
+                {
+                    RecordTypedArgument(argument.Value);
+                }
+
+                foreach (var named in value.NamedArguments)
+                {
+                    RecordTypedArgument(named.Value);
+                }
+            });
+
+        private void RecordTypedArgument(object? value)
+        {
+            switch (value)
+            {
+                case string serialized:
+                    // Vlerat Type serializohen si emra të plotë të kualifikuar.
+                    Record(serialized);
+                    break;
+                case ImmutableArray<CustomAttributeTypedArgument<string>> elements:
+                    foreach (var element in elements)
+                    {
+                        RecordTypedArgument(element.Value);
+                    }
+
+                    break;
+            }
+        }
+
+        private void Record(string fullName)
+        {
+            currentCollection?.Add(fullName);
+        }
+
+        // ── ISignatureTypeProvider ──
+
+        public string GetPrimitiveType(PrimitiveTypeCode typeCode) => typeCode.ToString();
+
+        public string GetTypeFromDefinition(MetadataReader metadataReader, TypeDefinitionHandle handle, byte rawTypeKind)
+        {
+            var fullName = FullNameOfDefinition(metadataReader, handle);
+            Record(fullName);
+            return fullName;
+        }
+
+        public string GetTypeFromReference(MetadataReader metadataReader, TypeReferenceHandle handle, byte rawTypeKind)
+        {
+            var fullName = FullNameOfReference(metadataReader, handle);
+            Record(fullName);
+            return fullName;
+        }
+
+        public string GetTypeFromSpecification(MetadataReader metadataReader, object? genericContext, TypeSpecificationHandle handle, byte rawTypeKind)
+        {
+            var blobReader = metadataReader.GetBlobReader(metadataReader.GetTypeSpecification(handle).Signature);
+            return new SignatureDecoder<string, object?>(this, metadataReader, genericContext).DecodeType(ref blobReader);
+        }
+
+        public string GetGenericInstantiation(string genericType, ImmutableArray<string> typeArguments)
+            => $"{genericType}<{string.Join(",", typeArguments)}>";
+
+        public string GetSZArrayType(string elementType) => $"{elementType}[]";
+
+        public string GetArrayType(string elementType, ArrayShape shape) => $"{elementType}[*]";
+
+        public string GetByReferenceType(string elementType) => $"{elementType}&";
+
+        public string GetPointerType(string elementType) => $"{elementType}*";
+
+        public string GetFunctionPointerType(MethodSignature<string> signature) => "fnptr";
+
+        public string GetGenericMethodParameter(object? genericContext, int index) => $"!!{index}";
+
+        public string GetGenericTypeParameter(object? genericContext, int index) => $"!{index}";
+
+        public string GetModifiedType(string modifier, string unmodifiedType, bool isRequired) => unmodifiedType;
+
+        public string GetPinnedType(string elementType) => elementType;
+
+        // ── ICustomAttributeTypeProvider ──
+
+        public string GetSystemType() => "System.Type";
+
+        public bool IsSystemType(string type) => type == "System.Type";
+
+        public string GetTypeFromSerializedName(string name)
+        {
+            Record(name);
+            return name;
+        }
+
+        /// <summary>
+        /// Zgjidhja REALE e tipit bazë të enum-eve në attribute blobs —
+        /// enum i pazgjidhshëm = përjashtim (gjetje fail-closed), kurrë
+        /// hamendësim i heshtur i gjerësisë.
+        /// </summary>
+        public PrimitiveTypeCode GetUnderlyingEnumType(string type)
+        {
+            var resolved = ResolveRuntimeType(type)
+                ?? throw new BadImageFormatException($"Enum i pazgjidhshëm në attribute blob: {type}");
+            return Type.GetTypeCode(resolved.GetEnumUnderlyingType()) switch
+            {
+                TypeCode.SByte => PrimitiveTypeCode.SByte,
+                TypeCode.Byte => PrimitiveTypeCode.Byte,
+                TypeCode.Int16 => PrimitiveTypeCode.Int16,
+                TypeCode.UInt16 => PrimitiveTypeCode.UInt16,
+                TypeCode.Int32 => PrimitiveTypeCode.Int32,
+                TypeCode.UInt32 => PrimitiveTypeCode.UInt32,
+                TypeCode.Int64 => PrimitiveTypeCode.Int64,
+                TypeCode.UInt64 => PrimitiveTypeCode.UInt64,
+                _ => throw new BadImageFormatException($"Tip bazë enum-i i papritur: {type}"),
+            };
+        }
+
+        private static Type? ResolveRuntimeType(string serializedName)
+        {
+            if (Type.GetType(serializedName, throwOnError: false) is { } direct)
+            {
+                return direct;
+            }
+
+            // Emrat pa assembly qualifier: kërko në assemblies e ngarkuara
+            // (framework-u i pinuar + referencat e testeve janë të pranishme).
+            var bareName = serializedName.Split(',')[0].Trim();
+            return AppDomain.CurrentDomain.GetAssemblies()
+                .Select(assembly => assembly.GetType(bareName, throwOnError: false))
+                .FirstOrDefault(candidate => candidate is not null);
+        }
     }
 }

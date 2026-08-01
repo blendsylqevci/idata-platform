@@ -70,13 +70,34 @@ internal static class IdentitySecurityDependencyInventory
         };
 
     /// <summary>
-    /// Familje provider-ësh/protokolli të ndaluara (ADR-028 B.1) — skanohen
-    /// mbi çdo paketë të çdo lockfile-i, pavarësisht closure-it.
+    /// Përputhje familjeje me KUFI PIKE (§5-R4): emër EKZAKT ose
+    /// `familje.`-prefiks — JO StartsWith i lirshëm (emra si
+    /// "Microsoft.AspNetCore.CryptographyFake" NUK përputhen).
+    /// </summary>
+    internal static bool MatchesFamily(string packageName, string family)
+        => packageName.Equals(family, StringComparison.OrdinalIgnoreCase)
+           || packageName.StartsWith(family + ".", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Familje provider-ësh/protokolli të NDALUARA (ADR-028 B.1) — hapi 1 i
+    /// rendit normativ: gjetje GJITHMONË, fitojnë mbi manifest/closure/çdo
+    /// kategori tjetër; skanohen mbi çdo paketë të çdo lockfile-i.
     /// </summary>
     internal static readonly string[] ForbiddenFamilies =
-        ["IdentityServer", "Duende", "Auth0", "Okta",
+        ["IdentityServer", "IdentityServer4", "Duende", "Auth0", "Okta",
          "OpenIddict.Server", "OpenIddict.Validation", "OpenIddict.Client", "OpenIddict.AspNetCore",
          "Microsoft.AspNetCore.Identity.UI"];
+
+    /// <summary>
+    /// Familje security/identity/auth që kërkojnë REVIEW (§5-R4) — hapi 3 i
+    /// rendit normativ: çdo paketë e këtyre familjeve JASHTË closure-it të
+    /// aprovuar = gjetje. Asnjë paketë s'kapërcehet para klasifikimit.
+    /// </summary>
+    internal static readonly string[] ReviewRequiredFamilies =
+        ["OpenIddict", "Microsoft.AspNetCore.Identity", "Microsoft.Extensions.Identity",
+         "Microsoft.AspNetCore.Authentication", "Microsoft.AspNetCore.DataProtection",
+         "Microsoft.AspNetCore.Cryptography", "Microsoft.IdentityModel", "System.IdentityModel",
+         "Microsoft.Bcl.Cryptography"];
 
     private static readonly string[] AllowedTypes = ["Direct", "Transitive", "CentralTransitive"];
 
@@ -93,7 +114,7 @@ internal static class IdentitySecurityDependencyInventory
          "Microsoft.IdentityModel", "Microsoft.AspNetCore.Cryptography", "Microsoft.Bcl.Cryptography"];
 
     internal static bool IsIdentitySpecific(string packageName)
-        => IdentitySpecificFamilies.Any(family => packageName.StartsWith(family, StringComparison.OrdinalIgnoreCase));
+        => IdentitySpecificFamilies.Any(family => MatchesFamily(packageName, family));
 
     /// <summary>
     /// Closure-i REAL i një lockfile-i: BFS cycle-safe nga rrënjët e
@@ -154,51 +175,63 @@ internal static class IdentitySecurityDependencyInventory
         {
             foreach (var dependency in framework.Value.EnumerateObject())
             {
-                // Familjet e ndaluara: mbi ÇDO paketë, edhe jashtë closure.
-                foreach (var family in ForbiddenFamilies)
+                // RENDI NORMATIV §5-R4 — çdo paketë KLASIFIKOHET para çdo skip-i.
+
+                // 1. Familjet e NDALUARA: gjetje GJITHMONË — fitojnë mbi
+                //    manifest, closure dhe çdo kategori tjetër.
+                if (ForbiddenFamilies.Any(family => MatchesFamily(dependency.Name, family)))
                 {
-                    if (dependency.Name.StartsWith(family, StringComparison.OrdinalIgnoreCase))
+                    findings.Add($"{canonicalProjectPath}: familje provider-i e ndaluar '{dependency.Name}'");
+                    continue;
+                }
+
+                // 2. Brenda closure-it të aprovuar: valido manifest/version/
+                //    lloj/owner (deny-by-default brenda closure).
+                if (closure.Contains(dependency.Name))
+                {
+                    if (!dependency.Value.TryGetProperty("type", out var typeElement)
+                        || typeElement.GetString() is not { } dependencyType
+                        || !dependency.Value.TryGetProperty("resolved", out var resolvedElement)
+                        || resolvedElement.GetString() is not { } resolved)
                     {
-                        findings.Add($"{canonicalProjectPath}: familje provider-i e ndaluar '{dependency.Name}'");
+                        findings.Add($"{canonicalProjectPath}: metadata e palexueshme për '{dependency.Name}' (type/resolved mungon)");
+                        continue;
                     }
-                }
 
-                if (!closure.Contains(dependency.Name))
-                {
-                    continue; // Jashtë closure + jashtë familjeve = i palidhur, zero false positive.
-                }
+                    if (!ClosureManifest.TryGetValue(dependency.Name, out var expectedVersion))
+                    {
+                        findings.Add($"{canonicalProjectPath}: paketë e PA-inventarizuar në closure '{dependency.Name}'");
+                        continue;
+                    }
 
-                if (!dependency.Value.TryGetProperty("type", out var typeElement)
-                    || typeElement.GetString() is not { } dependencyType
-                    || !dependency.Value.TryGetProperty("resolved", out var resolvedElement)
-                    || resolvedElement.GetString() is not { } resolved)
-                {
-                    findings.Add($"{canonicalProjectPath}: metadata e palexueshme për '{dependency.Name}' (type/resolved mungon)");
+                    if (resolved != expectedVersion)
+                    {
+                        findings.Add($"{canonicalProjectPath}: version i panjohur {dependency.Name}={resolved} (pritej {expectedVersion})");
+                    }
+
+                    if (!AllowedTypes.Contains(dependencyType))
+                    {
+                        findings.Add($"{canonicalProjectPath}: lloj i palejuar '{dependencyType}' për {dependency.Name}");
+                    }
+                    else if (dependencyType == "Direct"
+                        && IsIdentitySpecific(dependency.Name)
+                        && (!isStoreOwner || !ApprovedRoots.ContainsKey(dependency.Name)))
+                    {
+                        findings.Add($"{canonicalProjectPath}: Direct i PAAUTORIZUAR për {dependency.Name}");
+                    }
+
                     continue;
                 }
 
-                if (!ClosureManifest.TryGetValue(dependency.Name, out var expectedVersion))
+                // 3. Familje security/identity/auth REVIEW-REQUIRED jashtë
+                //    closure-it të aprovuar = gjetje.
+                if (ReviewRequiredFamilies.Any(family => MatchesFamily(dependency.Name, family)))
                 {
-                    // Deny-by-default BRENDA closure: emër i panjohur = gjetje.
-                    findings.Add($"{canonicalProjectPath}: paketë e PA-inventarizuar në closure '{dependency.Name}'");
+                    findings.Add($"{canonicalProjectPath}: paketë security/identity JASHTË aprovimit '{dependency.Name}'");
                     continue;
                 }
 
-                if (resolved != expectedVersion)
-                {
-                    findings.Add($"{canonicalProjectPath}: version i panjohur {dependency.Name}={resolved} (pritej {expectedVersion})");
-                }
-
-                if (!AllowedTypes.Contains(dependencyType))
-                {
-                    findings.Add($"{canonicalProjectPath}: lloj i palejuar '{dependencyType}' për {dependency.Name}");
-                }
-                else if (dependencyType == "Direct"
-                    && IsIdentitySpecific(dependency.Name)
-                    && (!isStoreOwner || !ApprovedRoots.ContainsKey(dependency.Name)))
-                {
-                    findings.Add($"{canonicalProjectPath}: Direct i PAAUTORIZUAR për {dependency.Name}");
-                }
+                // 4. Realisht e palidhur — skip VETËM PAS klasifikimit.
             }
         }
 

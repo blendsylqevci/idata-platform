@@ -26,23 +26,109 @@ public sealed class DependencyDirectionTests
 {
     private const string PlatformPrefix = "Idata.Platform";
 
-    private static readonly Assembly PsDomain = Assembly.Load("Idata.Platform.Modules.PlatformStatus.Domain");
-    private static readonly Assembly PsApplication = Assembly.Load("Idata.Platform.Modules.PlatformStatus.Application");
-    private static readonly Assembly PsInfrastructure = Assembly.Load("Idata.Platform.Modules.PlatformStatus.Infrastructure");
-    private static readonly Assembly PsPresentation = Assembly.Load("Idata.Platform.Modules.PlatformStatus.Presentation");
-    private static readonly Assembly AcDomain = Assembly.Load("Idata.Platform.Modules.AccessControl.Domain");
-    private static readonly Assembly AcApplication = Assembly.Load("Idata.Platform.Modules.AccessControl.Application");
-    private static readonly Assembly AcInfrastructure = Assembly.Load("Idata.Platform.Modules.AccessControl.Infrastructure");
-    private static readonly Assembly AcPresentation = Assembly.Load("Idata.Platform.Modules.AccessControl.Presentation");
-    private static readonly Assembly IdentityInfrastructure = Assembly.Load("Idata.Platform.Modules.Identity.Infrastructure");
-    private static readonly Assembly Persistence = Assembly.Load("Idata.Platform.Persistence");
-    private static readonly Assembly DbMigrator = Assembly.Load("Idata.Platform.DbMigrator");
-    private static readonly Assembly ApiHost = Assembly.Load("Idata.Platform.Api");
+    /// <summary>
+    /// §3-R4: ngarkimi i një projekti VETËM me path kanonik nga katalogu
+    /// MSBuild-real, me identitet të verifikuar kundër TargetPath (MVID).
+    /// Referencat eksplicite per-layer mbeten, por NUK janë inventari global.
+    /// </summary>
+    private static Assembly ByCanonicalPath(string canonicalPath)
+        => PlatformProjectCatalog.LoadVerified(PlatformProjectCatalog.DiscoverProduction()
+            .Single(entry => entry.CanonicalPath == canonicalPath));
 
+    private static readonly Assembly PsDomain =
+        ByCanonicalPath("src/platform/Modules/PlatformStatus/Domain/Idata.Platform.Modules.PlatformStatus.Domain.csproj");
+    private static readonly Assembly PsApplication =
+        ByCanonicalPath("src/platform/Modules/PlatformStatus/Application/Idata.Platform.Modules.PlatformStatus.Application.csproj");
+    private static readonly Assembly PsInfrastructure =
+        ByCanonicalPath("src/platform/Modules/PlatformStatus/Infrastructure/Idata.Platform.Modules.PlatformStatus.Infrastructure.csproj");
+    private static readonly Assembly PsPresentation =
+        ByCanonicalPath("src/platform/Modules/PlatformStatus/Presentation/Idata.Platform.Modules.PlatformStatus.Presentation.csproj");
+    private static readonly Assembly AcDomain =
+        ByCanonicalPath("src/platform/Modules/AccessControl/Domain/Idata.Platform.Modules.AccessControl.Domain.csproj");
+    private static readonly Assembly AcApplication =
+        ByCanonicalPath("src/platform/Modules/AccessControl/Application/Idata.Platform.Modules.AccessControl.Application.csproj");
+    private static readonly Assembly AcInfrastructure =
+        ByCanonicalPath("src/platform/Modules/AccessControl/Infrastructure/Idata.Platform.Modules.AccessControl.Infrastructure.csproj");
+    private static readonly Assembly AcPresentation =
+        ByCanonicalPath("src/platform/Modules/AccessControl/Presentation/Idata.Platform.Modules.AccessControl.Presentation.csproj");
+    private static readonly Assembly IdentityInfrastructure =
+        ByCanonicalPath("src/platform/Modules/Identity/Infrastructure/Idata.Platform.Modules.Identity.Infrastructure.csproj");
+    private static readonly Assembly Persistence =
+        ByCanonicalPath("src/platform/Idata.Platform.Persistence/Idata.Platform.Persistence.csproj");
+    private static readonly Assembly DbMigrator =
+        ByCanonicalPath("src/platform/Idata.Platform.DbMigrator/Idata.Platform.DbMigrator.csproj");
+    private static readonly Assembly ApiHost =
+        ByCanonicalPath("src/platform/Idata.Platform.Api/Idata.Platform.Api.csproj");
+
+    /// <summary>§3-R4: inventari GLOBAL = i DERIVUAR nga katalogu, jo lista e emërtuar.</summary>
     private static Assembly[] AllPlatformAssemblies =>
-        [PsDomain, PsApplication, PsInfrastructure, PsPresentation,
-         AcDomain, AcApplication, AcInfrastructure, AcPresentation,
-         IdentityInfrastructure, Persistence, DbMigrator, ApiHost];
+        [.. PlatformProjectCatalog.DiscoverProduction().Select(PlatformProjectCatalog.LoadVerified)];
+
+    private sealed record ProjectClassification(string CanonicalPath, string Category, string? Module, string? Layer);
+
+    private static readonly string[] KnownLayers = ["Domain", "Application", "Infrastructure", "Presentation"];
+
+    /// <summary>
+    /// §3-R4: klasifikimi dependency-direction i ÇDO projekti të katalogut —
+    /// projekt që s'klasifikohet dot = FAIL i qartë (moduli/projekti i 13-të
+    /// s'humbet kurrë në heshtje).
+    /// </summary>
+    private static ProjectClassification Classify(PlatformProjectCatalog.ProjectEntry entry)
+    {
+        var segments = entry.CanonicalPath.Split('/');
+        if (segments is ["src", "platform", "Modules", var module, var layer, _] && KnownLayers.Contains(layer))
+        {
+            return new ProjectClassification(entry.CanonicalPath, "module-layer", module, layer);
+        }
+
+        return entry.CanonicalPath switch
+        {
+            "src/platform/Idata.Platform.Persistence/Idata.Platform.Persistence.csproj"
+                => new ProjectClassification(entry.CanonicalPath, "shared-persistence", null, null),
+            "src/platform/Idata.Platform.DbMigrator/Idata.Platform.DbMigrator.csproj"
+                => new ProjectClassification(entry.CanonicalPath, "migration-host", null, null),
+            "src/platform/Idata.Platform.Api/Idata.Platform.Api.csproj"
+                => new ProjectClassification(entry.CanonicalPath, "composition-root", null, null),
+            _ => throw new InvalidOperationException(
+                $"Projekt i PAKLASIFIKUAR nga dependency-direction guards: {entry.CanonicalPath}"),
+        };
+    }
+
+    /// <summary>
+    /// Meta-testi i BARAZISË §3-R4: catalog == evaluated assemblies ==
+    /// assemblies të skanuara == projekte të klasifikuara — një projekt i ri
+    /// që del nga cilido set e bën testin RED.
+    /// </summary>
+    [Fact]
+    public void Universi_global_katalog_assemblies_skanime_klasifikime_jane_te_barabarta()
+    {
+        var catalog = PlatformProjectCatalog.DiscoverProduction();
+        Assert.NotEmpty(catalog);
+
+        // Çdo projekt klasifikohet (throw = RED me diagnostikë të qartë).
+        var classified = catalog.Select(Classify).ToArray();
+        Assert.Equal(catalog.Length, classified.Length);
+        Assert.Equal(
+            catalog.Select(entry => entry.CanonicalPath).Order(StringComparer.Ordinal),
+            classified.Select(c => c.CanonicalPath).Order(StringComparer.Ordinal));
+
+        // Assemblies e vlerësuara == assemblies e ngarkuara/skanuara.
+        var evaluatedNames = catalog.Select(entry => entry.AssemblyName).Order(StringComparer.Ordinal).ToArray();
+        var loadedNames = AllPlatformAssemblies
+            .Select(assembly => assembly.GetName().Name ?? string.Empty)
+            .Order(StringComparer.Ordinal).ToArray();
+        Assert.Equal(evaluatedNames, loadedNames);
+
+        // Referencat e emërtuara per-layer mbulojnë SAKTËSISHT të njëjtin set —
+        // modul/projekt i ri i paklasifikuar në asserts eksplicite = RED.
+        var namedFieldNames = ((Assembly[])
+            [PsDomain, PsApplication, PsInfrastructure, PsPresentation,
+             AcDomain, AcApplication, AcInfrastructure, AcPresentation,
+             IdentityInfrastructure, Persistence, DbMigrator, ApiHost])
+            .Select(assembly => assembly.GetName().Name ?? string.Empty)
+            .Order(StringComparer.Ordinal).ToArray();
+        Assert.Equal(evaluatedNames, namedFieldNames);
+    }
 
     /// <summary>Referencat DIREKTE `Idata.Platform.*` të një assembly.</summary>
     private static string[] DirectPlatformReferencesOf(Assembly assembly) =>
@@ -251,13 +337,10 @@ public sealed class DependencyDirectionTests
     [Fact]
     public void Cdo_referece_Idata_eshte_brenda_setit_te_njohur_te_platformes()
     {
-        string[] known =
-            ["Idata.Platform.Api", "Idata.Platform.DbMigrator", "Idata.Platform.Persistence",
-             "Idata.Platform.Modules.AccessControl.Domain", "Idata.Platform.Modules.AccessControl.Application",
-             "Idata.Platform.Modules.AccessControl.Infrastructure", "Idata.Platform.Modules.AccessControl.Presentation",
-             "Idata.Platform.Modules.Identity.Infrastructure",
-             "Idata.Platform.Modules.PlatformStatus.Domain", "Idata.Platform.Modules.PlatformStatus.Application",
-             "Idata.Platform.Modules.PlatformStatus.Infrastructure", "Idata.Platform.Modules.PlatformStatus.Presentation"];
+        // §3-R4: seti i njohur = i DERIVUAR nga katalogu (jo listë e hardcoded).
+        var known = PlatformProjectCatalog.DiscoverProduction()
+            .Select(entry => entry.AssemblyName)
+            .ToHashSet(StringComparer.Ordinal);
         foreach (var assembly in AllPlatformAssemblies)
         {
             foreach (var name in DirectPlatformReferencesOf(assembly))
