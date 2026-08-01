@@ -117,6 +117,249 @@ internal static class IdentitySecurityDependencyInventory
         => IdentitySpecificFamilies.Any(family => MatchesFamily(packageName, family));
 
     /// <summary>
+    /// §2-R5 — AUTORITETI EKSPLICIT i package roots DIREKTE, i indeksuar me
+    /// path kanonik repo-relative të csproj-it: emër → version i pritur.
+    /// Lista është E SHKRUAR DORAZI (e versionuar/review-ueshme në git) dhe
+    /// NUK derivohet nga graph-i aktual — përndryshe kontrolli do të ishte
+    /// tautologjik dhe do të aprovonte çdo paketë të re. Garancia: asnjë
+    /// package root i ri pa update të review-uar të këtij autoriteti — JO
+    /// pretendim se kuptohet semantikisht çdo emër NuGet.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> DirectPackageAuthority =
+        new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal)
+        {
+            ["src/platform/Idata.Platform.Api/Idata.Platform.Api.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Mediator.SourceGenerator"] = "3.0.2",
+                ["Microsoft.AspNetCore.OpenApi"] = "10.0.10",
+                ["Microsoft.Extensions.ApiDescription.Server"] = "10.0.10",
+                ["Microsoft.OpenApi"] = "2.11.0",
+                ["Scalar.AspNetCore"] = "2.16.16",
+            },
+            ["src/platform/Idata.Platform.DbMigrator/Idata.Platform.DbMigrator.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Microsoft.EntityFrameworkCore.Design"] = "10.0.10",
+            },
+            ["src/platform/Idata.Platform.Persistence/Idata.Platform.Persistence.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Microsoft.AspNetCore.Identity.EntityFrameworkCore"] = "10.0.10",
+                ["Microsoft.EntityFrameworkCore"] = "10.0.10",
+                ["Microsoft.EntityFrameworkCore.Relational"] = "10.0.10",
+                ["Npgsql"] = "10.0.3",
+                ["Npgsql.EntityFrameworkCore.PostgreSQL"] = "10.0.3",
+                ["OpenIddict.EntityFrameworkCore"] = "7.6.0",
+            },
+            ["src/platform/Modules/AccessControl/Application/Idata.Platform.Modules.AccessControl.Application.csproj"]
+                = new Dictionary<string, string>(StringComparer.Ordinal),
+            ["src/platform/Modules/AccessControl/Domain/Idata.Platform.Modules.AccessControl.Domain.csproj"]
+                = new Dictionary<string, string>(StringComparer.Ordinal),
+            ["src/platform/Modules/AccessControl/Infrastructure/Idata.Platform.Modules.AccessControl.Infrastructure.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Microsoft.EntityFrameworkCore"] = "10.0.10",
+                ["Microsoft.EntityFrameworkCore.Relational"] = "10.0.10",
+                ["Npgsql"] = "10.0.3",
+            },
+            ["src/platform/Modules/AccessControl/Presentation/Idata.Platform.Modules.AccessControl.Presentation.csproj"]
+                = new Dictionary<string, string>(StringComparer.Ordinal),
+            ["src/platform/Modules/Identity/Infrastructure/Idata.Platform.Modules.Identity.Infrastructure.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Microsoft.AspNetCore.Identity.EntityFrameworkCore"] = "10.0.10",
+                ["OpenIddict.EntityFrameworkCore"] = "7.6.0",
+            },
+            ["src/platform/Modules/PlatformStatus/Application/Idata.Platform.Modules.PlatformStatus.Application.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Mediator.Abstractions"] = "3.0.2",
+            },
+            ["src/platform/Modules/PlatformStatus/Domain/Idata.Platform.Modules.PlatformStatus.Domain.csproj"]
+                = new Dictionary<string, string>(StringComparer.Ordinal),
+            ["src/platform/Modules/PlatformStatus/Infrastructure/Idata.Platform.Modules.PlatformStatus.Infrastructure.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Microsoft.EntityFrameworkCore"] = "10.0.10",
+                ["Microsoft.EntityFrameworkCore.Relational"] = "10.0.10",
+                ["Npgsql"] = "10.0.3",
+                ["Npgsql.EntityFrameworkCore.PostgreSQL"] = "10.0.3",
+            },
+            ["src/platform/Modules/PlatformStatus/Presentation/Idata.Platform.Modules.PlatformStatus.Presentation.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Mediator.Abstractions"] = "3.0.2",
+            },
+            ["tests/platform/Idata.Platform.ArchitectureTests/Idata.Platform.ArchitectureTests.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Microsoft.NET.Test.Sdk"] = "18.8.1",
+                ["xunit.runner.visualstudio"] = "3.1.5",
+                ["xunit.v3"] = "3.2.2",
+            },
+            ["tests/platform/Idata.Platform.IntegrationTests/Idata.Platform.IntegrationTests.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Microsoft.AspNetCore.Mvc.Testing"] = "10.0.10",
+                ["Microsoft.NET.Test.Sdk"] = "18.8.1",
+                ["xunit.runner.visualstudio"] = "3.1.5",
+                ["xunit.v3"] = "3.2.2",
+            },
+            ["tests/platform/Idata.Platform.UnitTests/Idata.Platform.UnitTests.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Microsoft.NET.Test.Sdk"] = "18.8.1",
+                ["xunit.runner.visualstudio"] = "3.1.5",
+                ["xunit.v3"] = "3.2.2",
+            },
+        };
+
+    /// <summary>
+    /// §2B-R5: përjashtime EKSPLICITE build/analyzer-only me arsyetim — sot
+    /// BOSH (asnjë paketë nuk e kërkon; të gjitha klasifikohen si Direct të
+    /// autorizuara, të arritshme nga rrënjët, ose referenca projektesh).
+    /// Çdo hyrje e ardhshme kërkon arsyetim + review.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, string> BuildOnlyExemptions =
+        new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>
+    /// §2B-R5 — KLASIFIKIMI TOTAL i një lockfile-i (autoriteti kryesor; familjet
+    /// e §5-R4 mbeten defense-in-depth): çdo hyrje duhet të jetë saktësisht
+    /// (1) Direct i autorizuar nga <paramref name="directAuthority"/> me emër+
+    /// version, (2) referencë projekti (`Project` — drejtimi mbulohet nga
+    /// DependencyDirectionTests; edges të saj marrin pjesë në arritshmëri),
+    /// (3) Transitive/CentralTransitive i ARRITSHËM nga një Direct i
+    /// autorizuar ose referencë projekti, ose (4) përjashtim eksplicit
+    /// build-only me arsyetim. Direct i panjohur / hyrje autoriteti e vdekur /
+    /// e paarritshme / lloj a metadata e palexueshme / edge drejt node-i të
+    /// munguar = GJETJE. Zero fall-through i heshtur.
+    /// </summary>
+    internal static List<string> AuditPackagesTotal(
+        string canonicalProjectPath, JsonDocument lockfile, IReadOnlyDictionary<string, string> directAuthority)
+        => AuditPackagesTotal(canonicalProjectPath, lockfile, directAuthority,
+            new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal));
+
+    /// <summary>
+    /// Varianti i plotë: <paramref name="knownProjectAuthorities"/> harton
+    /// emrat e projekteve platformë → autoriteti i tyre direkt — sepse në
+    /// lockfile-in e një konsumatori, referencat TRANZITIVE të projekteve
+    /// shfaqen vetëm si edges (pa node); zgjerimi bëhet me rrënjët e
+    /// AUTORIZUARA të atij projekti (autoritet i review-uar — JO graph-i
+    /// aktual, pra jo-tautologjik).
+    /// </summary>
+    internal static List<string> AuditPackagesTotal(
+        string canonicalProjectPath, JsonDocument lockfile,
+        IReadOnlyDictionary<string, string> directAuthority,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> knownProjectAuthorities)
+    {
+        var findings = new List<string>();
+        foreach (var framework in lockfile.RootElement.GetProperty("dependencies").EnumerateObject())
+        {
+            var entries = framework.Value.EnumerateObject()
+                .ToDictionary(dependency => dependency.Name, dependency => dependency.Value, StringComparer.Ordinal);
+
+            var reachableRoots = new List<string>();
+            var seenDirect = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (name, node) in entries)
+            {
+                if (!node.TryGetProperty("type", out var typeElement)
+                    || typeElement.GetString() is not { } entryType)
+                {
+                    findings.Add($"{canonicalProjectPath}: metadata e palexueshme — '{name}' pa 'type'");
+                    continue;
+                }
+
+                switch (entryType)
+                {
+                    case "Direct":
+                        seenDirect.Add(name);
+                        if (!directAuthority.TryGetValue(name, out var expectedVersion))
+                        {
+                            findings.Add($"{canonicalProjectPath}: package root DIREKT i PAAUTORIZUAR '{name}'");
+                            continue;
+                        }
+
+                        if (!node.TryGetProperty("resolved", out var resolvedElement)
+                            || resolvedElement.GetString() is not { } resolved)
+                        {
+                            findings.Add($"{canonicalProjectPath}: metadata e palexueshme — Direct '{name}' pa 'resolved'");
+                            continue;
+                        }
+
+                        if (resolved != expectedVersion)
+                        {
+                            findings.Add($"{canonicalProjectPath}: version i paautorizuar {name}={resolved} (autoriteti: {expectedVersion})");
+                        }
+
+                        reachableRoots.Add(name);
+                        break;
+                    case "Project":
+                        reachableRoots.Add(name);
+                        break;
+                    case "Transitive" or "CentralTransitive":
+                        break;
+                    default:
+                        findings.Add($"{canonicalProjectPath}: lloj i palejuar '{entryType}' për '{name}'");
+                        break;
+                }
+            }
+
+            // Hyrje autoriteti që s'ekziston më realisht = GJETJE (autoritet i vdekur).
+            foreach (var authorized in directAuthority.Keys)
+            {
+                if (!seenDirect.Contains(authorized))
+                {
+                    findings.Add($"{canonicalProjectPath}: hyrje autoriteti E VDEKUR '{authorized}' (s'është më Direct real)");
+                }
+            }
+
+            // Arritshmëria BFS nga rrënjët e autorizuara + referencat e projekteve.
+            var reachable = new HashSet<string>(StringComparer.Ordinal);
+            var stack = new Stack<string>(reachableRoots);
+            while (stack.Count > 0)
+            {
+                var name = stack.Pop();
+                if (!reachable.Add(name))
+                {
+                    continue;
+                }
+
+                if (!entries.TryGetValue(name, out var node))
+                {
+                    // Referencë TRANZITIVE projekti (edge pa node): zgjerohet
+                    // me rrënjët e AUTORIZUARA të atij projekti; çdo emër
+                    // tjetër i munguar = GJETJE fail-closed.
+                    if (knownProjectAuthorities.TryGetValue(name, out var projectAuthority))
+                    {
+                        foreach (var authorizedRoot in projectAuthority.Keys)
+                        {
+                            stack.Push(authorizedRoot);
+                        }
+
+                        continue;
+                    }
+
+                    findings.Add($"{canonicalProjectPath}: edge drejt node-i të MUNGUAR '{name}'");
+                    continue;
+                }
+
+                if (node.TryGetProperty("dependencies", out var edges))
+                {
+                    foreach (var edge in edges.EnumerateObject())
+                    {
+                        stack.Push(edge.Name);
+                    }
+                }
+            }
+
+            // Klasifikimi total: asnjë hyrje pa kategori.
+            foreach (var (name, node) in entries)
+            {
+                if (node.TryGetProperty("type", out var typeElement)
+                    && typeElement.GetString() is "Transitive" or "CentralTransitive"
+                    && !reachable.Contains(name)
+                    && !BuildOnlyExemptions.ContainsKey(name))
+                {
+                    findings.Add($"{canonicalProjectPath}: paketë E PAARRITSHME nga rrënjët e autorizuara '{name}'");
+                }
+            }
+        }
+
+        return findings;
+    }
+
+    /// <summary>
     /// Closure-i REAL i një lockfile-i: BFS cycle-safe nga rrënjët e
     /// aprovuara mbi edges "dependencies". Edge drejt emri të munguar në
     /// seksionin e framework-ut raportohet si metadata e palexueshme.

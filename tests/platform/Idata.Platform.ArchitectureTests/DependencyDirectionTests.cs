@@ -256,9 +256,214 @@ public sealed class DependencyDirectionTests
                 or "Idata.Platform.Modules.PlatformStatus.Presentation"
                 or "Idata.Platform.Modules.AccessControl.Presentation");
 
+    /// <summary>§3-R5: DEFENSE-IN-DEPTH — NUK është më autoriteti (autoriteti = klasifikimi TOTAL më poshtë).</summary>
     private static readonly string[] IdentitySurfacePrefixes =
         ["OpenIddict", "IdentityServer", "Duende", "Microsoft.AspNetCore.Identity",
          "Microsoft.Extensions.Identity", "Microsoft.IdentityModel", "Auth0", "Okta"];
+
+    // ── §3-R5: KLASIFIKIMI TOTAL i AssemblyRefs (autoriteti kryesor) ──
+
+    /// <summary>Rrënja e shared-framework-ut REAL të runtime-it (autoriteti i kategorisë 'framework').</summary>
+    private static readonly string SharedFrameworkRoot =
+        Path.GetFullPath(Path.Combine(
+            Path.GetDirectoryName(typeof(object).Assembly.Location)!, "..", ".."));
+
+    /// <summary>
+    /// Referenca eksplicite të aprovuara me identitet + arsyetim (§3-R5,
+    /// kategoria 4). E vetmja hyrje reale: assembly-ja `Mediator` shipped
+    /// nga paketa e APROVUAR `Mediator.Abstractions` 3.0.2 (id-ja e paketës
+    /// ≠ emri i assembly-t — verifikuar nga lib/ i paketës në cache-in NuGet;
+    /// paketa vetë është nën autoritetin §2 të PlatformStatus.Application/
+    /// Presentation). Çdo hyrje e ardhshme kërkon arsyetim + review.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> ExplicitApprovedReferences =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Mediator"] = "assembly i paketës së aprovuar Mediator.Abstractions 3.0.2 (package id ≠ assembly name)",
+        };
+
+    /// <summary>
+    /// §3-R5: çdo AssemblyRef duhet të jetë SAKTËSISHT njëra nga: (1) assembly
+    /// platforme nga katalogu MSBuild-real; (2) assembly i furnizuar nga
+    /// package graph-i i aprovuar në autoritetin §2 (ids të paketave të
+    /// klasifikuara — të ankoruara te authority map-i i review-uar, JO te
+    /// vetë seti i referencave); (3) referencë eksplicite e aprovuar me
+    /// arsyetim; (4) assembly i shared-framework-ut real (zgjidhet dhe
+    /// verifikohet vendndodhja nën rrënjën e framework-ut). Çdo gjë tjetër
+    /// (përfshirë HintPath custom/të panjohur) = null → GJETJE. Zero
+    /// `continue` para klasifikimit; prefix-et s'janë autoritet.
+    /// </summary>
+    internal static string? ClassifyAssemblyReference(
+        string referenceName,
+        IReadOnlySet<string> platformAssemblyNames,
+        IReadOnlySet<string> approvedPackageIds,
+        IReadOnlyDictionary<string, string> explicitApproved)
+    {
+        if (platformAssemblyNames.Contains(referenceName))
+        {
+            return "platform";
+        }
+
+        if (approvedPackageIds.Contains(referenceName))
+        {
+            return "package";
+        }
+
+        if (explicitApproved.ContainsKey(referenceName))
+        {
+            return "explicit";
+        }
+
+        try
+        {
+            var loaded = Assembly.Load(new AssemblyName(referenceName));
+            if (!string.IsNullOrEmpty(loaded.Location)
+                && Path.GetFullPath(loaded.Location)
+                    .StartsWith(SharedFrameworkRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            {
+                return "framework";
+            }
+        }
+        catch (Exception)
+        {
+            // I pazgjidhshëm → i paklasifikuar (gjetje te thirrësi).
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Ids e paketave të APROVUARA: bashkimi i hyrjeve të çdo lockfile-i që
+    /// kalon klasifikimin TOTAL §2 (i ankoruar te DirectPackageAuthority i
+    /// review-uar — lockfile me gjetje NUK kontribuon asgjë, fail-closed).
+    /// </summary>
+    private static HashSet<string> ApprovedPackageIds()
+    {
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        var discovered = ConventionEnforcementTests.DiscoverLockfiles(
+            repoRoot,
+            Path.Combine(repoRoot, "src", "platform"),
+            Path.Combine(repoRoot, "tests", "platform"));
+        var knownProjectAuthorities = discovered.ToDictionary(
+            pair => pair.Entry.AssemblyName,
+            pair => IdentitySecurityDependencyInventory.DirectPackageAuthority[pair.Entry.CanonicalPath],
+            StringComparer.Ordinal);
+
+        var approved = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (entry, lockfile) in discovered)
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockfile!));
+            var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                entry.CanonicalPath, document,
+                IdentitySecurityDependencyInventory.DirectPackageAuthority[entry.CanonicalPath],
+                knownProjectAuthorities);
+            if (findings.Count > 0)
+            {
+                continue; // fail-closed: lockfile me gjetje s'aprovon asnjë id.
+            }
+
+            foreach (var framework in document.RootElement.GetProperty("dependencies").EnumerateObject())
+            {
+                foreach (var dependency in framework.Value.EnumerateObject())
+                {
+                    if (dependency.Value.TryGetProperty("type", out var typeElement)
+                        && typeElement.GetString() is "Direct" or "Transitive" or "CentralTransitive")
+                    {
+                        approved.Add(dependency.Name);
+                    }
+                }
+            }
+        }
+
+        return approved;
+    }
+
+    /// <summary>
+    /// §3-R5 — testi AUTORITET: ÇDO AssemblyRef i ÇDO assembly platforme
+    /// klasifikohet; referencë e paklasifikueshme = GJETJE (zero fall-through).
+    /// </summary>
+    [Fact]
+    public void Cdo_AssemblyRef_i_platformes_klasifikohet_totalisht()
+    {
+        var platformNames = PlatformProjectCatalog.DiscoverProduction()
+            .Select(entry => entry.AssemblyName)
+            .ToHashSet(StringComparer.Ordinal);
+        var approvedPackages = ApprovedPackageIds();
+        Assert.NotEmpty(approvedPackages);
+
+        var findings = new List<string>();
+        foreach (var assembly in AllPlatformAssemblies)
+        {
+            var owner = assembly.GetName().Name ?? string.Empty;
+            foreach (var reference in assembly.GetReferencedAssemblies())
+            {
+                var name = reference.Name ?? string.Empty;
+                if (ClassifyAssemblyReference(name, platformNames, approvedPackages, ExplicitApprovedReferences) is null)
+                {
+                    findings.Add($"{owner} → referencë e PAKLASIFIKUESHME '{name}'");
+                }
+            }
+        }
+
+        Assert.True(findings.Count == 0, string.Join(" · ", findings));
+    }
+
+    /// <summary>§3-R5 — fixtures diskriminuese të klasifikuesit.</summary>
+    [Fact]
+    public void Klasifikuesi_i_AssemblyRefs_kap_te_panjohurat_dhe_lejon_te_njohurat()
+    {
+        var platformNames = PlatformProjectCatalog.DiscoverProduction()
+            .Select(entry => entry.AssemblyName)
+            .ToHashSet(StringComparer.Ordinal);
+        var approvedPackages = ApprovedPackageIds();
+
+        // Të panjohura (provider të jashtëm / HintPath custom / sintetikë) → GJETJE.
+        foreach (var unknown in (string[])
+            ["Keycloak.AuthServices.Authentication", "Sintetik.Provider.Client", "CustomVendor.HintPath.Lib"])
+        {
+            Assert.Null(DependencyDirectionTests.ClassifyAssemblyReference(
+                unknown, platformNames, approvedPackages, ExplicitApprovedReferences));
+        }
+
+        // Të njohura → kategoria e saktë.
+        Assert.Equal("platform", ClassifyAssemblyReference(
+            "Idata.Platform.Persistence", platformNames, approvedPackages, ExplicitApprovedReferences));
+        Assert.Equal("package", ClassifyAssemblyReference(
+            "Npgsql", platformNames, approvedPackages, ExplicitApprovedReferences));
+        Assert.Equal("framework", ClassifyAssemblyReference(
+            "System.Runtime", platformNames, approvedPackages, ExplicitApprovedReferences));
+
+        // Kategoria 'explicit' funksionon vetëm me hyrje të deklaruar + arsyetim.
+        var syntheticExplicit = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["Vendor.I.Aprovuar"] = "arsyetim sintetik i testit",
+        };
+        Assert.Equal("explicit", ClassifyAssemblyReference(
+            "Vendor.I.Aprovuar", platformNames, approvedPackages, syntheticExplicit));
+        Assert.Null(ClassifyAssemblyReference(
+            "Vendor.I.Aprovuar", platformNames, approvedPackages, ExplicitApprovedReferences));
+    }
+
+    /// <summary>
+    /// §3-R5 — owner assemblies të DERIVUARA: StoreOwnerCanonicalPaths →
+    /// entry i katalogut → AssemblyName i vlerësuar nga MSBuild; secili path
+    /// zgjidhet SAKTËSISHT një herë; zero duplikate; asnjë literal basename.
+    /// </summary>
+    private static string[] DerivedStoreOwnerAssemblyNames()
+        => [.. PlatformProjectCatalog.StoreOwnerCanonicalPaths
+            .Select(path => PlatformProjectCatalog.DiscoverProduction()
+                .Single(entry => entry.CanonicalPath == path).AssemblyName)];
+
+    [Fact]
+    public void Owner_assemblies_derivohen_nga_katalogu_pa_literale()
+    {
+        var owners = DerivedStoreOwnerAssemblyNames();
+        Assert.Equal(2, owners.Length);
+        Assert.Equal(2, owners.Distinct(StringComparer.Ordinal).Count());
+        // Ndryshimi i AssemblyName kapet nga spec-i i pritur në
+        // ConventionEnforcementTests.Katalogu_production_permban_saktesisht_dy_owner_at_kanonike
+        // (barazi me literale të pritura) — këtu derivimi mbetet pa literale.
+    }
 
     /// <summary>
     /// ZËVENDËSIMI i kontrolluar (ADR-028 §7, Increment B.1) i testit të
@@ -286,9 +491,9 @@ public sealed class DependencyDirectionTests
              "OpenIddict.Core",
              "OpenIddict.EntityFrameworkCore",
              "OpenIddict.EntityFrameworkCore.Models"];
-        string[] approvedProjects =
-            ["Idata.Platform.Persistence",
-             "Idata.Platform.Modules.Identity.Infrastructure"];
+        // §3-R5: owner-at DERIVOHEN nga path-et kanonike përmes katalogut
+        // MSBuild-real — zero literal basename/emri (heqja e `approvedProjects`).
+        var approvedProjects = DerivedStoreOwnerAssemblyNames();
 
         foreach (var assembly in AllPlatformAssemblies)
         {

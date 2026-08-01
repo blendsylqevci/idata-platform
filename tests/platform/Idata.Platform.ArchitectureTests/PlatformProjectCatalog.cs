@@ -72,17 +72,15 @@ internal static class PlatformProjectCatalog
     /// përjashtim — kurrë klasifikim i heshtur, kurrë fallback.
     /// </summary>
     /// <summary>
-    /// Memoizim VETËM in-process (një vlerësim i freskët MSBuild për çift
-    /// rrënjësh për run testesh — determinist; zero cache në disk).
+    /// §4-R5: `Discover` kryen zbulim + vlerësim MSBuild TË FRESKËT në ÇDO
+    /// thirrje (zero cache sipas path-it — add/change/remove i csproj-ve
+    /// shihet menjëherë nga thirrja pasuese) dhe kthen array të RI që
+    /// thirrësi s'mund ta ndikojë për thirrjen tjetër. Përjashtimi i VETËM i
+    /// dokumentuar: <see cref="ProductionCatalog"/> mbetet Lazy
+    /// (një-vlerësim-për-proces) sepse pema production nuk ndryshon gjatë
+    /// një test-run-i — pemët sintetike NUK kalojnë asnjëherë andej.
     /// </summary>
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<(string, string), ProjectEntry[]> DiscoveryCache = new();
-
     internal static ProjectEntry[] Discover(string repoRoot, string searchRoot)
-        => DiscoveryCache.GetOrAdd(
-            (Path.GetFullPath(repoRoot), Path.GetFullPath(searchRoot)),
-            key => DiscoverCore(key.Item1, key.Item2));
-
-    private static ProjectEntry[] DiscoverCore(string repoRoot, string searchRoot)
     {
         var canonicalRepoRoot = Path.GetFullPath(repoRoot);
         var entries = Directory.GetFiles(searchRoot, "*.csproj", SearchOption.AllDirectories)
@@ -279,6 +277,73 @@ internal static class PlatformProjectCatalog
         {
             throw new InvalidOperationException(
                 $"Output MSBuild bosh/malformed për {canonicalPath} ({exception.GetType().Name})");
+        }
+    }
+
+    /// <summary>
+    /// §2-R5: seti REAL i PackageReference-ve DIREKTE të një csproj, i
+    /// vlerësuar nga MSBuild (`-getItem:PackageReference`) — i njëjti motor
+    /// procesi si vlerësimi i identitetit; dështim/output i palexueshëm =
+    /// përjashtim fail-closed, kurrë set bosh i heshtur.
+    /// </summary>
+    internal static string[] EvaluateDirectPackageReferences(string repoRoot, string canonicalCsprojPath)
+    {
+        var absoluteProjectPath = Path.Combine(
+            Path.GetFullPath(repoRoot), canonicalCsprojPath.Replace('/', Path.DirectorySeparatorChar));
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            WorkingDirectory = Path.GetFullPath(repoRoot),
+        };
+        startInfo.ArgumentList.Add("msbuild");
+        startInfo.ArgumentList.Add(absoluteProjectPath);
+        startInfo.ArgumentList.Add("-nologo");
+        startInfo.ArgumentList.Add("-getItem:PackageReference");
+        startInfo.ArgumentList.Add($"-p:Configuration={BuildConfiguration}");
+
+        using var process = new Process { StartInfo = startInfo };
+        if (!process.Start())
+        {
+            throw new InvalidOperationException($"MSBuild nuk u nis dot për PackageReference: {canonicalCsprojPath}");
+        }
+
+        var stdout = process.StandardOutput.ReadToEndAsync();
+        var stderr = process.StandardError.ReadToEndAsync();
+        if (!process.WaitForExit(TimeSpan.FromSeconds(120)))
+        {
+            process.Kill(entireProcessTree: true);
+            throw new InvalidOperationException($"MSBuild timeout (120s) për PackageReference: {canonicalCsprojPath}");
+        }
+
+        var output = stdout.GetAwaiter().GetResult();
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"MSBuild exit {process.ExitCode} për PackageReference {canonicalCsprojPath}: "
+                + Sanitize(Path.GetFullPath(repoRoot), stderr.GetAwaiter().GetResult(), output));
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(output);
+            if (!document.RootElement.TryGetProperty("Items", out var items)
+                || !items.TryGetProperty("PackageReference", out var references))
+            {
+                return [];
+            }
+
+            return [.. references.EnumerateArray()
+                .Select(item => item.GetProperty("Identity").GetString()
+                    ?? throw new InvalidOperationException($"PackageReference pa Identity: {canonicalCsprojPath}"))
+                .Order(StringComparer.Ordinal)];
+        }
+        catch (Exception exception) when (exception is JsonException or KeyNotFoundException)
+        {
+            throw new InvalidOperationException(
+                $"Output MSBuild PackageReference bosh/malformed për {canonicalCsprojPath} ({exception.GetType().Name})");
         }
     }
 

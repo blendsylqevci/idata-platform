@@ -443,6 +443,214 @@ public sealed class ConventionEnforcementTests
         Assert.Equal(manifest.Count(), specific.Length + shared.Length);
     }
 
+    /// <summary>
+    /// §2A-R5 — AUTORITETI i package roots direkte: për ÇDO csproj real
+    /// (src+tests), seti i PackageReference-ve direkte i vlerësuar nga
+    /// MSBuild duhet të jetë EKZAKTËSISHT i barabartë me authority map-in
+    /// eksplicit (i shkruar dorazi — JO i derivuar nga graph-i); dhe seti i
+    /// projekteve të autoritetit duhet të jetë EKZAKTËSISHT seti real i
+    /// projekteve (projekt i ri pa hyrje autoriteti = RED; hyrje autoriteti
+    /// pa projekt real = RED).
+    /// </summary>
+    [Fact]
+    public void Autoriteti_i_paketave_direkte_perputhet_me_MSBuild_dhe_projektet_reale()
+    {
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        var discovered = DiscoverLockfiles(
+            repoRoot, PlatformRoot, Path.Combine(repoRoot, "tests", "platform"));
+
+        // Barazia e projekteve: autoriteti mbulon SAKTËSISHT projektet reale.
+        Assert.Equal(
+            discovered.Select(pair => pair.Entry.CanonicalPath).Order(StringComparer.Ordinal).ToArray(),
+            IdentitySecurityDependencyInventory.DirectPackageAuthority.Keys.Order(StringComparer.Ordinal).ToArray());
+
+        foreach (var (entry, _) in discovered)
+        {
+            var evaluated = PlatformProjectCatalog.EvaluateDirectPackageReferences(repoRoot, entry.CanonicalPath);
+            var authorized = IdentitySecurityDependencyInventory.DirectPackageAuthority[entry.CanonicalPath]
+                .Keys.Order(StringComparer.Ordinal).ToArray();
+            Assert.True(evaluated.SequenceEqual(authorized, StringComparer.Ordinal),
+                $"{entry.CanonicalPath}: MSBuild direct=[{string.Join(",", evaluated)}] ≠ autoriteti=[{string.Join(",", authorized)}]");
+        }
+    }
+
+    /// <summary>
+    /// §2B-R5 — klasifikimi TOTAL i çdo lockfile-i real kundrejt autoritetit
+    /// (Direct i autorizuar · referencë projekti · i arritshëm · përjashtim
+    /// eksplicit): zero gjetje = closure reale B.1 GREEN.
+    /// </summary>
+    [Fact]
+    public void Klasifikimi_total_i_TE_GJITHA_lockfiles_eshte_fail_closed()
+    {
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        var discovered = DiscoverLockfiles(
+            repoRoot, PlatformRoot, Path.Combine(repoRoot, "tests", "platform"));
+        Assert.NotEmpty(discovered);
+
+        // Harta emër-projekti → autoriteti i tij (për edges tranzitive projektesh).
+        var knownProjectAuthorities = discovered.ToDictionary(
+            pair => pair.Entry.AssemblyName,
+            pair => IdentitySecurityDependencyInventory.DirectPackageAuthority[pair.Entry.CanonicalPath],
+            StringComparer.Ordinal);
+
+        foreach (var (entry, lockfile) in discovered)
+        {
+            Assert.True(
+                IdentitySecurityDependencyInventory.DirectPackageAuthority.ContainsKey(entry.CanonicalPath),
+                $"Projekt real PA hyrje autoriteti: {entry.CanonicalPath}");
+            using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(lockfile!));
+            var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                entry.CanonicalPath,
+                document,
+                IdentitySecurityDependencyInventory.DirectPackageAuthority[entry.CanonicalPath],
+                knownProjectAuthorities);
+            Assert.True(findings.Count == 0, string.Join(" · ", findings));
+        }
+    }
+
+    /// <summary>
+    /// §2C-R5 — fixtures diskriminuese të klasifikimit total: provider-ë
+    /// direkte jashtë autoritetit (emra realë tregtarë + sintetikë) = GJETJE;
+    /// transitive i paarritshëm = GJETJE; metadata malformed = GJETJE;
+    /// autoritet i vdekur = GJETJE; paketë e aprovuar jo-Identity = GREEN.
+    /// </summary>
+    [Fact]
+    public void Klasifikimi_total_kap_direct_te_panjohur_te_paarritshem_dhe_malformed()
+    {
+        var emptyAuthority = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        // (1) Direct jashtë autoritetit → GJETJE (edhe pa asnjë prefix identity).
+        foreach (var package in (string[])
+            ["Keycloak.AuthServices.Authentication", "AspNet.Security.OAuth.GitHub", "Synthetic.Identity.Provider"])
+        {
+            using var document = SyntheticStandalone(package, "1.0.0", "Direct");
+            var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                NonOwnerCanonicalPath, document, emptyAuthority);
+            Assert.Contains(findings, finding =>
+                finding.Contains("DIREKT i PAAUTORIZUAR", StringComparison.Ordinal)
+                && finding.Contains(package, StringComparison.Ordinal));
+        }
+
+        // (2) Transitive i PAARRITSHËM nga asnjë rrënjë e autorizuar → GJETJE.
+        using (var document = SyntheticStandalone("Orphan.Package", "1.0.0", "Transitive"))
+        {
+            var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                NonOwnerCanonicalPath, document, emptyAuthority);
+            Assert.Contains(findings, finding => finding.Contains("PAARRITSHME", StringComparison.Ordinal));
+        }
+
+        // (3) Metadata malformed: hyrje pa 'type' → GJETJE.
+        using (var document = System.Text.Json.JsonDocument.Parse(
+            "{\"version\":2,\"dependencies\":{\"net10.0\":{\"Pa.Tip\":{\"resolved\":\"1.0.0\"}}}}"))
+        {
+            var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                NonOwnerCanonicalPath, document, emptyAuthority);
+            Assert.Contains(findings, finding => finding.Contains("pa 'type'", StringComparison.Ordinal));
+        }
+
+        // (4) Edge drejt node-i të munguar → GJETJE.
+        using (var document = System.Text.Json.JsonDocument.Parse(
+            "{\"version\":2,\"dependencies\":{\"net10.0\":{\"Rrenja.Ok\":{\"type\":\"Direct\",\"resolved\":\"1.0.0\","
+            + "\"contentHash\":\"s\",\"dependencies\":{\"Fantazma\":\"1.0.0\"}}}}}"))
+        {
+            var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                NonOwnerCanonicalPath, document,
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["Rrenja.Ok"] = "1.0.0" });
+            Assert.Contains(findings, finding => finding.Contains("MUNGUAR", StringComparison.Ordinal));
+        }
+
+        // (5) Hyrje autoriteti E VDEKUR (s'është më Direct reale) → GJETJE.
+        using (var document = SyntheticStandalone("Tjeter.Paketa", "1.0.0", "Direct"))
+        {
+            var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                NonOwnerCanonicalPath, document,
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["Tjeter.Paketa"] = "1.0.0",
+                    ["E.Vdekur"] = "9.9.9",
+                });
+            Assert.Contains(findings, finding => finding.Contains("E VDEKUR", StringComparison.Ordinal));
+        }
+
+        // (6) Inverse GREEN: Direct i autorizuar jo-Identity + subtree i arritshëm.
+        using (var document = SyntheticWithRootNamed(
+            "Npgsql", "10.0.3", "Direct", "Microsoft.Extensions.Logging.Abstractions", "10.0.10", "Transitive"))
+        {
+            Assert.Empty(IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                NonOwnerCanonicalPath, document,
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["Npgsql"] = "10.0.3" }));
+        }
+
+        // (7) Version ≠ autoriteti → GJETJE.
+        using (var document = SyntheticStandalone("Npgsql", "9.9.9", "Direct"))
+        {
+            var findings = IdentitySecurityDependencyInventory.AuditPackagesTotal(
+                NonOwnerCanonicalPath, document,
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["Npgsql"] = "10.0.3" });
+            Assert.Contains(findings, finding => finding.Contains("version i paautorizuar", StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>Lockfile sintetik me rrënjë të EMËRTUAR + një varësi të saj.</summary>
+    private static System.Text.Json.JsonDocument SyntheticWithRootNamed(
+        string rootName, string rootVersion, string rootType,
+        string childName, string childVersion, string childType)
+        => System.Text.Json.JsonDocument.Parse(
+            "{\"version\":2,\"dependencies\":{\"net10.0\":{"
+            + "\"" + rootName + "\":{\"type\":\"" + rootType + "\",\"resolved\":\"" + rootVersion
+            + "\",\"contentHash\":\"s\",\"dependencies\":{\"" + childName + "\":\"" + childVersion + "\"}},"
+            + "\"" + childName + "\":{\"type\":\"" + childType + "\",\"resolved\":\"" + childVersion
+            + "\",\"contentHash\":\"s\"}}}}");
+
+    /// <summary>
+    /// §4-R5 — FRESHNESS i Discover(): mbi TË NJËJTIN temp-root, add/change/
+    /// remove i csproj-ve shihet nga thirrja pasuese; mutimi i rezultatit të
+    /// kthyer nuk ndikon thirrjen tjetër. Zero cache-clear hook.
+    /// </summary>
+    [Fact]
+    public void Discover_eshte_i_fresket_ne_cdo_thirrje_mbi_te_njejtin_root()
+    {
+        var temporary = Directory.CreateTempSubdirectory("idata_freshness_");
+        try
+        {
+            var firstDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "a"));
+            var firstProject = Path.Combine(firstDirectory.FullName, "Freskia.Nje.csproj");
+            File.WriteAllText(firstProject, SdkProjectXml);
+
+            // (1) Zbulimi fillestar.
+            var initial = PlatformProjectCatalog.Discover(temporary.FullName, temporary.FullName);
+            Assert.Single(initial);
+            Assert.Equal("Freskia.Nje", initial[0].AssemblyName);
+
+            // (2) ADD: csproj i ri shihet nga thirrja pasuese.
+            var secondDirectory = Directory.CreateDirectory(Path.Combine(temporary.FullName, "b"));
+            File.WriteAllText(Path.Combine(secondDirectory.FullName, "Freskia.Dy.csproj"), SdkProjectXml);
+            Assert.Equal(2, PlatformProjectCatalog.Discover(temporary.FullName, temporary.FullName).Length);
+
+            // (3) CHANGE: AssemblyName i ndryshuar shihet me vlerën e RE.
+            File.WriteAllText(firstProject, SdkProjectXmlWith("<AssemblyName>Freskia.Ndryshuar</AssemblyName>"));
+            var changed = PlatformProjectCatalog.Discover(temporary.FullName, temporary.FullName);
+            Assert.Contains(changed, entry => entry.AssemblyName == "Freskia.Ndryshuar");
+            Assert.DoesNotContain(changed, entry => entry.AssemblyName == "Freskia.Nje");
+
+            // (4) REMOVE: csproj i hequr nuk kthehet më.
+            File.Delete(firstProject);
+            var afterRemove = PlatformProjectCatalog.Discover(temporary.FullName, temporary.FullName);
+            var remaining = Assert.Single(afterRemove);
+            Assert.Equal("Freskia.Dy", remaining.AssemblyName);
+
+            // (5) Mutimi i array-t të kthyer NUK ndikon thirrjen tjetër.
+            afterRemove[0] = null!;
+            var fresh = PlatformProjectCatalog.Discover(temporary.FullName, temporary.FullName);
+            Assert.NotNull(Assert.Single(fresh));
+            Assert.Equal("Freskia.Dy", fresh[0].AssemblyName);
+        }
+        finally
+        {
+            temporary.Delete(recursive: true);
+        }
+    }
+
     /// <summary>Zbulimi dinamik kap projekt të ri PA lockfile (fail-closed).</summary>
     [Fact]
     public void Zbulimi_i_projekteve_kap_csproj_pa_lockfile()
