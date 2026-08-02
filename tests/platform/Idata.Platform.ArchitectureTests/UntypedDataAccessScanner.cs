@@ -8,8 +8,11 @@ namespace Idata.Platform.ArchitectureTests;
 
 /// <summary>
 /// Skaneri ENG-007 (Pre-B2 Increment 1, §4–§6): inventarizon dhe klasifikon
-/// ÇDO raw-data sink në një production assembly, me ATRIBUIM të saktë
-/// (tip + anëtar) që manifesti i përjashtimeve të jetë i verifikueshëm.
+/// çdo sink të NJOHUR nga taksonomia e mbështetur/versionuar
+/// (<see cref="RawDataSinkTaxonomy"/>) brenda një production assembly, me
+/// ATRIBUIM të saktë (tip + anëtar) që manifesti i përjashtimeve të jetë i
+/// verifikueshëm. NUK pretendohet mbulim universal i çdo API-je të ardhshme të
+/// ekosistemit — mbulimi është ai i provuar nga fixtures dhe meta-testet.
 ///
 /// Dy shtresa, të dyja të detyrueshme (fail-closed):
 ///
@@ -65,15 +68,22 @@ internal static class UntypedDataAccessScanner
     /// familje sink-esh është MBAJTËSE: heqja e saj duhet ta bëjë fixture-n
     /// përkatëse të pazbuluar (guard-i s'kalon nga rrugë të tjera aksidentale).
     /// </summary>
-    internal sealed record SinkTaxonomy(IReadOnlySet<string> RawTypes, IReadOnlySet<string> RawMembers)
+    internal sealed record SinkTaxonomy(
+        IReadOnlySet<string> RawTypes,
+        IReadOnlySet<string> RawMembers,
+        IReadOnlySet<(string ParentType, string Member)> QualifiedMembers)
     {
         internal static readonly SinkTaxonomy Default = new(
             RawDataSinkTaxonomy.RawCapabilityTypeFullNames,
-            RawDataSinkTaxonomy.RawExecutionMemberNames);
+            RawDataSinkTaxonomy.RawExecutionMemberNames,
+            RawDataSinkTaxonomy.QualifiedRawExecutionMembers);
 
         internal bool IsRawType(string fullTypeName) => RawTypes.Contains(fullTypeName);
 
         internal bool IsRawMember(string memberName) => RawMembers.Contains(memberName);
+
+        internal bool IsQualifiedRawMember(string parentTypeFullName, string memberName)
+            => QualifiedMembers.Contains((parentTypeFullName, memberName));
     }
 
     // ───────────────────────── Skanimi kryesor ─────────────────────────
@@ -225,6 +235,15 @@ internal static class UntypedDataAccessScanner
         var memberReference = reader.GetMemberReference(handle);
         var memberName = reader.GetString(memberReference.Name);
         var parents = ParentTypeNames(reader, memberReference.Parent);
+
+        // (C) Çifti i KUALIFIKUAR vlerësohet i pari: lidh tipin prind me anëtarin
+        // ekzakt, prandaj është më specifik se të dyja rregullat globale.
+        var qualifiedParent = parents.FirstOrDefault(
+            parent => taxonomy.IsQualifiedRawMember(parent, memberName));
+        if (qualifiedParent is not null)
+        {
+            return ("qualified-raw-member", $"{qualifiedParent}.{memberName}");
+        }
 
         var rawParent = parents.FirstOrDefault(taxonomy.IsRawType);
         if (rawParent is not null)

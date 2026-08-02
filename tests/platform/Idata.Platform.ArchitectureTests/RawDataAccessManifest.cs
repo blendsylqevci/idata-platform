@@ -64,9 +64,12 @@ internal static class RawDataAccessManifest
     private static readonly string UnitOfWorkSha = Fingerprint(
         "ceed8e39", "cfe00316", "32419996", "cc8ba02b", "2afdba6d", "a420531a", "0e54c256", "17ce1e65");
 
+    private static readonly string Migration0002Sha = Fingerprint(
+        "63a052e6", "9d4f1252", "c9912db9", "dcd807a9", "fa5ddb79", "df14f250", "b81f9c5d", "871020b4");
+
     /// <summary>
-    /// SAKTËSISHT tri surface production (§5) — asnjë hyrje tjetër nuk lejohet
-    /// pa review të pavarur + Human Gate.
+    /// SAKTËSISHT katër surface production (§5 + correction C1) — asnjë hyrje
+    /// tjetër nuk lejohet pa review të pavarur + Human Gate.
     /// </summary>
     internal static readonly AllowedRawSurface[] Production =
     [
@@ -146,6 +149,27 @@ internal static class RawDataAccessManifest
             UnitOfWorkSha,
             "Fabrika e vetme e komandave të protokollit: lidh transaksionin EF ekzistues dhe shton "
             + "parametra — zero konkatenim inputi të jashtëm.",
+            TechOwner),
+
+        // ── Surface 4: migrimi 0002 — DDL/triggers të auditit (metoda SYNC, jo async) ──
+        new("src/platform/Idata.Platform.Persistence/Idata.Platform.Persistence.csproj",
+            "Idata.Platform.Persistence",
+            "src/platform/Idata.Platform.Persistence/Migrations/0002_F1AccessControlCore.cs",
+            "Idata.Platform.Persistence.Migrations.F1AccessControlCore",
+            "Up",
+            Migration0002Sha,
+            "DDL konstante dhe e audituar brenda migrimit të vetëm owner: funksione/triggers "
+            + "append-only të auditit që EF DDL i tipizuar nuk i shpreh; zero input i jashtëm; "
+            + "migrimi është IMMUTABLE (forward-only, i pandryshueshëm pas merge-it).",
+            TechOwner),
+        new("src/platform/Idata.Platform.Persistence/Idata.Platform.Persistence.csproj",
+            "Idata.Platform.Persistence",
+            "src/platform/Idata.Platform.Persistence/Migrations/0002_F1AccessControlCore.cs",
+            "Idata.Platform.Persistence.Migrations.F1AccessControlCore",
+            "Down",
+            Migration0002Sha,
+            "Rikthimi i guard-uar i të njëjtave funksione/triggers append-only të auditit; DDL "
+            + "konstante, zero input i jashtëm; migrimi është IMMUTABLE (forward-only).",
             TechOwner),
     ];
 

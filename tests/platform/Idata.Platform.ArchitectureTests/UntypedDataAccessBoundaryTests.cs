@@ -5,9 +5,13 @@ namespace Idata.Platform.ArchitectureTests;
 /// <summary>
 /// ENG-007 — Identity untyped data-access boundary (Pre-B2 Increment 1).
 ///
-/// Policy fail-closed DENY-BY-DEFAULT mbi ÇDO production assembly të zbuluar
-/// nga <see cref="PlatformProjectCatalog"/>: çdo raw-data sink është GJETJE,
-/// përveç hyrjeve EKZAKTE në <see cref="RawDataAccessManifest.Production"/>.
+/// Policy fail-closed DENY-BY-DEFAULT mbi inventarin autoritativ të production
+/// assemblies (<see cref="PlatformProjectCatalog"/>): çdo sink i NJOHUR nga
+/// taksonomia e mbështetur/versionuar është GJETJE, përveç hyrjeve EKZAKTE në
+/// <see cref="RawDataAccessManifest.Production"/>; anëtar i PANJOHUR mbi një tip
+/// raw të njohur mbetet gjetje fail-closed. Mbulimi i taksonomisë provohet me
+/// fixtures dhe meta-teste — NUK pretendohet mbulim universal i çdo API-je të
+/// ardhshme të ekosistemit.
 ///
 /// Kufij të deklaruar HAPUR (zero overclaim): kjo është architecture-policy,
 /// JO DB-level isolation; reflection/dynamic invocation mbetet **ENG-006 OPEN**;
@@ -61,20 +65,21 @@ public sealed class UntypedDataAccessBoundaryTests
     }
 
     /// <summary>
-    /// §5 — manifesti production përmban SAKTËSISHT tri surface, pa wildcard,
-    /// pa përjashtim blanket në nivel assembly-je/tipi, me arsye dhe pronar të
-    /// shkruar për çdo hyrje.
+    /// §5 — manifesti production përmban SAKTËSISHT surface-t e review-uara, pa
+    /// wildcard, pa përjashtim blanket në nivel assembly-je/tipi, me arsye dhe
+    /// pronar të shkruar për çdo hyrje. Counts janë DERIVUARA nga manifesti.
     /// </summary>
     [Fact]
-    public void Manifesti_production_permban_saktesisht_tri_surface_pa_wildcard()
+    public void Manifesti_production_permban_saktesisht_surface_t_e_review_uara_pa_wildcard()
     {
         var manifest = RawDataAccessManifest.Production;
 
-        Assert.Equal(3, manifest.Select(entry => entry.CanonicalSourcePath)
+        Assert.Equal(10, manifest.Length);
+        Assert.Equal(4, manifest.Select(entry => entry.CanonicalSourcePath)
             .Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(3, manifest.Select(entry => entry.AssemblyName)
+        Assert.Equal(4, manifest.Select(entry => entry.AssemblyName)
             .Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(3, manifest.Select(entry => entry.DeclaringType)
+        Assert.Equal(4, manifest.Select(entry => entry.DeclaringType)
             .Distinct(StringComparer.Ordinal).Count());
 
         foreach (var entry in manifest)
@@ -86,10 +91,11 @@ public sealed class UntypedDataAccessBoundaryTests
             Assert.Equal(64, entry.SourceSha256.Length);
         }
 
-        // Tri surface-t e vetme të lejuara — të deklaruara shprehimisht.
+        // Surface-t e vetme të lejuara — të deklaruara shprehimisht.
         Assert.Equal(
             [
                 "src/platform/Idata.Platform.DbMigrator/MigratorApp.cs",
+                "src/platform/Idata.Platform.Persistence/Migrations/0002_F1AccessControlCore.cs",
                 "src/platform/Modules/AccessControl/Infrastructure/EfMembershipRoleUnitOfWork.cs",
                 "src/platform/Modules/PlatformStatus/Infrastructure/NpgsqlDatabaseReadinessProbe.cs",
             ],
@@ -116,8 +122,9 @@ public sealed class UntypedDataAccessBoundaryTests
 
     /// <summary>
     /// §5 — atribuimi i state machine-ve async zgjidhet DERI TE METODA BURIMORE
-    /// (jo `MoveNext`): të tri surface-t janë metoda `async`, prandaj pa këtë
-    /// zgjidhje manifesti do të ishte i pakonsumueshëm.
+    /// (jo `MoveNext`): surface-t 1–3 janë metoda `async`, prandaj pa këtë
+    /// zgjidhje manifesti do të ishte i pakonsumueshëm. Kundërprova: `Up`/`Down`
+    /// të migrimit 0002 janë SYNC dhe atribuohen direkt.
     /// </summary>
     [Fact]
     public void Atribuimi_i_state_machine_ve_async_zgjidhet_te_metoda_burimore()
@@ -140,6 +147,18 @@ public sealed class UntypedDataAccessBoundaryTests
         Assert.DoesNotContain(findings, finding =>
             finding.DeclaringType.Contains("+<", StringComparison.Ordinal));
         Assert.DoesNotContain(findings, finding => UntypedDataAccessScanner.IsNeverAllowable(finding));
+
+        // Kundërprovë: `Up`/`Down` të migrimit 0002 janë metoda SYNC/direkte —
+        // atribuimi i tyre NUK kalon nga asnjë state machine, prandaj emri i
+        // tipit deklarues është vetë klasa e migrimit.
+        foreach (var member in (string[])["Up", "Down"])
+        {
+            var migration = Assert.Single(findings, finding =>
+                finding.DeclaringType == "Idata.Platform.Persistence.Migrations.F1AccessControlCore"
+                && finding.Member == member);
+            Assert.Equal("qualified-raw-member", migration.Kind);
+            Assert.DoesNotContain('<', migration.DeclaringType);
+        }
     }
 
     /// <summary>
@@ -448,12 +467,12 @@ public sealed class UntypedDataAccessBoundaryTests
     }
 
     /// <summary>
-    /// GREEN 16 — tri surface-t ekzistuese me identitet DHE fingerprint ekzakt
-    /// janë të mbuluara plotësisht: çdo gjetje production konsumohet nga një
-    /// hyrje e vetme, dhe asnjë hyrje nuk mbetet e vdekur.
+    /// GREEN 16 — surface-t ekzistuese me identitet DHE fingerprint ekzakt janë
+    /// të mbuluara plotësisht: çdo gjetje production konsumohet nga një hyrje e
+    /// vetme, dhe asnjë hyrje nuk mbetet e vdekur.
     /// </summary>
     [Fact]
-    public void Tri_surface_t_ekzistuese_konsumojne_saktesisht_gjetjet_reale()
+    public void Surface_t_e_manifestuara_konsumojne_saktesisht_gjetjet_reale()
     {
         var findings = ScanProduction(out _);
         var identities = findings
@@ -527,7 +546,8 @@ public sealed class UntypedDataAccessBoundaryTests
             .Except(Split(membersToRemove), StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
 
         Assert.False(
-            Detected(new UntypedDataAccessScanner.SinkTaxonomy(reducedTypes, reducedMembers)),
+            Detected(new UntypedDataAccessScanner.SinkTaxonomy(
+                reducedTypes, reducedMembers, RawDataSinkTaxonomy.QualifiedRawExecutionMembers)),
             $"heqja e familjes NUK e ndryshoi zbulimin (guard jo-mbajtës): {member}/{detail}");
     }
 
@@ -553,7 +573,8 @@ public sealed class UntypedDataAccessBoundaryTests
         var withoutDbConnection = RawDataSinkTaxonomy.RawCapabilityTypeFullNames
             .Where(name => name != "System.Data.Common.DbConnection").ToHashSet(StringComparer.Ordinal);
         Assert.False(Detected(new UntypedDataAccessScanner.SinkTaxonomy(
-            withoutDbConnection, RawDataSinkTaxonomy.RawExecutionMemberNames)));
+            withoutDbConnection, RawDataSinkTaxonomy.RawExecutionMemberNames,
+            RawDataSinkTaxonomy.QualifiedRawExecutionMembers)));
     }
 
     /// <summary>
@@ -625,5 +646,200 @@ public sealed class UntypedDataAccessBoundaryTests
 
         IlOperandTable.Walk([0xFE], out var truncatedPrefix);
         Assert.Contains("i cunguar", truncatedPrefix);
+    }
+
+    // ═══════ C1/A — `MigrationBuilder::Sql` si ÇIFT i kualifikuar ═══════
+
+    private const string MigrationBuilderSql =
+        "Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder.Sql";
+
+    /// <summary>
+    /// Sink-u kapet VETËM nga çifti (tip prind + anëtar): `MigrationBuilder`
+    /// nuk është tip raw dhe `Sql` nuk është emër global. Gjetja mban EMRIN E
+    /// PLOTË të tipit prind dhe atribuohet te metoda reale.
+    /// </summary>
+    [Fact]
+    public void Sink_i_kualifikuar_MigrationBuilder_Sql_kapet_me_cift_type_plus_member()
+    {
+        // Kufiri i rregullit është i lidhur me tipin prind, jo me emrin.
+        Assert.True(RawDataSinkTaxonomy.IsQualifiedRawMember(
+            "Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder", "Sql"));
+        Assert.False(RawDataSinkTaxonomy.IsQualifiedRawMember(
+            "Idata.Platform.ArchitectureTests.UnrelatedSqlHost", "Sql"));
+        Assert.DoesNotContain("Sql", RawDataSinkTaxonomy.RawExecutionMemberNames);
+        Assert.False(RawDataSinkTaxonomy.IsRawCapabilityType(
+            "Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder"));
+
+        var findings = UntypedDataAccessScanner.Scan(SelfAssemblyPath());
+        var finding = Assert.Single(findings, candidate =>
+            candidate.DeclaringType == typeof(RawSinkFixtures).FullName
+            && candidate.Member == nameof(RawSinkFixtures.MigrationBuilderSqlFixture)
+            && candidate.Kind == "qualified-raw-member");
+        Assert.Equal(MigrationBuilderSql, finding.Detail);
+    }
+
+    /// <summary>
+    /// `Up` dhe `Down` të migrimit 0002 raportohen dhe konsumohen nga hyrjet
+    /// EKZAKTE të manifestit — pa asnjë ndryshim në vetë migrimin (IMMUTABLE):
+    /// fingerprint-i i deklaruar përputhet me file-in real.
+    /// </summary>
+    [Fact]
+    public void Up_dhe_Down_i_migrimit_0002_konsumohen_nga_manifesti_ekzakt()
+    {
+        const string migrationType = "Idata.Platform.Persistence.Migrations.F1AccessControlCore";
+        const string migrationSource =
+            "src/platform/Idata.Platform.Persistence/Migrations/0002_F1AccessControlCore.cs";
+
+        var findings = ScanProduction(out _);
+        foreach (var member in (string[])["Up", "Down"])
+        {
+            Assert.Contains(findings, finding =>
+                finding.Assembly == "Idata.Platform.Persistence"
+                && finding.DeclaringType == migrationType
+                && finding.Member == member
+                && finding.Kind == "qualified-raw-member"
+                && finding.Detail == MigrationBuilderSql);
+
+            var entry = Assert.Single(RawDataAccessManifest.Production, candidate =>
+                candidate.DeclaringType == migrationType && candidate.Member == member);
+            Assert.Equal(migrationSource, entry.CanonicalSourcePath);
+            Assert.Equal("Idata.Platform.Persistence", entry.AssemblyName);
+        }
+
+        // Migrimi mbetet i paprekur: fingerprint-i i deklaruar == file-i real.
+        var absolute = Path.Combine(
+            PlatformProjectCatalog.RepoRoot(),
+            migrationSource.Replace('/', Path.DirectorySeparatorChar));
+        Assert.Equal(
+            RawDataAccessManifest.Production.First(entry => entry.DeclaringType == migrationType).SourceSha256,
+            RawDataAccessManifest.ComputeFingerprint(absolute));
+    }
+
+    /// <summary>
+    /// GREEN — anëtar homonim `Sql` mbi tipe TË TJERA nuk raportohet: as tipi
+    /// REAL i EF-it `SqlOperation` (property `set_Sql`), as një tip krejt i
+    /// palidhur brenda assembly-së.
+    /// </summary>
+    [Fact]
+    public void Anetar_homonim_Sql_mbi_tip_tjeter_nuk_eshte_gjetje()
+    {
+        var findings = UntypedDataAccessScanner.Scan(SelfAssemblyPath());
+
+        foreach (var member in (string[])
+        [
+            nameof(RawSinkFixtures.SqlOperationPropertyFixture),
+            nameof(RawSinkFixtures.UnrelatedSqlMemberFixture),
+        ])
+        {
+            Assert.DoesNotContain(findings, finding =>
+                finding.DeclaringType == typeof(RawSinkFixtures).FullName && finding.Member == member);
+        }
+
+        Assert.DoesNotContain(findings, finding =>
+            finding.DeclaringType == typeof(UnrelatedSqlHost).FullName);
+    }
+
+    /// <summary>
+    /// Meta-test: rregulli i KUALIFIKUAR është MBAJTËS — heqja e VETËM tij e
+    /// zhduk zbulimin te fixture-i dhe te të dyja metodat production.
+    /// </summary>
+    [Fact]
+    public void Heqja_e_rregullit_te_kualifikuar_e_zhduk_zbulimin_e_MigrationBuilder_Sql()
+    {
+        var empty = new UntypedDataAccessScanner.SinkTaxonomy(
+            RawDataSinkTaxonomy.RawCapabilityTypeFullNames,
+            RawDataSinkTaxonomy.RawExecutionMemberNames,
+            new HashSet<(string, string)>());
+
+        bool DetectedIn(string assemblyPath, UntypedDataAccessScanner.SinkTaxonomy? taxonomy)
+            => UntypedDataAccessScanner.Scan(assemblyPath, taxonomy)
+                .Any(finding => finding.Detail == MigrationBuilderSql);
+
+        Assert.True(DetectedIn(SelfAssemblyPath(), null));
+        Assert.False(DetectedIn(SelfAssemblyPath(), empty));
+
+        var persistence = AbsoluteTargetPath(PlatformProjectCatalog.DiscoverProduction()
+            .Single(entry => entry.AssemblyName == "Idata.Platform.Persistence"));
+        Assert.True(DetectedIn(persistence, null));
+        Assert.False(DetectedIn(persistence, empty));
+    }
+
+    // ═══════ C1/B — familja IDataAdapter / NpgsqlDataAdapter ═══════
+
+    [Theory]
+    [InlineData(nameof(RawSinkFixtures.NpgsqlDataAdapterConstructorFixture), "Npgsql.NpgsqlDataAdapter..ctor")]
+    [InlineData(nameof(RawSinkFixtures.DataAdapterInterfaceFillFixture), "System.Data.IDataAdapter.Fill")]
+    [InlineData(nameof(RawSinkFixtures.DataAdapterFillSchemaFixture), "System.Data.Common.DataAdapter.FillSchema")]
+    [InlineData(nameof(RawSinkFixtures.DataAdapterUpdateFixture), "System.Data.Common.DataAdapter.Update")]
+    public void Familja_DataAdapter_kapet_me_atribuim_te_sakte(string member, string detail)
+    {
+        var findings = UntypedDataAccessScanner.Scan(SelfAssemblyPath());
+        Assert.Contains(findings, finding =>
+            finding.DeclaringType == typeof(RawSinkFixtures).FullName
+            && finding.Member == member
+            && finding.Kind == "raw-type-member"
+            && finding.Detail == detail);
+    }
+
+    /// <summary>
+    /// GREEN — emrat gjenerikë `Fill`/`FillSchema`/`Update` NUK janë shtuar
+    /// globalisht. Prova nuk është emri i testit por METADATA REALE: assembly-ja
+    /// përmban një `System.Array::Fill` (referencë e vërtetë) dhe ai NUK
+    /// raportohet; njësoj një anëtar homonim brenda assembly-së.
+    /// </summary>
+    [Fact]
+    public void Emrat_gjenerike_te_adapter_it_nuk_jane_globale()
+    {
+        foreach (var name in (string[])["Fill", "FillSchema", "Update"])
+        {
+            Assert.DoesNotContain(name, RawDataSinkTaxonomy.RawExecutionMemberNames);
+        }
+
+        var findings = UntypedDataAccessScanner.Scan(SelfAssemblyPath());
+        Assert.DoesNotContain(findings, finding =>
+            finding.Detail.StartsWith("System.Array.", StringComparison.Ordinal));
+        Assert.DoesNotContain(findings, finding =>
+            finding.DeclaringType == typeof(RawSinkFixtures).FullName
+            && finding.Member == nameof(RawSinkFixtures.UnrelatedFillMemberFixture));
+    }
+
+    /// <summary>
+    /// Meta-test: secili tip i familjes adapter është MBAJTËS — heqja e tij e
+    /// zhduk saktësisht zbulimin që varet prej tij.
+    /// </summary>
+    [Theory]
+    [InlineData("Npgsql.NpgsqlDataAdapter", "Npgsql.NpgsqlDataAdapter..ctor")]
+    [InlineData("System.Data.IDataAdapter", "System.Data.IDataAdapter.Fill")]
+    [InlineData("System.Data.Common.DataAdapter", "System.Data.Common.DataAdapter.FillSchema")]
+    [InlineData("System.Data.Common.DataAdapter", "System.Data.Common.DataAdapter.Update")]
+    public void Heqja_e_tipit_te_adapter_it_e_zhduk_zbulimin_perkates(string rawType, string detail)
+    {
+        bool Detected(UntypedDataAccessScanner.SinkTaxonomy? taxonomy)
+            => UntypedDataAccessScanner.Scan(SelfAssemblyPath(), taxonomy)
+                .Any(finding => finding.Detail == detail);
+
+        Assert.True(Detected(null));
+
+        var reduced = RawDataSinkTaxonomy.RawCapabilityTypeFullNames
+            .Where(name => name != rawType).ToHashSet(StringComparer.Ordinal);
+        Assert.False(Detected(new UntypedDataAccessScanner.SinkTaxonomy(
+            reduced, RawDataSinkTaxonomy.RawExecutionMemberNames,
+            RawDataSinkTaxonomy.QualifiedRawExecutionMembers)));
+    }
+
+    /// <summary>
+    /// Sot NUK ka përdorim production të `DataAdapter`, prandaj manifesti
+    /// production mbetet BOSH për këtë familje — zero hyrje e re, zero gjetje.
+    /// </summary>
+    [Fact]
+    public void Familja_DataAdapter_nuk_ka_asnje_hyrje_manifesti_production()
+    {
+        Assert.DoesNotContain(RawDataAccessManifest.Production, entry =>
+            entry.DeclaringType.Contains("Adapter", StringComparison.Ordinal)
+            || entry.Member.Contains("Adapter", StringComparison.Ordinal));
+
+        var findings = ScanProduction(out _);
+        Assert.DoesNotContain(findings, finding =>
+            finding.Detail.Contains("DataAdapter", StringComparison.Ordinal));
     }
 }

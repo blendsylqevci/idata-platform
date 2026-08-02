@@ -6,7 +6,7 @@ namespace Idata.Platform.ArchitectureTests;
 /// parametrizimi: autoriteti është **aftësia për ekzekutim raw**, edhe kur
 /// SQL-i ndërtohet në runtime.
 ///
-/// Dy shtresa komplementare, të dyja të imponuara nga
+/// Tri shtresa komplementare, të gjitha të imponuara nga
 /// <see cref="UntypedDataAccessScanner"/>:
 ///
 ///  (A) <see cref="RawCapabilityTypeFullNames"/> — tipet që MISHËROJNË
@@ -21,6 +21,13 @@ namespace Idata.Platform.ArchitectureTests;
 ///      methods të EF Core relational, variantet async/generic, accessor-ët e
 ///      property-ve që bartin komandën). Kjo mbulon sipërfaqet ku tipi
 ///      deklarues është një klasë statike `*Extensions` e padëmshme në vetvete.
+///
+///  (C) <see cref="QualifiedRawExecutionMembers"/> — çifte EKZAKTE
+///      (tip prind, anëtar) për sipërfaqe ku AS tipi AS emri i anëtarit nuk
+///      mund të klasifikohen vetëm: `MigrationBuilder` nuk është tip raw (mban
+///      dhjetëra operacione DDL të tipizuara) dhe emri `Sql` është shumë i
+///      përgjithshëm për ta ndaluar globalisht. Vetëm ÇIFTI i lidh të dyja pa
+///      false-positive.
 ///
 /// Përputhja është me EMËR TË PLOTË TË TIPIT (ordinal, i plotë) dhe me EMËR
 /// EKZAKT ANËTARI — asnjë `StartsWith`/`Contains`, që `NpgsqlConnection` të mos
@@ -45,12 +52,17 @@ internal static class RawDataSinkTaxonomy
             "System.Data.Common.DbDataReader",
             "System.Data.Common.DbTransaction",
             "System.Data.Common.DbDataAdapter",
+            // Baza ABSTRAKTE ku kompajleri lidh realisht `FillSchema`/`Update`
+            // (verifikuar në metadata: `System.Data.Common.DataAdapter::FillSchema`).
+            // Pa këtë, një adapter i marrë si `DataAdapter` do të ishte i padukshëm.
+            "System.Data.Common.DataAdapter",
             "System.Data.Common.DbProviderFactory",
             "System.Data.IDbConnection",
             "System.Data.IDbCommand",
             "System.Data.IDataReader",
             "System.Data.IDbTransaction",
             "System.Data.IDbDataAdapter",
+            "System.Data.IDataAdapter",
 
             // ── Npgsql ──
             "Npgsql.NpgsqlConnection",
@@ -61,6 +73,7 @@ internal static class RawDataSinkTaxonomy
             "Npgsql.NpgsqlMultiHostDataSource",
             "Npgsql.NpgsqlDataReader",
             "Npgsql.NpgsqlTransaction",
+            "Npgsql.NpgsqlDataAdapter",
             "Npgsql.NpgsqlBinaryImporter",
             "Npgsql.NpgsqlBinaryExporter",
             "Npgsql.NpgsqlRawCopyStream",
@@ -97,6 +110,27 @@ internal static class RawDataSinkTaxonomy
             "BeginTextImport", "BeginBinaryImport", "BeginRawBinaryCopy",
             "BeginTextExport", "BeginBinaryExport",
         };
+
+    /// <summary>
+    /// (C) Çifte EKZAKTE (tip prind, anëtar) — sipërfaqe që kërkojnë kualifikim
+    /// sepse asnjëra anë nuk mjafton e vetme.
+    ///
+    /// `Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder::Sql` ekzekuton
+    /// SQL arbitrar brenda një migrimi. NUK klasifikohet i gjithë
+    /// `MigrationBuilder` si tip raw (pjesa dërrmuese e sipërfaqes së tij është
+    /// DDL e tipizuar — `CreateTable`, `CreateIndex`, `AddColumn`, …) dhe NUK
+    /// shtohet emri global `Sql` (do të kapte çdo anëtar homonim në ekosistem).
+    /// Vetëm çifti i lidh të dyja.
+    /// </summary>
+    internal static readonly IReadOnlySet<(string ParentType, string Member)> QualifiedRawExecutionMembers =
+        new HashSet<(string, string)>
+        {
+            ("Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder", "Sql"),
+        };
+
+    /// <summary>A është ky çift (tip prind, anëtar) sink i kualifikuar (barazi EKZAKTE në të dyja anët)?</summary>
+    internal static bool IsQualifiedRawMember(string parentTypeFullName, string memberName)
+        => QualifiedRawExecutionMembers.Contains((parentTypeFullName, memberName));
 
     /// <summary>
     /// §6 — fjalori i emrave të PARAMETRAVE që tregojnë pranim SQL-i ose

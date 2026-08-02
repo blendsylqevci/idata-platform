@@ -1,6 +1,9 @@
+using System.Data;
 using System.Data.Common;
 using Idata.Platform.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Npgsql;
 
 namespace Idata.Platform.ArchitectureTests;
@@ -131,6 +134,50 @@ internal static class RawSinkFixtures
     internal static object UnknownSinkMemberFixture(NpgsqlConnection connection)
         => connection.GetSchema();
 
+    // ═════ RED 22 (C1/A) — `MigrationBuilder::Sql` si ÇIFT i kualifikuar ═════
+
+    /// <summary>
+    /// Ekzekutim SQL arbitrar brenda një migrimi. Kapet VETËM nga çifti
+    /// (tip prind + anëtar): `MigrationBuilder` nuk është tip raw dhe emri
+    /// `Sql` nuk është në listën globale të anëtarëve.
+    /// </summary>
+    internal static void MigrationBuilderSqlFixture(MigrationBuilder migrationBuilder)
+        => migrationBuilder.Sql("CREATE INDEX ix_synthetic ON identity.user_account (id)");
+
+    // ═════ RED 23–26 (C1/B) — familja IDataAdapter / NpgsqlDataAdapter ═════
+
+    /// <summary>Constructor i `NpgsqlDataAdapter` me SQL sintetik.</summary>
+    internal static object NpgsqlDataAdapterConstructorFixture(NpgsqlConnection connection)
+        => new NpgsqlDataAdapter("SELECT id FROM identity.user_account", connection);
+
+    /// <summary>Thirrje përmes INTERFACE-it `IDataAdapter` (dispatch i tipizuar në interface).</summary>
+    internal static int DataAdapterInterfaceFillFixture(IDataAdapter adapter)
+        => adapter.Fill(new DataSet());
+
+    /// <summary>`FillSchema` konkret mbi adapter-in.</summary>
+    internal static object DataAdapterFillSchemaFixture(NpgsqlDataAdapter adapter)
+        => adapter.FillSchema(new DataSet(), SchemaType.Source);
+
+    /// <summary>`Update` konkret mbi adapter-in.</summary>
+    internal static int DataAdapterUpdateFixture(NpgsqlDataAdapter adapter)
+        => adapter.Update(new DataSet());
+
+    // ═════════════ GREEN 22 — `Sql` mbi tip TJETËR (jashtë çiftit) ═════════════
+
+    /// <summary>
+    /// `SqlOperation` është tip REAL i EF Core Migrations, POR nuk është
+    /// `MigrationBuilder` dhe accessor-i i tij quhet `set_Sql`, jo `Sql`.
+    /// Çifti i kualifikuar nuk përputhet → zero gjetje.
+    /// </summary>
+    internal static object SqlOperationPropertyFixture()
+        => new SqlOperation { Sql = "SELECT 1" };
+
+    /// <summary>Anëtar homonim `Sql` mbi një tip krejt të palidhur → zero gjetje.</summary>
+    internal static string UnrelatedSqlMemberFixture() => UnrelatedSqlHost.Sql("SELECT 1");
+
+    /// <summary>Anëtar homonim `Fill` mbi një tip krejt të palidhur → zero gjetje.</summary>
+    internal static int UnrelatedFillMemberFixture() => UnrelatedSqlHost.Fill(new object());
+
     // ═════════════ GREEN 17 — EF LINQ i tipizuar, pa sink ═════════════
 
     internal static IQueryable<BusinessRecord> TypedLinqFixture(PlatformDbContext context)
@@ -160,6 +207,18 @@ internal static class RawSinkFixtures
         var assemblyParts = new[] { ", ", "System", ".", "Data", ".", "Common" };
         return Type.GetType(string.Concat(typeParts) + string.Concat(assemblyParts));
     }
+}
+
+/// <summary>
+/// Tip pritës i anëtarëve HOMONIMË (`Sql`, `Fill`) krejt të palidhur me
+/// ekzekutimin raw — provon se rregullat janë të lidhura me tipin prind
+/// (çifti i kualifikuar) dhe se emrat gjenerikë NUK janë shtuar globalisht.
+/// </summary>
+internal static class UnrelatedSqlHost
+{
+    internal static string Sql(string text) => text.ToUpperInvariant();
+
+    internal static int Fill(object value) => value.GetHashCode();
 }
 
 /// <summary>
