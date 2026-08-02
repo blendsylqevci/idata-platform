@@ -16,6 +16,7 @@
 - **anëtar i PANJOHUR mbi një tip raw të njohur = gjetje fail-closed** (nuk kërkohet listë shteruese anëtarësh);
 - **sinks të kualifikuar** lidhen me çiftin (tip prind + anëtar) — as tipi as emri i vetëm nuk mjafton;
 - mbulimi i taksonomisë provohet me fixtures dhe meta-teste që dëshmojnë se çdo familje është MBAJTËSE;
+- **[C2] për familjet provider (`DbProviderFactory` / `DbCommandBuilder` / `DbDataAdapter`) mbyllja e listës manuale është STRUKTURORE**: universi derivohet nga assembly-ja REALE e Npgsql-it e zgjidhur nga dependency graph-i i pin-uar, dhe çdo tip konkret i paklasifikuar e skuq suitën;
 - **nuk pretendohet mbulim universal i çdo API-je të ardhshme të ekosistemit.**
 
 Ky është **kufi i deklaruar i threat model-it, jo suppression**: çdo familje e re sink-esh kërkon shtim eksplicit në taksonomi, me fixture dhe meta-test përkatës.
@@ -70,8 +71,10 @@ Tri shtresa komplementare, të gjitha me barazi **EKZAKTE** (asnjë `StartsWith`
 
 **(A) Tipet me kapacitet raw** — çdo referencë ndaj tyre dhe çdo anëtar i tyre (i njohur ose i panjohur) = gjetje:
 
-- ADO.NET: `DbConnection`, `DbCommand`, `DbBatch`, `DbBatchCommand`, `DbDataReader`, `DbTransaction`, `DbDataAdapter`, **`DataAdapter`**, `DbProviderFactory`, `IDbConnection`, `IDbCommand`, `IDataReader`, `IDbTransaction`, `IDbDataAdapter`, **`IDataAdapter`**;
-- Npgsql: `NpgsqlConnection`, `NpgsqlCommand`, `NpgsqlBatch`, `NpgsqlBatchCommand`, `NpgsqlDataSource`, `NpgsqlMultiHostDataSource`, `NpgsqlDataReader`, `NpgsqlTransaction`, **`NpgsqlDataAdapter`**, `NpgsqlBinaryImporter`, `NpgsqlBinaryExporter`, `NpgsqlRawCopyStream`, `NpgsqlCopyTextReader`, `NpgsqlCopyTextWriter`.
+- ADO.NET: `DbConnection`, `DbCommand`, `DbBatch`, `DbBatchCommand`, `DbDataReader`, `DbTransaction`, `DbDataAdapter`, **`DataAdapter`**, **`DbCommandBuilder`**, `DbProviderFactory`, `IDbConnection`, `IDbCommand`, `IDataReader`, `IDbTransaction`, `IDbDataAdapter`, **`IDataAdapter`**;
+- Npgsql: `NpgsqlConnection`, `NpgsqlCommand`, `NpgsqlBatch`, `NpgsqlBatchCommand`, `NpgsqlDataSource`, `NpgsqlMultiHostDataSource`, `NpgsqlDataReader`, `NpgsqlTransaction`, **`NpgsqlDataAdapter`**, **`NpgsqlFactory`**, **`NpgsqlCommandBuilder`**, `NpgsqlBinaryImporter`, `NpgsqlBinaryExporter`, `NpgsqlRawCopyStream`, `NpgsqlCopyTextReader`, `NpgsqlCopyTextWriter`.
+
+*(Familja provider — `DbCommandBuilder`, `NpgsqlFactory`, `NpgsqlCommandBuilder` — u shtua në correction C2. Këto prodhojnë komanda raw pa kaluar nga asnjë anëtar i listës globale: `NpgsqlFactory.Instance` është fushë statike, `NpgsqlCommandBuilder(..)` është constructor, `DbCommandBuilder.GetInsertCommand()` është anëtar i pa-listuar. Emrat `Instance`/`GetInsertCommand`/`.ctor` NUK u shtuan globalisht — do të prodhonin false-positive masive; testet e imponojnë mungesën e tyre nga lista globale.)*
 
 *(Familja adapter u shtua në correction C1. `System.Data.Common.DataAdapter` — baza ABSTRAKTE — hyri sepse metadata REALE tregon se kompajleri lidh `FillSchema`/`Update` pikërisht atje, jo te `NpgsqlDataAdapter`; pa të, një adapter i marrë si `DataAdapter` do të ishte i padukshëm. Emrat gjenerikë `Fill`/`FillSchema`/`Update` NUK u shtuan globalisht — assembly-ja e testeve përmban një `System.Array::Fill` REAL që do të ishte false-positive; testi e provon këtë shprehimisht.)*
 
@@ -148,15 +151,17 @@ Sipërfaqja publike/`protected` e DEKLARUAR e owner-ave nuk lejohet:
 
 Të gjitha sintetike, në assembly-në e testeve; asnjëra nuk ekzekutohet ndaj një DB-je.
 
-**RED (kapen me atribuim të saktë):** 1 ADO.NET jo-owner + konstant `identity.` · 2 schema nga fragmente · 3 mixed-case/quoted/interpolated/**parameterized** · 4 `FromSqlRaw`/`FromSqlInterpolated` · 5 `ExecuteSqlRaw`/`ExecuteSqlInterpolated` · 6 `SqlQueryRaw`/`SqlQuery` · 7 `NpgsqlCommand`/`NpgsqlBatch`/`NpgsqlDataSource`/`BeginBinaryImport` · 8 indirektim përmes helper-i (sink-u raportohet TE helper-i) · 9 alias `ldftn` (method-group) **dhe** lambda pa state machine → `unattributed-compiler-generated` fail-closed · 10 projekt/assembly jashtë katalogut · 11 metadata jo-PE e palexueshme + burim manifesti i munguar · 12 mutim i surface-it pa update fingerprint-i · 13 duplicate/dead/wildcard/empty/uncovered/unallowable · 14 escape hatch publik i owner-it · 15 anëtar i PANJOHUR mbi tip raw (`GetSchema`) · **[C1] 22 `MigrationBuilder::Sql` si çift i kualifikuar** · **[C1] 23–26 familja adapter: constructor `NpgsqlDataAdapter`, `IDataAdapter.Fill` përmes interface-it, `FillSchema` dhe `Update` konkrete**.
+**RED (kapen me atribuim të saktë):** 1 ADO.NET jo-owner + konstant `identity.` · 2 schema nga fragmente · 3 mixed-case/quoted/interpolated/**parameterized** · 4 `FromSqlRaw`/`FromSqlInterpolated` · 5 `ExecuteSqlRaw`/`ExecuteSqlInterpolated` · 6 `SqlQueryRaw`/`SqlQuery` · 7 `NpgsqlCommand`/`NpgsqlBatch`/`NpgsqlDataSource`/`BeginBinaryImport` · 8 indirektim përmes helper-i (sink-u raportohet TE helper-i) · 9 alias `ldftn` (method-group) **dhe** lambda pa state machine → `unattributed-compiler-generated` fail-closed · 10 projekt/assembly jashtë katalogut · 11 metadata jo-PE e palexueshme + burim manifesti i munguar · 12 mutim i surface-it pa update fingerprint-i · 13 duplicate/dead/wildcard/empty/uncovered/unallowable · 14 escape hatch publik i owner-it · 15 anëtar i PANJOHUR mbi tip raw (`GetSchema`) · **[C1] 22 `MigrationBuilder::Sql` si çift i kualifikuar** · **[C1] 23–26 familja adapter: constructor `NpgsqlDataAdapter`, `IDataAdapter.Fill` përmes interface-it, `FillSchema` dhe `Update` konkrete** · **[C2] 27 `NpgsqlFactory.Instance` (fushë statike, pa `CreateCommand`)** · **[C2] 28 constructor `NpgsqlCommandBuilder(NpgsqlDataAdapter)`** · **[C2] 29 `DbCommandBuilder.GetInsertCommand()` base-typed**.
 
-**GREEN (zero gjetje ENG-007):** 16 surface-t ekzistuese me identitet+fingerprint ekzakt (barazi e plotë manifest ↔ gjetje reale) · 17 EF LINQ i tipizuar · 18 API publik i tipizuar i ndërmjetësuar · 19 store Identity i tipizuar · 20 string `identity.*` pa sink · 21 reflection dinamik → **ENG-006 OPEN**, jo provë PASS · **[C1] 22 anëtar homonim `Sql` mbi tip tjetër** (`SqlOperation.set_Sql` REAL i EF-it + një tip krejt i palidhur) · **[C1] 23 emrat gjenerikë `Fill`/`FillSchema`/`Update` nuk janë globalë** — prova nuk është emri i testit por metadata REALE: assembly-ja përmban një `System.Array::Fill` që NUK raportohet.
+**GREEN (zero gjetje ENG-007):** 16 surface-t ekzistuese me identitet+fingerprint ekzakt (barazi e plotë manifest ↔ gjetje reale) · 17 EF LINQ i tipizuar · 18 API publik i tipizuar i ndërmjetësuar · 19 store Identity i tipizuar · 20 string `identity.*` pa sink · 21 reflection dinamik → **ENG-006 OPEN**, jo provë PASS · **[C1] 22 anëtar homonim `Sql` mbi tip tjetër** (`SqlOperation.set_Sql` REAL i EF-it + një tip krejt i palidhur) · **[C1] 23 emrat gjenerikë `Fill`/`FillSchema`/`Update` nuk janë globalë** — prova nuk është emri i testit por metadata REALE: assembly-ja përmban një `System.Array::Fill` që NUK raportohet · **[C2] 24 homonime SINTETIKE të familjes provider** (`NpgsqlFactory`/`NpgsqlCommandBuilder` në një namespace sintetik): emri i thjeshtë përputhet, `FullName` jo → zero gjetje, çka provon lidhjen me emrin E PLOTË.
 
 **Meta-teste:**
 
 - **çdo familje sink-esh është MBAJTËSE** — heqja e familjes nga taksonomia e zhduk zbulimin përkatës (6 rreshta: FromSql·, ExecuteSql·, SqlQuery·, ADO.NET `CommandText`, Npgsql import, `GetDbConnection` mbi surface-in production);
 - **[C1] rregulli i KUALIFIKUAR është mbajtës** — heqja e VETËM çiftit `MigrationBuilder::Sql` e zhduk zbulimin edhe te fixture-i edhe te të dyja metodat production;
 - **[C1] secili tip i familjes adapter është mbajtës** — 4 rreshta: `NpgsqlDataAdapter..ctor`, `IDataAdapter.Fill`, `DataAdapter.FillSchema`, `DataAdapter.Update`;
+- **[C2] secili tip i familjes provider është mbajtës** — 3 rreshta: `NpgsqlFactory.Instance`, `NpgsqlCommandBuilder..ctor`, `DbCommandBuilder.GetInsertCommand`; testi imponon njëkohësisht që `Instance`/`.ctor`/`GetInsertCommand` të MOS jenë në listën globale të anëtarëve;
+- **[C2] PARITY STRUKTUROR i familjes provider** — universi derivohet nga assembly-ja REALE e Npgsql-it (`typeof(NpgsqlConnection).Assembly`, i zgjidhur nga graph-i i pin-uar): çdo tip publik KONKRET assignable te `DbProviderFactory`/`DbCommandBuilder`/`DbDataAdapter` duhet të ekzistojë me `FullName` EKZAKT në taksonomi. Për Npgsql **10.0.3** derivimi jep saktësisht `NpgsqlFactory`, `NpgsqlCommandBuilder`, `NpgsqlDataAdapter`. Testi **nuk auto-allowlistson** dhe **nuk zgjeron skanimin në ekosistem**: një tip i ri provider në një version të ardhshëm e skuq suitën derisa të klasifikohet SHPREHIMISHT me fixture + review. Mbajtësia e vetë kontrollit provohet me një taksonomi të reduktuar që e raporton tipin e hequr si të paklasifikuar;
 - **rregulli "i panjohur = gjetje" është mbajtës** — `GetSchema` NUK është në listën e emrave; heqja e tipit raw prind e humbet zbulimin, çka provon se kapej NGA anëtarësia në tip;
 - manifesti production është ekzakt, pa wildcard, pa hyrje të pakonsumuar;
 - skanimi mbulon çdo projekt production të zbuluar nga katalogu;
@@ -169,6 +174,9 @@ Të gjitha sintetike, në assembly-në e testeve; asnjëra nuk ekzekutohet ndaj 
 | Një anëtar i vetëm i manifestit (`CreateCommand` → emër i rremë) | 2 teste RED (`dead-entry` + `uncovered-sink`) | byte-identik |
 | **[C1]** çifti i kualifikuar `MigrationBuilder::Sql` (parent i rremë) | **6 teste RED** — përfshirë guard-in qendror dhe konsumimin e `Up`/`Down` | byte-identik (sha256 i pandryshuar) |
 | **[C1]** tri tipet e familjes adapter (`IDataAdapter`, `NpgsqlDataAdapter`, `DataAdapter`) | **8 teste RED** — 4 fixtures + 4 meta-teste | byte-identik (sha256 i pandryshuar) |
+| **[C2]** `Npgsql.NpgsqlFactory` (i izoluar) | **3 teste RED** — fixture + meta-test + parity strukturor | byte-identik (sha256 i pandryshuar) |
+| **[C2]** `Npgsql.NpgsqlCommandBuilder` (i izoluar) | **4 teste RED** — fixture + meta-test + parity + mbajtësia e parity-t | byte-identik (sha256 i pandryshuar) |
+| **[C2]** `System.Data.Common.DbCommandBuilder` (i izoluar) | **3 teste RED** — fixture + meta-test + parity strukturor | byte-identik (sha256 i pandryshuar) |
 
 ---
 
@@ -188,8 +196,8 @@ Ky rezultat klasifikohet **ENG-006 OPEN** — nuk është dhe nuk paraqitet si p
 **LOKALE (macOS, kjo makinë), nën `HG-PRE-B2-ENG007-LOCAL-DISK-WAIVER` të Pronarit:**
 
 - `dotnet build src/platform/Idata.Platform.slnx` → succeeded, **0 warnings, 0 errors**;
-- `Idata.Platform.ArchitectureTests`: **169/169 PASS, zero skip** (prej të cilave **59** janë testet ENG-007, nga të cilat **14 të reja në correction C1**);
-- targeted fixtures/meta-teste të ENG-007 të ekzekutuara **3× radhazi** — 59/59 stabile;
+- `Idata.Platform.ArchitectureTests`: **178/178 PASS, zero skip** (prej të cilave **68** janë testet ENG-007: 45 bazë + **14 në C1** + **9 në C2**);
+- targeted fixtures/meta-teste të ENG-007 të ekzekutuara **3× radhazi** — 68/68 stabile;
 - provat RED→GREEN të §7 dhe rikthimet byte-identike.
 
 **NUK ekzekutohet lokalisht:** Docker/PostgreSQL, suita Unit/Integration, contracts generate/drift-check, legacy turbo, Angular Backoffice. Këto merren **VETËM** nga GitHub CI dhe raportohen veçmas. Asnjë prej tyre nuk pretendohet PASS pa ekzekutim real.
@@ -226,6 +234,7 @@ Hiqen gjashtë file-at e rinj të testeve (`RawDataSinkTaxonomy.cs`, `IlOperandT
 - **`ENG-006` = OPEN** (reflection/dynamic invocation) — i njëjti afat i rishikuar.
 - **`ADR-026` = OPEN** — DB roles/provisioning/secrets; **DB-level isolation = NOT IMPLEMENTED**.
 - **`ADR-025`/`ADR-027` = OPEN**; **`ENG-004` fallback AKTIV**; **`ENG-005` = OPEN**.
+- **Taksonomia mbetet e KUFIZUAR te familjet e deklaruara.** Tip i ri i derivuar nga familjet provider (`DbProviderFactory`/`DbCommandBuilder`/`DbDataAdapter`) = **fail-closed / test RED** derisa të klasifikohet shprehimisht. Një familje krejtësisht e RE (jashtë atyre të deklaruara) kërkon shtim eksplicit në taksonomi + fixture + meta-test + review — nuk kapet automatikisht. Zero pretendim "universal" ose "bypass-free".
 - **`ENG-008` = OPEN (i REGJISTRUAR në correction C1, JO i implementuar këtu)** — stabiliteti i snapshot-it output/MVID të ArchitectureTests: testet që nisin `-t:ResolveReferences` mund të rindërtojnë output-in production PAS kapjes së MVID-it dhe të krijojnë dështime false të varura nga rendi. **Nuk është bypass i provuar i ENG-007.** Mbyllet brenda Pre-B2 Increment 2 / ENG-006, përpara Human Gate-it të tij.
 - **B.2 / B.3 = NOT STARTED / BLOCKED**; identity protocol, token issuance/validation, projection = jashtë scope-it.
 - **Step B/C, PREFLIGHT, Tier 2 = NO-GO**; **production Go = BLOCKED**.
