@@ -56,6 +56,9 @@ internal static class RawDataSinkTaxonomy
             // (verifikuar në metadata: `System.Data.Common.DataAdapter::FillSchema`).
             // Pa këtë, një adapter i marrë si `DataAdapter` do të ishte i padukshëm.
             "System.Data.Common.DataAdapter",
+            // Fabrikat/ndërtuesit e komandave: prodhojnë komanda raw pa kaluar
+            // nga asnjë anëtar i listës globale (correction C2).
+            "System.Data.Common.DbCommandBuilder",
             "System.Data.Common.DbProviderFactory",
             "System.Data.IDbConnection",
             "System.Data.IDbCommand",
@@ -74,6 +77,8 @@ internal static class RawDataSinkTaxonomy
             "Npgsql.NpgsqlDataReader",
             "Npgsql.NpgsqlTransaction",
             "Npgsql.NpgsqlDataAdapter",
+            "Npgsql.NpgsqlFactory",
+            "Npgsql.NpgsqlCommandBuilder",
             "Npgsql.NpgsqlBinaryImporter",
             "Npgsql.NpgsqlBinaryExporter",
             "Npgsql.NpgsqlRawCopyStream",

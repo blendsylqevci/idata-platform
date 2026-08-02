@@ -178,6 +178,39 @@ internal static class RawSinkFixtures
     /// <summary>Anëtar homonim `Fill` mbi një tip krejt të palidhur → zero gjetje.</summary>
     internal static int UnrelatedFillMemberFixture() => UnrelatedSqlHost.Fill(new object());
 
+    // ═════ RED 27–29 (C2) — familja provider: factory + command builder ═════
+
+    /// <summary>
+    /// `NpgsqlFactory.Instance` — fabrika e provider-it, pa asnjë thirrje
+    /// `CreateCommand`. Kapet VETËM sepse tipi prind është në taksonomi:
+    /// emri `Instance` NUK është (dhe nuk duhet të jetë) anëtar global.
+    /// </summary>
+    internal static object NpgsqlFactoryInstanceFixture() => NpgsqlFactory.Instance;
+
+    /// <summary>
+    /// Constructor-i REAL i `NpgsqlCommandBuilder` mbi një `NpgsqlDataAdapter` —
+    /// prodhon komanda INSERT/UPDATE/DELETE pa kaluar nga asnjë anëtar global.
+    /// </summary>
+    internal static object NpgsqlCommandBuilderFixture(NpgsqlDataAdapter adapter)
+        => new NpgsqlCommandBuilder(adapter);
+
+    /// <summary>
+    /// Thirrje BASE-TYPED mbi `DbCommandBuilder`: `GetInsertCommand` nuk është
+    /// emër global i taksonomisë, prandaj gjetja varet pikërisht nga baza.
+    /// </summary>
+    internal static object DbCommandBuilderInsertFixture(DbCommandBuilder builder)
+        => builder.GetInsertCommand();
+
+    // ═════════════ GREEN 24 (C2) — homonime sintetike, jashtë taksonomisë ═════════════
+
+    /// <summary>Tipe HOMONIME në namespace sintetik — FullName ndryshon, zero gjetje.</summary>
+    internal static object SyntheticProviderHomonymsFixture()
+        => new object[]
+        {
+            SyntheticProviders.NpgsqlFactory.Instance,
+            new SyntheticProviders.NpgsqlCommandBuilder(),
+        };
+
     // ═════════════ GREEN 17 — EF LINQ i tipizuar, pa sink ═════════════
 
     internal static IQueryable<BusinessRecord> TypedLinqFixture(PlatformDbContext context)
@@ -207,6 +240,21 @@ internal static class RawSinkFixtures
         var assemblyParts = new[] { ", ", "System", ".", "Data", ".", "Common" };
         return Type.GetType(string.Concat(typeParts) + string.Concat(assemblyParts));
     }
+}
+
+/// <summary>
+/// Homonime SINTETIKE të familjes provider (correction C2): emri i thjeshtë
+/// përputhet, `FullName` jo. Provojnë se taksonomia lidhet me EMRIN E PLOTË dhe
+/// jo me emrin e thjeshtë — zero gjetje për këto.
+/// </summary>
+internal static class SyntheticProviders
+{
+    internal sealed class NpgsqlFactory
+    {
+        internal static readonly NpgsqlFactory Instance = new();
+    }
+
+    internal sealed class NpgsqlCommandBuilder;
 }
 
 /// <summary>

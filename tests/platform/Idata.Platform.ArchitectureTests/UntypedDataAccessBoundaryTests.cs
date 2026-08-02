@@ -1,3 +1,6 @@
+using System.Data.Common;
+using System.Reflection;
+using Npgsql;
 using Xunit;
 
 namespace Idata.Platform.ArchitectureTests;
@@ -841,5 +844,152 @@ public sealed class UntypedDataAccessBoundaryTests
         var findings = ScanProduction(out _);
         Assert.DoesNotContain(findings, finding =>
             finding.Detail.Contains("DataAdapter", StringComparison.Ordinal));
+    }
+
+    // ═══════ C2 — familja provider: factory + command builder ═══════
+
+    [Theory]
+    [InlineData(nameof(RawSinkFixtures.NpgsqlFactoryInstanceFixture), "Npgsql.NpgsqlFactory.Instance")]
+    [InlineData(nameof(RawSinkFixtures.NpgsqlCommandBuilderFixture), "Npgsql.NpgsqlCommandBuilder..ctor")]
+    [InlineData(nameof(RawSinkFixtures.DbCommandBuilderInsertFixture), "System.Data.Common.DbCommandBuilder.GetInsertCommand")]
+    public void Familja_provider_kapet_me_atribuim_te_sakte(string member, string detail)
+    {
+        var findings = UntypedDataAccessScanner.Scan(SelfAssemblyPath());
+        var finding = Assert.Single(findings, candidate =>
+            candidate.DeclaringType == typeof(RawSinkFixtures).FullName
+            && candidate.Member == member
+            && candidate.Kind == "raw-type-member"
+            && candidate.Detail == detail);
+
+        // Locator-i i plotë asertohet, jo vetëm prania e një gjetjeje.
+        Assert.Equal("Idata.Platform.ArchitectureTests", finding.Assembly);
+        Assert.False(UntypedDataAccessScanner.IsNeverAllowable(finding));
+    }
+
+    /// <summary>
+    /// Meta-test: secili tip i ri i familjes provider është MBAJTËS — heqja e tij
+    /// e zhduk saktësisht zbulimin që varet prej tij. Emrat e anëtarëve
+    /// (`Instance`, `GetInsertCommand`) NUK janë dhe nuk duhet të bëhen globalë.
+    /// </summary>
+    [Theory]
+    [InlineData("Npgsql.NpgsqlFactory", "Npgsql.NpgsqlFactory.Instance", "Instance")]
+    [InlineData("Npgsql.NpgsqlCommandBuilder", "Npgsql.NpgsqlCommandBuilder..ctor", ".ctor")]
+    [InlineData("System.Data.Common.DbCommandBuilder", "System.Data.Common.DbCommandBuilder.GetInsertCommand", "GetInsertCommand")]
+    public void Heqja_e_tipit_provider_e_zhduk_zbulimin_perkates(string rawType, string detail, string memberName)
+    {
+        Assert.DoesNotContain(memberName, RawDataSinkTaxonomy.RawExecutionMemberNames);
+
+        bool Detected(UntypedDataAccessScanner.SinkTaxonomy? taxonomy)
+            => UntypedDataAccessScanner.Scan(SelfAssemblyPath(), taxonomy)
+                .Any(finding => finding.Detail == detail);
+
+        Assert.True(Detected(null));
+
+        var reduced = RawDataSinkTaxonomy.RawCapabilityTypeFullNames
+            .Where(name => name != rawType).ToHashSet(StringComparer.Ordinal);
+        Assert.False(Detected(new UntypedDataAccessScanner.SinkTaxonomy(
+            reduced, RawDataSinkTaxonomy.RawExecutionMemberNames,
+            RawDataSinkTaxonomy.QualifiedRawExecutionMembers)));
+    }
+
+    /// <summary>
+    /// GREEN — homonime SINTETIKE: emri i thjeshtë përputhet, `FullName` jo.
+    /// Provon se taksonomia lidhet me emrin E PLOTË, jo me emrin e thjeshtë.
+    /// </summary>
+    [Fact]
+    public void Homonimet_sintetike_te_familjes_provider_nuk_jane_gjetje()
+    {
+        foreach (var syntheticName in (string[])
+        [
+            "Idata.Platform.ArchitectureTests.SyntheticProviders+NpgsqlFactory",
+            "Idata.Platform.ArchitectureTests.SyntheticProviders+NpgsqlCommandBuilder",
+        ])
+        {
+            Assert.False(RawDataSinkTaxonomy.IsRawCapabilityType(syntheticName));
+        }
+
+        var findings = UntypedDataAccessScanner.Scan(SelfAssemblyPath());
+        Assert.DoesNotContain(findings, finding =>
+            finding.DeclaringType == typeof(RawSinkFixtures).FullName
+            && finding.Member == nameof(RawSinkFixtures.SyntheticProviderHomonymsFixture));
+        Assert.DoesNotContain(findings, finding =>
+            finding.DeclaringType.StartsWith(
+                "Idata.Platform.ArchitectureTests.SyntheticProviders", StringComparison.Ordinal));
+    }
+
+    // ─── Meta-test strukturor: parity e familjes provider ───
+
+    private static readonly Type[] ProviderFamilyBases =
+        [typeof(DbProviderFactory), typeof(DbCommandBuilder), typeof(DbDataAdapter)];
+
+    /// <summary>
+    /// Derivon nga një assembly REALE çdo tip publik KONKRET që është assignable
+    /// te ndonjëra prej bazave provider-family. Zero listë manuale.
+    /// </summary>
+    private static string[] DeriveProviderFamily(Assembly assembly)
+        => [.. assembly.GetExportedTypes()
+            .Where(type => !type.IsAbstract && !type.IsInterface && type.IsPublic
+                && ProviderFamilyBases.Any(family => family.IsAssignableFrom(type)))
+            .Select(type => type.FullName!)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)];
+
+    /// <summary>
+    /// MBYLLJA STRUKTURORE e listës manuale për tri familjet provider: universi
+    /// derivohet nga assembly-ja REALE e Npgsql-it e zgjidhur nga dependency
+    /// graph-i i pin-uar (tipi `NpgsqlConnection` → assembly-ja e tij e ngarkuar),
+    /// jo nga një listë e shkruar dorazi.
+    ///
+    /// Testi NUK auto-allowlistson asgjë dhe NUK e zgjeron skanimin në gjithë
+    /// ekosistemin: një tip i ri provider në një version të ardhshëm të Npgsql-it
+    /// e bën këtë test RED derisa të klasifikohet SHPREHIMISHT në taksonomi, me
+    /// fixture dhe review — dështimi është kërkesë për review, jo defekt.
+    /// </summary>
+    [Fact]
+    public void Familja_provider_e_Npgsql_it_eshte_e_klasifikuar_plotesisht()
+    {
+        var assembly = typeof(NpgsqlConnection).Assembly;
+        Assert.Equal("Npgsql", assembly.GetName().Name);
+
+        // (1) Bazat duhet të jenë vetë në taksonomi.
+        foreach (var family in ProviderFamilyBases)
+        {
+            Assert.Contains(family.FullName!, RawDataSinkTaxonomy.RawCapabilityTypeFullNames);
+        }
+
+        var derived = DeriveProviderFamily(assembly);
+        Assert.NotEmpty(derived);
+
+        // (2) Çdo tip konkret provider i derivuar duhet të ekzistojë me FullName EKZAKT.
+        var unclassified = derived.Where(name => !RawDataSinkTaxonomy.IsRawCapabilityType(name)).ToArray();
+        Assert.True(unclassified.Length == 0,
+            "Tip(e) provider TË PAKLASIFIKUAR në taksonomi — kërkohet klasifikim EKSPLICIT "
+            + $"+ fixture + review, JO auto-allowlist: {string.Join(", ", unclassified)}");
+
+        // (3) Minimumi i pritur për versionin aktual të pin-uar.
+        foreach (var expected in (string[])
+            ["Npgsql.NpgsqlFactory", "Npgsql.NpgsqlCommandBuilder", "Npgsql.NpgsqlDataAdapter"])
+        {
+            Assert.Contains(expected, derived);
+        }
+    }
+
+    /// <summary>
+    /// (4)+(5) Prova që kontrolli i parity-t është MBAJTËS: mbi të njëjtin
+    /// universi të derivuar, një taksonomi së cilës i mungon një tip provider e
+    /// raporton atë si TË PAKLASIFIKUAR. Kështu një tip i ri i një versioni të
+    /// ardhshëm skuq testin, në vend që të kalojë në heshtje.
+    /// </summary>
+    [Fact]
+    public void Kontrolli_i_parity_t_provider_eshte_mbajtes()
+    {
+        var derived = DeriveProviderFamily(typeof(NpgsqlConnection).Assembly);
+        Assert.Contains("Npgsql.NpgsqlFactory", derived);
+
+        var reduced = RawDataSinkTaxonomy.RawCapabilityTypeFullNames
+            .Where(name => name != "Npgsql.NpgsqlFactory").ToHashSet(StringComparer.Ordinal);
+        var unclassified = derived.Where(name => !reduced.Contains(name)).ToArray();
+
+        Assert.Equal(["Npgsql.NpgsqlFactory"], unclassified);
     }
 }
