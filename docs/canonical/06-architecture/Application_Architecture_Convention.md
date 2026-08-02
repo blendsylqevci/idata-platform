@@ -1,6 +1,6 @@
 # Application Architecture Convention (iData+ platform)
 
-**Statusi:** **EFFECTIVE — ADR-029 ACCEPTED (PR #26 merged, squash `305aefd`, 28.07.2026, pas Fable→Codex→Human Gate). INCREMENT A = COMPLETED/MERGED (PR #27, squash `abc2b291`, 28.07.2026); HAPI AKTUAL = INCREMENT B (ACTIVE — B.1 store foundation CURRENT; B.2/B.3 NOT STARTED).**
+**Statusi:** **EFFECTIVE — ADR-029 ACCEPTED (PR #26 merged, squash `305aefd`, 28.07.2026, pas Fable→Codex→Human Gate). INCREMENT A = COMPLETED/MERGED (PR #27, squash `abc2b291`, 28.07.2026); **B.1 STORE FOUNDATION = COMPLETED/MERGED (PR #28, squash `d6ddff2`, 02.08.2026)**; HAPI AKTUAL = **PRE-B2 INCREMENT 1 — ENG-007 UNTYPED DATA-ACCESS BOUNDARY (IMPLEMENTED_POLICY / PENDING_INDEPENDENT_REVIEW / NOT MERGED)**; B.2/B.3 = NOT STARTED / BLOCKED derisa ENG-006 + ENG-007 të mbyllen me Human Gate.**
 **Autoriteti:** ky dokument është **specifikimi normativ i detajuar, SUBORDINATE ndaj ADR-029** (`docs/canonical/01-phase0/05_Decision_Gates_ADR.md`). ADR-029 mban vendimin; ky dokument mban detajet. Në konflikt fiton ADR-029.
 **Data:** 27.07.2026 (v1; **corrected pre-merge 27.07.2026 · 28.07.2026** — correction passes të review-t të pavarur mbi PR #26, para merge-it; pa v2 artificial) · **Pronari:** Tech/Platform Owner + PM · **Kufiri:** ASNJË rresht i këtij dokumenti nuk është i implementuar nga PR-ja që e krijon — zero kod, zero dependency, zero migrim.
 
