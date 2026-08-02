@@ -61,7 +61,7 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/06-architecture/PlatformStatus_Architecture_Pilot_Record.md` — **Increment A pilot** (mediator/controller/Scalar; **COMPLETED / MERGED — PR #27, squash `abc2b291`, 28.07.2026**)
 - `docs/canonical/06-architecture/Identity_Authority_Store_Decision.md` — **specifikim subordinate ndaj ADR-028 (ACCEPTED / EFFECTIVE)**; implementimi = **Increment B (ACTIVE — B.1 Identity Store Foundation CURRENT; B.2/B.3 NOT STARTED)**; acceptance matrix §9
 - `docs/canonical/06-architecture/Identity_Store_Foundation_B1_Record.md` — **Increment B.1 store foundation** (Identity roleless + OpenIddict Core/EF; schema `identity`; migrimi 0003; **COMPLETED / MERGED — PR #28, squash `d6ddff2`, 02.08.2026**)
-- `docs/canonical/06-architecture/Identity_Untyped_Data_Access_Boundary_ENG007_Record.md` — **Pre-B2 Increment 1 — ENG-007** (architecture-policy fail-closed mbi raw SQL/ADO.NET/Npgsql/EF-raw; manifest me tri surface platform-only + fingerprint; **IMPLEMENTED_POLICY / PENDING_INDEPENDENT_REVIEW — NOT MERGED**; gate `ENG-007` mbetet OPEN)
+- `docs/canonical/06-architecture/Identity_Untyped_Data_Access_Boundary_ENG007_Record.md` — **Pre-B2 Increment 1 — ENG-007** (architecture-policy fail-closed mbi raw SQL/ADO.NET/Npgsql/EF-raw; manifest me katër surface platform-only + fingerprint; **IMPLEMENTED_POLICY / PENDING_INDEPENDENT_REVIEW — NOT MERGED**; gate `ENG-007` mbetet OPEN)
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
 - `docs/canonical/08-roadmap/Cutover_Rollback_Runbook.md`
 
