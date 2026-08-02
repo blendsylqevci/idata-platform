@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Identity Infrastructure (ADR-028, Increment B.1): kompozimi i store
+       foundation-it — AddIdentityCore ROLELESS + OpenIddict Core/EF mbi
+       PlatformDbContext (Persistence = migration owner + storage mapping).
+       ZERO endpoint, ZERO protokoll OIDC, ZERO credentials — B.2/B.3.
+       Domain/Application të modulit vijnë kur ekzistojnë koncepte reale
+       (flows/projection) — B.1 nuk krijon projekte bosh (ADR-029 §14). -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Idata.Platform.Persistence\Idata.Platform.Persistence.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <PackageReference Include="OpenIddict.EntityFrameworkCore" />
+  </ItemGroup>
+</Project>

@@ -43,7 +43,7 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/00-ssot/Outstanding_Confirmations_Tracker_2026-06-29.md`
 - `docs/canonical/01-phase0/00_Phase0_Execution_Plan.md`
 - `docs/canonical/01-phase0/Repo_Assembly_Walking_Skeleton_Runbook_2026-06-30.md`
-- `docs/canonical/01-phase0/05_Decision_Gates_ADR.md` — ADR Register (v1.6); ADR-024 = MERGED/ACCEPTED; Bootstrap = COMPLETED (PR #24 `0f12488c`); F1.1 = COMPLETED (PR #25 `1dc06d5`); **ADR-028 + ADR-029 = ACCEPTED / EFFECTIVE (PR #26 merged, squash `305aefd`, 28.07.2026)**; 19 Accepted · 2 Superseded · 8 Open · 0 Proposed · 29 unikë
+- `docs/canonical/01-phase0/05_Decision_Gates_ADR.md` — ADR Register (v1.7); ADR-024 = MERGED/ACCEPTED; Bootstrap = COMPLETED (PR #24 `0f12488c`); F1.1 = COMPLETED (PR #25 `1dc06d5`); **ADR-028 + ADR-029 = ACCEPTED / EFFECTIVE (PR #26 merged, squash `305aefd`, 28.07.2026)**; Increment A = COMPLETED (PR #27 `abc2b291`); 19 Accepted · 2 Superseded · 8 Open · 0 Proposed · 29 unikë
 - `docs/canonical/01-phase0/07_PRODATA_Evidence_Closure_Parity_Matrix.md` — v2 Source→Target Closure (dy boshte + capability map)
 - `docs/canonical/02-accounting/Accounting_Posting_Rules_v0_2026-06-29.md`
 - `docs/canonical/02-accounting/VAT_Book_Mapping_v0_2026-06-29.md`
@@ -57,20 +57,21 @@ During implementation, code plus tests become the truth for system behavior.
 - `docs/canonical/06-architecture/Reliability_Gate.md`
 - `docs/canonical/06-architecture/Platform_Foundation_Bootstrap_Record.md` — Bootstrap pre-F1 (COMPLETED, PR #24)
 - `docs/canonical/06-architecture/F1_1_Tenant_Authorization_Audit_Core_Record.md` — F1.1 increment (AccessControl + audit + idempotency + migrimi 0002; **COMPLETED / MERGED — PR #25, squash `1dc06d5`, 27.07.2026**)
-- `docs/canonical/06-architecture/Application_Architecture_Convention.md` — **konventa EFFECTIVE subordinate ndaj ADR-029 (ACCEPTED, PR #26 `305aefd`)**; implementimi nis me **Increment A (ACTIVE)**
-- `docs/canonical/06-architecture/PlatformStatus_Architecture_Pilot_Record.md` — **Increment A pilot** (mediator/controller/Scalar; IMPLEMENTED / PENDING_INDEPENDENT_REVIEW — NOT COMPLETE/NOT MERGED)
-- `docs/canonical/06-architecture/Identity_Authority_Store_Decision.md` — **specifikim subordinate ndaj ADR-028 (ACCEPTED / EFFECTIVE)**; implementimi = **Increment B (NOT STARTED)**; acceptance matrix §9
+- `docs/canonical/06-architecture/Application_Architecture_Convention.md` — **konventa EFFECTIVE subordinate ndaj ADR-029 (ACCEPTED, PR #26 `305aefd`)**; **Increment A = COMPLETED/MERGED (PR #27 `abc2b291`)**; hapi aktual = **Increment B (ACTIVE — B.1 store foundation CURRENT)**
+- `docs/canonical/06-architecture/PlatformStatus_Architecture_Pilot_Record.md` — **Increment A pilot** (mediator/controller/Scalar; **COMPLETED / MERGED — PR #27, squash `abc2b291`, 28.07.2026**)
+- `docs/canonical/06-architecture/Identity_Authority_Store_Decision.md` — **specifikim subordinate ndaj ADR-028 (ACCEPTED / EFFECTIVE)**; implementimi = **Increment B (ACTIVE — B.1 Identity Store Foundation CURRENT; B.2/B.3 NOT STARTED)**; acceptance matrix §9
+- `docs/canonical/06-architecture/Identity_Store_Foundation_B1_Record.md` — **Increment B.1 store foundation** (Identity roleless + OpenIddict Core/EF; schema `identity`; migrimi 0003; IMPLEMENTED / PENDING_INDEPENDENT_REVIEW — NOT MERGED)
 - `docs/canonical/08-roadmap/Project_Delivery_Roadmap_Phases_1_10.md`
 - `docs/canonical/08-roadmap/Cutover_Rollback_Runbook.md`
 
-## Next gate (rendi aktual — 28.07.2026: PR #26 MERGED `305aefd`; ADR-028/029 ACCEPTED / EFFECTIVE; Increment A PlatformStatus pilot ACTIVE)
+## Next gate (rendi aktual — 29.07.2026: PR #27 MERGED `abc2b291`; Increment A COMPLETED; hapi aktual = Increment B.1 Identity Store Foundation — IMPLEMENTED në PR #28 / PENDING_INDEPENDENT_REVIEW / NOT MERGED)
 
 *(**Re-audit-i + harta LAPT = të dorëzuara për review të pavarur** me këtë ndryshim; `ATK-011` = **OPEN / PENDING_INDEPENDENT_REVIEW** (disposition-pass i përpunuar; mbyllja pas review-t të pavarur + Human Gate). **Verdikti: regression lokale 66 PASS/1 LIVE SKIP · Tier 1 PARTIAL/REOPENED · compliance FAIL · Tier 2 NOT IMPLEMENTED/NO-GO** — Gate v2.0.)*
 
 0. **GOV-001 baseline advisory — COMPLETED me merge-in e PR #21.** `DOC-CORE` + `HISTORY-PRIV` aktive advisory; 14 profile NOT_IMPLEMENTED; `HG-LINTER-REQUIRED` mbetet OPEN.
-1. **ADR-024 — MERGED / ACCEPTED (PR #23, merge `e0d4cdc`):** target-i .NET/Angular/POS i instalueshëm/RN/PostgreSQL i kanonizuar; stack-u historik SUPERSEDED; desktop wrapper/OS (`ADR-027`) mbetet OPEN; identity provider/store (`ADR-028`) = **ACCEPTED / EFFECTIVE (28.07.2026, PR #26 `305aefd`; implementimi = Increment B, NOT STARTED)**; **target ≠ implemented — NOT YET IMPLEMENTED përtej Bootstrap-it**.
+1. **ADR-024 — MERGED / ACCEPTED (PR #23, merge `e0d4cdc`):** target-i .NET/Angular/POS i instalueshëm/RN/PostgreSQL i kanonizuar; stack-u historik SUPERSEDED; desktop wrapper/OS (`ADR-027`) mbetet OPEN; identity provider/store (`ADR-028`) = **ACCEPTED / EFFECTIVE (28.07.2026, PR #26 `305aefd`; implementimi = Increment B ACTIVE — B.1 store foundation CURRENT; B.2/B.3 NOT STARTED)**; **target ≠ implemented — NOT YET IMPLEMENTED përtej incrementeve të merge-uara**.
 2. **Platform Foundation Bootstrap pre-F1 — COMPLETED (PR #24 MERGED, squash `0f12488c`, 24.07.2026):** solution/CI + API/module smoke path + PostgreSQL dev migration path + OpenAPI client generation + Angular shell minimal — merged në main pas Fable→Codex→Human Gate. Evidence: `docs/canonical/06-architecture/Platform_Foundation_Bootstrap_Record.md`.
-3. **F1 Foundation në stack-un e ri — GATE AKTUAL / ACTIVE / NOT COMPLETE:** Identity/Tenant/RBAC + audit + encryption/key custody + observability + recovery + i18n SQ/EN/SR. F1.1 = COMPLETED (PR #25 `1dc06d5`); Architecture Freeze = COMPLETED/MERGED (PR #26 `305aefd`; ADR-028/029 ACCEPTED/EFFECTIVE); hapi aktual = **Increment A — PlatformStatus Architecture Pilot (ACTIVE / NOT COMPLETE)**; Increment B Identity / C AccessControl migration / D module = **NOT STARTED** (ENG-004 fallback AKTIV; ENG-005 OPEN). Step B/C, PREFLIGHT, Tier 2 = NO-GO; RECERT = JO.
+3. **F1 Foundation në stack-un e ri — GATE AKTUAL / ACTIVE / NOT COMPLETE:** Identity/Tenant/RBAC + audit + encryption/key custody + observability + recovery + i18n SQ/EN/SR. F1.1 = COMPLETED (PR #25 `1dc06d5`); Architecture Freeze = COMPLETED/MERGED (PR #26 `305aefd`; ADR-028/029 ACCEPTED/EFFECTIVE); Increment A PlatformStatus pilot = COMPLETED/MERGED (PR #27 `abc2b291`); hapi aktual = **Increment B — Identity Foundation (ACTIVE / NOT COMPLETE): B.1 Identity Store Foundation = IMPLEMENTED në PR #28 / PENDING_INDEPENDENT_REVIEW / NOT MERGED; B.2 authority/flows dhe B.3 projection = NOT STARTED**; Increment C AccessControl migration / D module = **NOT STARTED** (ENG-004 fallback AKTIV; ENG-005 OPEN). Step B/C, PREFLIGHT, Tier 2 = NO-GO; RECERT = JO.
 4. **Step B — code hardening (`ATK-012`, P0/PRE-TIER2) në Fiscal bounded context të ri:** T2-01..T2-10.
 5. **Step C — Fiscal Semantics Conformance Pack:** golden vectors zyrtarë + C#↔TypeScript offline equivalence + fake-HTTP/negative tests.
 6. **Independent re-review** i deltës + gates.

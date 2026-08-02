@@ -9,6 +9,7 @@
     <ProjectReference Include="..\..\..\src\platform\Modules\PlatformStatus\Presentation\Idata.Platform.Modules.PlatformStatus.Presentation.csproj" />
     <ProjectReference Include="..\..\..\src\platform\Idata.Platform.DbMigrator\Idata.Platform.DbMigrator.csproj" />
     <ProjectReference Include="..\..\..\src\platform\Idata.Platform.Persistence\Idata.Platform.Persistence.csproj" />
+    <ProjectReference Include="..\..\..\src\platform\Modules\Identity\Infrastructure\Idata.Platform.Modules.Identity.Infrastructure.csproj" />
     <ProjectReference Include="..\..\..\src\platform\Modules\AccessControl\Application\Idata.Platform.Modules.AccessControl.Application.csproj" />
     <ProjectReference Include="..\..\..\src\platform\Modules\AccessControl\Domain\Idata.Platform.Modules.AccessControl.Domain.csproj" />
     <ProjectReference Include="..\..\..\src\platform\Modules\AccessControl\Presentation\Idata.Platform.Modules.AccessControl.Presentation.csproj" />

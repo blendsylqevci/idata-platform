@@ -1,6 +1,7 @@
 using Idata.Platform.Modules.AccessControl.Application;
 using Idata.Platform.Modules.AccessControl.Infrastructure;
 using Idata.Platform.Modules.AccessControl.Presentation;
+using Idata.Platform.Modules.Identity.Infrastructure;
 using Idata.Platform.Modules.PlatformStatus.Application;
 using Idata.Platform.Modules.PlatformStatus.Application.Features.GetPlatformStatus;
 using Idata.Platform.Modules.PlatformStatus.Infrastructure;
@@ -37,9 +38,15 @@ builder.Services.AddMediator(options =>
 // AccessControl mbeten të paprekura deri në Increment C.
 builder.Services.AddControllers();
 
+// ADR-028 Increment B.1 — Identity STORE foundation VETËM: Identity roleless
+// (UserOnlyStore) + OpenIddict Core/EF me Guid mbi PlatformDbContext.
+// ZERO endpoint/protokoll OIDC, ZERO token issuance/validation, ZERO
+// credentials — B.2; ZERO projection drejt platform.app_user — B.3.
+builder.Services.AddIdentityStoreFoundation();
+
 // AccessControl (F1.1) — provider-neutral: host-i NUK regjistron asnjë
-// authentication scheme (ADR-028 ACCEPTED / EFFECTIVE; Identity
-// implementation = Increment B NOT STARTED) → principal bosh → deny-by-default;
+// authentication scheme (B.1 shton vetëm STORE foundation — asnjë scheme,
+// asnjë cookie; authority/flows = B.2) → principal bosh → deny-by-default;
 // override auth lejohet VETËM në integration-test assembly.
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IAccessControlStore, EfAccessControlStore>();

@@ -9,5 +9,10 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="Npgsql" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <!-- ADR-028 B.1: provider-specific STORAGE mapping jeton ne Persistence
+         (migration owner i vetem): konteksti roleless IdentityUserContext +
+         entitetet OpenIddict Core/EF me celesa Guid. ZERO protokoll ketu. -->
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <PackageReference Include="OpenIddict.EntityFrameworkCore" />
   </ItemGroup>
 </Project>

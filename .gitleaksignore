@@ -1,0 +1,19 @@
+# iData+ — gitleaks fingerprint ignore (mekanizmi standard i gitleaks për
+# gjetje HISTORIKE të rishikuara si false-positive; NUK ndryshon asnjë
+# rregull të .gitleaks.toml dhe NUK ndikon detektimin e ardhshëm — çdo hyrje
+# është e ankoruar te NJË commit + file + rregull + rresht specifik).
+#
+# Çdo hyrje e re kërkon deklarim eksplicit në PR body + review + Human Gate.
+#
+# PR #28 (Increment B.1 — Identity Store Foundation) — hyrje e
+# RATIFIKUAR nga Pronari në correction pass të PR #28 (29.07.2026),
+# VETËM për fingerprint-in ekzakt commit-scoped më poshtë: një GUID
+# sintetik all-zeros (me prapashtesë "b1", pa asnjë shifër reale) në një
+# test migrimi u kap nga rregulli idata-client-pii (pattern telefoni mbi
+# vargje shifrash) — ZERO PII reale; vlera u zëvendësua FORWARD-ONLY me
+# Guid të gjeneruar në ekzekutim (commit 3ffc1da); historia nuk
+# rishkruhet. Follow-up i regjistruar: pas squash-merge, kur commit-i
+# historik s'është pjesë e main-it, hyrja shqyrtohet për heqje në PR të
+# veçantë. False-positive të tjerë të idata-client-pii mbi GUID sintetikë
+# = follow-up i detektorit, JO zgjerim i këtij suppression-i.
+1ebe1e1544da1a9d17dee887e076af88160b08f5:tests/platform/Idata.Platform.IntegrationTests/IdentityMigrationUpgradeTests.cs:idata-client-pii:193

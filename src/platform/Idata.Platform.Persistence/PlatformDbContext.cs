@@ -1,4 +1,7 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using OpenIddict.EntityFrameworkCore.Models;
 
 namespace Idata.Platform.Persistence;
 
@@ -9,14 +12,31 @@ namespace Idata.Platform.Persistence;
 /// storage records NEUTRALE (POCO persistence) — Persistence NUK varet nga
 /// asnjë Domain moduli; çdo modul mapon records ↔ tipet e veta në shtresën
 /// e vet Infrastructure. Zero të dhëna reale.
+///
+/// ADR-028 (Increment B.1): konteksti derivon nga varianti 5-generic i
+/// <see cref="IdentityUserContext{TUser, TKey, TUserClaim, TUserLogin, TUserToken}"/>
+/// ROLELESS (JO IdentityDbContext me role) me çelësa Guid dhe claim type
+/// CUSTOM (<see cref="UserClaimRecord"/> — çelës UUID; zero persisted int
+/// IDs ABSOLUT) — schema `identity` mban vetëm store foundation (Identity +
+/// OpenIddict Core/EF); ZERO tabela rolesh, ZERO FK cross-schema drejt
+/// `platform`, ZERO projection para B.3.
 /// </summary>
 public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> options)
-    : DbContext(options)
+    : IdentityUserContext<UserAccountRecord, Guid, UserClaimRecord, IdentityUserLogin<Guid>, IdentityUserToken<Guid>>(options)
 {
     public const string Schema = "platform";
+    public const string IdentitySchema = "identity";
 
     public DbSet<MigrationSmokeCheck> MigrationSmokeChecks => Set<MigrationSmokeCheck>();
-    public DbSet<AppUserRecord> AppUsers => Set<AppUserRecord>();
+
+    /// <summary>
+    /// `platform.app_user` (projection boundary i F1.1) — i riemërtuar
+    /// `PlatformAppUsers` që të MOS ngatërrohet KURRË me inherited
+    /// <c>Users</c> (`identity.user_account`, store-i i Identity-t).
+    /// AccessControl përdor VETËM këtë; `Users` i takon vetëm Identity
+    /// wiring/store (guard-test diskriminues në ArchitectureTests).
+    /// </summary>
+    public DbSet<AppUserRecord> PlatformAppUsers => Set<AppUserRecord>();
     public DbSet<BusinessRecord> Businesses => Set<BusinessRecord>();
     public DbSet<RoleRecord> Roles => Set<RoleRecord>();
     public DbSet<PermissionRecord> Permissions => Set<PermissionRecord>();
@@ -27,7 +47,18 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // ADR-028 B.1 (rregull i detyrueshëm): mapping-u bazë ROLELESS i
+        // Identity-t aplikohet I PARI; remap-et tona (schema/tabela/kolona)
+        // e mbishkruajnë default-in PAS tij.
+        base.OnModelCreating(modelBuilder);
+
         modelBuilder.HasDefaultSchema(Schema);
+
+        // OpenIddict Core/EF me çelësa Guid — regjistrohet KËTU (Persistence
+        // = model/migration owner i vetëm) që modeli të jetë IDENTIK në çdo
+        // vend ku ndërtohen options (API host, DbMigrator, design-time,
+        // teste) — ekuivalenti i dokumentuar i `options.UseOpenIddict<Guid>()`.
+        modelBuilder.UseOpenIddict<Guid>();
 
         modelBuilder.Entity<MigrationSmokeCheck>(entity =>
         {
@@ -182,5 +213,79 @@ public sealed class PlatformDbContext(DbContextOptions<PlatformDbContext> option
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(entry => new { entry.BusinessId, entry.EventAt });
         });
+
+        // ── Identity store foundation (ADR-028, B.1) — schema `identity`,
+        //    emra tabelash të KONTROLLUAR (§3 i Identity_Authority_Store_
+        //    Decision.md); ZERO AspNet*/role tables; user_token (Identity,
+        //    account-level) dhe oidc_token (OpenIddict, OAuth2/OIDC
+        //    operacional) kanë pronësi TË NDARË — tabela/tipe të ndryshme. ──
+
+        modelBuilder.Entity<UserAccountRecord>(entity => entity.ToTable("user_account", IdentitySchema));
+        modelBuilder.Entity<IdentityUserLogin<Guid>>(entity => entity.ToTable("user_login", IdentitySchema));
+        modelBuilder.Entity<UserClaimRecord>(entity =>
+        {
+            // Invarianti DB (§7.2, correction R2): zero-UUID refuzohet nga
+            // PostgreSQL — shprehja pa literal shifrash (anti false-positive
+            // i skanerëve): repeat('0', 32)::uuid.
+            entity.ToTable("user_claim", IdentitySchema, table => table.HasCheckConstraint(
+                "ck_user_claim_id_non_empty", "id <> CAST(repeat('0', 32) AS uuid)"));
+            // ZERO persisted int IDs (ABSOLUT): çelësi i VETËM i persistuar =
+            // ClaimId (Guid, i gjeneruar në aplikacion — kurrë nga DB);
+            // inherited `IdentityUserClaim<TKey>.Id` (int) INJOROHET nga EF
+            // me formë STRING/metadata (zero referencë ekzekutuese IL ndaj
+            // getter/setter-it — IL guard-i i CI-së e ndalon përdorimin).
+            entity.HasKey(claim => claim.ClaimId);
+            entity.Property(claim => claim.ClaimId).ValueGeneratedNever();
+            entity.Ignore(nameof(IdentityUserClaim<Guid>.Id));
+        });
+        modelBuilder.Entity<IdentityUserToken<Guid>>(entity => entity.ToTable("user_token", IdentitySchema));
+        modelBuilder.Entity<OpenIddictEntityFrameworkCoreApplication<Guid>>(entity => entity.ToTable("oidc_application", IdentitySchema));
+        modelBuilder.Entity<OpenIddictEntityFrameworkCoreAuthorization<Guid>>(entity => entity.ToTable("oidc_authorization", IdentitySchema));
+        modelBuilder.Entity<OpenIddictEntityFrameworkCoreScope<Guid>>(entity => entity.ToTable("oidc_scope", IdentitySchema));
+        modelBuilder.Entity<OpenIddictEntityFrameworkCoreToken<Guid>>(entity => entity.ToTable("oidc_token", IdentitySchema));
+
+        ApplyIdentityColumnNaming(modelBuilder);
+
+        // PAS emërtimit mekanik snake_case: çelësi UUID i claim-it mapohet te
+        // kolona KANONIKE `id` (konsistente me user_account/oidc_*).
+        modelBuilder.Entity<UserClaimRecord>()
+            .Property(claim => claim.ClaimId)
+            .HasColumnName("id");
     }
+
+    /// <summary>
+    /// Emërtim DETERMINIST i kolonave të schema-s `identity`: emrat e
+    /// property-ve REALE të Identity/OpenIddict konvertohen MEKANIKISHT në
+    /// lowercase snake_case (konsistent me schema-n `platform`); emrat
+    /// eksplicitë të framework-ut për indekset (`UserNameIndex`/`EmailIndex`)
+    /// pastrohen → emrat default të EF-it mbi tabelat/kolonat e kontrolluara.
+    /// Asnjë kolonë nuk shtohet, hiqet apo ndryshon tip — vetëm emërtim.
+    /// </summary>
+    private static void ApplyIdentityColumnNaming(ModelBuilder modelBuilder)
+    {
+        foreach (var entity in modelBuilder.Model.GetEntityTypes())
+        {
+            if (entity.GetSchema() != IdentitySchema)
+            {
+                continue;
+            }
+
+            foreach (var property in entity.GetProperties())
+            {
+                property.SetColumnName(ToSnakeCase(property.Name));
+            }
+
+            foreach (var index in entity.GetIndexes())
+            {
+                index.SetDatabaseName(null); // emri default i EF: IX_<tabelë>_<kolona>
+            }
+        }
+    }
+
+    /// <summary>Konvertim mekanik PascalCase → snake_case (p.sh. NormalizedUserName → normalized_user_name).</summary>
+    private static string ToSnakeCase(string name)
+        => string.Concat(name.Select((character, position) =>
+            char.IsUpper(character)
+                ? (position > 0 ? "_" : string.Empty) + char.ToLowerInvariant(character)
+                : character.ToString()));
 }

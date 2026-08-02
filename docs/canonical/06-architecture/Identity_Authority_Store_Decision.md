@@ -1,6 +1,6 @@
 # Identity Authority & Store — Decision Specification (ADR-028)
 
-**Statusi:** **ACCEPTED / EFFECTIVE — ADR-028 ACCEPTED (PR #26 merged, squash `305aefd`, 28.07.2026, pas Fable→Codex→Human Gate). IMPLEMENTIMI = INCREMENT B (NOT STARTED); asnjë rresht i acceptance matrix §9 s'mbyllet pa evidencë të ekzekutuar.**
+**Statusi:** **ACCEPTED / EFFECTIVE — ADR-028 ACCEPTED (PR #26 merged, squash `305aefd`, 28.07.2026, pas Fable→Codex→Human Gate). IMPLEMENTIMI = INCREMENT B (ACTIVE — B.1 Identity Store Foundation CURRENT; B.2 authority/flows dhe B.3 projection NOT STARTED); asnjë rresht i acceptance matrix §9 s'mbyllet pa evidencë të ekzekutuar.**
 **Autoriteti:** ky dokument është **specifikimi SUBORDINATE ndaj ADR-028** (`docs/canonical/01-phase0/05_Decision_Gates_ADR.md`). ADR-028 mban vendimin; ky dokument mban boundary-t, schema/table map, flows, security gates, migrimin, rollback-un dhe acceptance criteria. Në konflikt fiton ADR-028.
 **Data:** 27.07.2026 (v1; **corrected pre-merge 27.07.2026 · 28.07.2026** — correction passes të review-t të pavarur mbi PR #26, para merge-it; pa v2 artificial) · **Pronari:** Pronari + Tech · **Kufiri:** ZERO kod/dependency/migrim nga PR-ja që e krijon; implementimi = **Increment B** i rendit A/B/C/D (shih `Application_Architecture_Convention.md` §15). Asnjë secret/konfigurim real këtu.
 
@@ -51,7 +51,7 @@ ASP.NET Core Identity + OpenIddict       AccessControl (F1.1, i pandryshuar)
 
 - **Asgjë nga kjo kontratë NUK është e implementuar sot** — kontratë target për Increment B; **OPEN / planned / documented / waiver NUK numërohen PASS** (shih edhe zgjerimin e `ENG-005` në Tracker).
 
-## 3. Schema / table map (emra target — verifikohen në Increment B PARA migrimit 0003)
+## 3. Schema / table map (emrat/llojet e IMPLEMENTUARA e të provuara në branch-in B.1 — statusi PENDING_INDEPENDENT_REVIEW / NOT MERGED; lifecycle/revocation/protokolli = B.2 OPEN)
 
 | Tabela target | Roli |
 |---|---|
@@ -64,9 +64,11 @@ ASP.NET Core Identity + OpenIddict       AccessControl (F1.1, i pandryshuar)
 | `identity.oidc_scope` | scopes |
 | `identity.oidc_token` | tokens/artifacts OPERACIONALE OAuth2/OIDC të OpenIddict — access, refresh, authorization/device artifacts sipas konfigurimit final — me lifecycle/revocation në KËTË store autoritativ |
 
-**Zero emra default të pakontrolluar** (`AspNetUsers`, `AspNetRoles`, `User` etj.) si emra finalë — mapping-u i EF/OpenIddict konfigurohet në emrat e mësipërm; **emrat finalë (dhe llojet reale të token-ave që paketat i përdorin) verifikohen në Increment B para migrimit 0003** — nuk deklarohen lloje që paketa finale nuk i përdor.
+**Zero emra default të pakontrolluar** (`AspNetUsers`, `AspNetRoles`, `User` etj.) si emra finalë — mapping-u i EF/OpenIddict konfigurohet në emrat e mësipërm; **emrat finalë dhe llojet reale të token-ave u verifikuan në B.1 kundër modelit real të paketave (shih paragrafin vijues); statusi = PENDING_INDEPENDENT_REVIEW — nuk deklarohen lloje që paketa finale nuk i përdor.**
 
-**Pronësia e token-ave — ZERO mbivendosje (kontratë + test i ardhshëm):** Increment B shton architecture/schema acceptance test që provon (a) **zero ownership të dyfishtë** midis `user_token` dhe `oidc_token`; (b) **zero token material në schema `platform`**; (c) lifecycle/revocation ndodhin në store-in autoritativ përkatës.
+**Verifikim B.1 (i kryer NË branch-in e PR #28 — migrimi 0003 EKZISTON aty dhe verifikimi iu bë modelit/schema-s REALE të tij; statusi mbetet PENDING_INDEPENDENT_REVIEW deri në review + Human Gate + merge; i korrigjuar në correction passes R1–R8, 29.07–01.08.2026 — `Identity_Store_Foundation_B1_Record.md`):** tabelat §3 u konfirmuan kundër modelit REAL të paketave; `user_token` = artefakte account-level të Identity-t me PK të përbërë (`user_id`/`login_provider`/`name`); `oidc_token` = OpenIddict me çelës Guid; pronësia e ndarë e provuar me teste (model + schema reale). **Zero persisted int IDs = ABSOLUT (vendim i Pronarit):** `identity.user_claim` përdor claim type CUSTOM (`UserClaimRecord : IdentityUserClaim<Guid>`) me çelës të VETËM të persistuar `ClaimId` — **non-empty i imponuar në DY shtresa**: setter-i refuzon `Guid.Empty` në APLIKACION (exception i testuar) dhe **CHECK constraint determinist `ck_user_claim_id_non_empty`** e refuzon në PostgreSQL (Guid → kolona `id` uuid). Inherited `Id:int` i framework-ut **ekziston vetëm në CLR**, është **i EF-injoruar** (mapping string/metadata — zero kolonë int identifikuese) dhe **përdorimi ekzekutues i tij ndalohet nga IL architecture guard i CI-së** — nuk pretendohet compiler-level inaccessibility për kod jashtë repo-s. **Kufiri i store-it = TYPE/METADATA statik** mbi të gjitha production assemblies — atribuim i saktë historik: **R3** = identiteti i owner-ëve me **path kanonik repo-relative** (jo basename si autoritet klasifikimi); **R4** = **AssemblyName + TargetPath të VLERËSUARA nga MSBuild** dhe verifikim **MVID** i binarit të ngarkuar (zero regex/XML raw, zero fallback); direct owners VETËM me path kanonik = Persistence + Identity.Infrastructure; API composition root pa akses direkt te records/DbSet-et identity; universi i mbrojtur = TË 8 entitetet e skemës `identity` me meta-test plotësie kundër modelit real; **R5** = garanci fail-closed e varësive: **package roots direkte = autoritet EKSPLICIT i review-ueshëm** (barazi ekzakte me setin MSBuild + lockfiles; root i panjohur/autoritet i vdekur/i paarritshëm/malformed = GJETJE) dhe **AssemblyRefs = klasifikim TOTAL**; **R6** = klasifikimi kalon te referencat e ZGJIDHURA nga MSBuild (jo emri); **R7** = autorizimi kërkon **ANËTARËSI EKZAKTE në asset-set autoritativ të derivuar VEÇMAS** — platform: `CanonicalTargetPath` ekzakt + MVID i output-it; package **[R8]**: anëtarësi në asset-set-in e **tuple-s `packageId+resolvedVersion`** nga `project.assets.json` (unioni i sheshtë i owner-it NUK është autoritet — asset real i një pakete tjetër refuzohet); framework: ref-set nga `ResolvedTargetingPack`; lockfile: adjacency DIREKTE reale për edges projektesh, range→resolved për edges paketash dhe `version`=2 e detyrueshme (metadata/path-prefix vetvetiu NUK autorizojnë). Prefix-listat = vetëm defense-in-depth — provuar me teste + fixtures diskriminuese. **Threat boundary (R7):** csproj/Directory.Build.*/targets të importuara janë build-definition e review-uar — guard-i NUK pretendon mbrojtje ndaj ekzekutimit arbitrar të MSBuild target-ëve keqdashës. **Kufij të mbetur të dokumentuar (R4):** reflektimi dinamik runtime NUK kapet nga skaneri statik — gate **ENG-006 OPEN**; untyped identity-data access (raw SQL/ADO.NET/FromSql/ExecuteSql mbi schema `identity`) nuk ndalohet nga asnjë analyzer — gate **ENG-007 OPEN** (auditi R4: zero përdorim i tillë sot; kapaciteti ekziston në shtresa jo-owner mbi `platform.`); të dy në Tracker me mbyllje para merge-it të B.2; zero pretendim "bypass-free"; lifecycle/revocation/protokolli mbeten B.2 OPEN.
+
+**Pronësia e token-ave — ZERO mbivendosje (E PROVUAR në B.1; lifecycle = B.2):** testet e B.1 (model + schema reale PostgreSQL sintetike) PROVOJNË (a) **zero ownership të dyfishtë** midis `user_token` dhe `oidc_token` (pronësi e ndarë me tipe CLR të veçanta); (b) **zero token material në schema `platform`**; (c) testet e lifecycle/revocation në store-in autoritativ përkatës mbeten **B.2 OPEN** — prova ekzistuese NUK paraqitet si e ardhshme dhe e ardhshmja NUK paraqitet si e kryer.
 
 **Arsyetimi i emërtimit (i saktë, pa overclaim):** `USER` është **fjalë e rezervuar e PostgreSQL** (SQL key words, PostgreSQL 16 — burim zyrtar), prandaj canonical përdor `identity.user_account` dhe `platform.app_user`. **NUK pretendohet** se `Users`, `Role` apo çdo emër tjetër janë të gjithë reserved — emrat e tjerë eksplicitë përdoren për qartësi domain-i, schema ownership, lowercase naming dhe shmangie të mapping-ut default të pakontrolluar. `Rolers` është emër i pavlefshëm/typo — jo alternativë.
 
@@ -142,7 +144,7 @@ Testi ekzistues `Zero_identity_provider_konkret_ne_asnje_assembly_te_platformes`
 4. ndryshimi arsyetohet EKSPLICIT në PR body;
 5. architecture coverage **NUK dobësohet në heshtje**.
 
-**Në PR-në docs-only aktuale testi NUK preket.**
+**Në PR-në docs-only aktuale testi NUK preket.** *(Shënim i datuar B.1, 28.07.2026: zëvendësimi i kontrolluar u krye në branch-in e B.1 sipas pikave 1–5 — allowlist ekzakt assemblies + projekte të aprovuara; providerët/protokolli të ndaluar kudo; coverage i FORCUAR; pending review — shih `Identity_Store_Foundation_B1_Record.md`.)*
 
 ## 8. Rollback (Increment B) — kontrata FORWARD-ONLY
 
@@ -155,7 +157,7 @@ Testi ekzistues `Zero_identity_provider_konkret_ne_asnje_assembly_te_platformes`
 
 ## 9. Acceptance matrix e Increment B (e MATSHME — çdo rresht me evidence, status, owner, closure gate)
 
-**Rregull:** statusi i çdo rreshti sot = **OPEN / NOT IMPLEMENTED**; **OPEN / waiver / planned / documented NUK numërohen PASS dhe NUK e mbyllin Increment B** — mbyllja kërkon testin/evidencën e kolonës 2 të ekzekutuar GREEN.
+**Rregull (i korrigjuar në correction pass të PR #28):** statusi **default = OPEN derisa të ketë evidencë të ekzekutuar**; çdo rresht **klasifikohet INDIVIDUALISHT** sipas evidencës reale (OPEN / PARTIAL / IMPLEMENTED-në-branch / N/A me justifikim); **OPEN / PARTIAL / N/A / waiver / planned / documented NUK numërohen PASS dhe NUK e mbyllin Increment B** — mbyllja e një rreshti kërkon testin/evidencën e kolonës 2 të ekzekutuar GREEN + review + Human Gate; **Increment B nuk quhet COMPLETE** para B.2/B.3.
 
 | # | Kriteri | Evidence/test i pritshëm | Statusi sot | Owner | Closure gate |
 |---|---|---|---|---|---|
@@ -168,11 +170,11 @@ Testi ekzistues `Zero_identity_provider_konkret_ne_asnje_assembly_te_platformes`
 | C1 | Credentials: matrica e plotë §5.2 — Development+dev OK · Development pa set minimal FAIL · Staging/Production/unknown + ÇFARËDO dev/ephemeral = startup FAIL (edhe mixed) · persistent signing missing FAIL · persistent encryption missing FAIL · set valid SUCCESS | startup tests per-rresht | OPEN | Tech | Increment B PR + review |
 | C2 | Credentials: restart me të njëjtat creds · rotation/rollover me overlap të kontrolluar · expired/invalid/unavailable → fail-closed | teste lifecycle | OPEN | Tech | Increment B PR + review |
 | D1 | Verification policy për email/telefon si **gate i veçantë** per-klasë user/client (§5.3); **recovery NUK e zëvendëson verification policy** | policy e specifikuar + teste enrollment/expiry/single-use/rate-limit | OPEN | Pronari + Tech | Increment B PR + Human Gate |
-| E1 | Schema `identity` me tabelat §3 (emra të verifikuar) · migrim 0003+ me upgrade real nga 0002 | migration tests | OPEN | Tech | Increment B PR + review |
+| E1 | Schema `identity` me tabelat §3 (emra të verifikuar) · migrim 0003+ me upgrade real nga 0002 | migration tests | **IMPLEMENTED në branch B.1 (PR #28) / PENDING_INDEPENDENT_REVIEW — NOT MERGED** (28–29.07.2026; teste të ekzekutuara GREEN, përfshirë UUID claim key pas correction pass — shih `Identity_Store_Foundation_B1_Record.md`) | Tech | Increment B PR + review |
 | E2 | Authorization Code + PKCE end-to-end; implicit/password grant të REFUZUARA | teste flows | OPEN | Tech | Increment B PR + review |
 | E3 | MFA + recovery + lockout + refresh rotation/reuse detection | teste reale | OPEN | Tech | Increment B PR + review |
-| E4 | Tenant RBAC F1.1 i PAPREKUR (baseline GREEN; zero Identity-role në authz) | baseline i plotë | OPEN | Tech | Increment B PR + review |
-| E5 | Architecture test i zëvendësuar §7; zero provider i paaprovuar; keys jashtë repo/log/renderers; audit identity i redaktuar | architecture + gitleaks/guard + audit tests | OPEN | Tech | Increment B PR + review |
+| E4 | Tenant RBAC F1.1 i PAPREKUR (baseline GREEN; zero Identity-role në authz) | baseline i plotë | **PROVUAR në branch B.1 / PENDING_INDEPENDENT_REVIEW** (baseline i plotë GREEN zero skip + zero Identity roles strukturalisht + kufiri `Users`↔`PlatformAppUsers` i guard-uar; mbyllja me review + merge) | Tech | Increment B PR + review |
+| E5 | Architecture test i zëvendësuar §7; zero provider i paaprovuar; keys jashtë repo/log/renderers; audit identity i redaktuar | architecture + gitleaks/guard + audit tests | **PARTIAL** (architecture replacement + inventari fail-closed + gitleaks/guard = të provuara në branch B.1; keys/credentials = B.2, audit identity events = B.2/B.3 — OPEN) | Tech | Increment B PR + review |
 
 ## 10. External IdP — kushtet e RIHAPJES (jo adoptim automatik)
 
@@ -186,4 +188,4 @@ Duende nuk zgjidhet sepse sjell **detyrime licensing/procurement/renewal për pr
 
 ## 12. Çfarë mbetet OPEN edhe pas kësaj PR-je
 
-Zgjedhja HA/backup topology konkrete (ADR-026) · key custody mekanizmi konkret (ADR-025) · federation e jashtme (vetëm sipas §10) · break-glass implementation (gate i veçantë) · production provisioning i roleve (F1.1 Record) · ndarja përfundimtare 401/403 (implementohet me Increment B) · **mekanizmi i delivery-t të projection-it (§2.1)** · **policy e verification-it per-klasë (§5.3)** · **mekanizmi konkret i token validation (§5.1)** · **emrat/llojet finale të tabelave para 0003 (§3)**.
+Zgjedhja HA/backup topology konkrete (ADR-026) · key custody mekanizmi konkret (ADR-025) · federation e jashtme (vetëm sipas §10) · break-glass implementation (gate i veçantë) · production provisioning i roleve (F1.1 Record) · ndarja përfundimtare 401/403 (implementohet me Increment B) · **mekanizmi i delivery-t të projection-it (§2.1)** · **policy e verification-it per-klasë (§5.3)** · **mekanizmi konkret i token validation (§5.1)** · **testet lifecycle/revocation të token-ave (B.2)** · **ENG-006 (reflection dinamik) + ENG-007 (untyped identity-data access)**. *(Hequr nga kjo listë sepse B.1 i ka PROVUAR realisht në branch: emrat/llojet e tabelave §3; ndarja e pronësisë `user_token`/`oidc_token`.)*

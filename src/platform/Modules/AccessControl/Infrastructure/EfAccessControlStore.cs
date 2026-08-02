@@ -22,7 +22,7 @@ public sealed class EfAccessControlStore(PlatformDbContext context) : IAccessCon
                 && candidate.Status == RecordStatus.Active)
             .Where(candidate => context.Businesses.Any(business =>
                 business.Id == businessId && business.Status == RecordStatus.Active))
-            .Where(candidate => context.AppUsers.Any(user =>
+            .Where(candidate => context.PlatformAppUsers.Any(user =>
                 user.Id == userId && user.Status == RecordStatus.Active))
             .SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);

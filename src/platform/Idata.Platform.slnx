@@ -13,6 +13,10 @@
   <Folder Name="/Modules/AccessControl/Presentation/">
     <Project Path="Modules/AccessControl/Presentation/Idata.Platform.Modules.AccessControl.Presentation.csproj" />
   </Folder>
+  <Folder Name="/Modules/Identity/" />
+  <Folder Name="/Modules/Identity/Infrastructure/">
+    <Project Path="Modules/Identity/Infrastructure/Idata.Platform.Modules.Identity.Infrastructure.csproj" />
+  </Folder>
   <Folder Name="/Modules/PlatformStatus/" />
   <Folder Name="/Modules/PlatformStatus/Application/">
     <Project Path="Modules/PlatformStatus/Application/Idata.Platform.Modules.PlatformStatus.Application.csproj" />

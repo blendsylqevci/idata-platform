@@ -114,8 +114,8 @@ i18n scaffold; CI që verifikon të dy stack-et; ky record.
 
 *(Kjo listë pasqyron gjendjen NË MOMENTIN e merge-it të PR #24 dhe NUK përditësohet
 si status aktual — statusi CURRENT autoritativ është ADR Register:
-**ADR-028 = ACCEPTED/EFFECTIVE me PR #26 `305aefd`, 28.07.2026; implementimi
-Identity = Increment B NOT STARTED**.)*
+**ADR-028 = ACCEPTED/EFFECTIVE me PR #26 `305aefd`, 28.07.2026; statusi CURRENT
+i implementimit Identity (Increment B) mbahet te ADR Register / SSOT**.)*
 
 Identity/Tenant/RBAC production · audit/outbox/observability/recovery production ·
 encryption/key custody (ADR-025) · providers (ADR-026) · POS/wrapper (ADR-027) ·

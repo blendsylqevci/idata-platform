@@ -1,6 +1,6 @@
 # PlatformStatus Architecture Pilot — Implementation Record (F1 Increment A)
 
-**Statusi:** **IMPLEMENTED / PENDING_INDEPENDENT_REVIEW** — *Increment A është IMPLEMENTED në branch, por NOT COMPLETE / NOT MERGED*; PASS vetëm pas Fable delta-review → Codex review (PM_REVIEW_PROTOCOL v1.8) → Human Gate → merge i aprovuar.
+**Statusi:** **COMPLETED / MERGED** — PR #27 merged në `main` (squash `abc2b291206c1f4555fc66be17a90e2ba2841a1b`, 28.07.2026) pas Fable delta-review → Codex review (PM_REVIEW_PROTOCOL v1.8) → Human Gate.
 **Autoriteti:** ADR-029 (ACCEPTED / EFFECTIVE, PR #26 `305aefd`) + `Application_Architecture_Convention.md` (subordinate). **Data:** 28.07.2026 (v1). **Increment:** A — pilot SCHEMA-FREE; zero Identity/OpenIddict, zero migrim/schema/DB change, zero prekje semantike e AccessControl, zero module biznesi.
 
 ## Çfarë ËSHTË implementuar (vetëm kjo)

@@ -1,6 +1,6 @@
 # Application Architecture Convention (iData+ platform)
 
-**Statusi:** **EFFECTIVE — ADR-029 ACCEPTED (PR #26 merged, squash `305aefd`, 28.07.2026, pas Fable→Codex→Human Gate). IMPLEMENTIMI NIS ME INCREMENT A (ACTIVE / NOT COMPLETE).**
+**Statusi:** **EFFECTIVE — ADR-029 ACCEPTED (PR #26 merged, squash `305aefd`, 28.07.2026, pas Fable→Codex→Human Gate). INCREMENT A = COMPLETED/MERGED (PR #27, squash `abc2b291`, 28.07.2026); HAPI AKTUAL = INCREMENT B (ACTIVE — B.1 store foundation CURRENT; B.2/B.3 NOT STARTED).**
 **Autoriteti:** ky dokument është **specifikimi normativ i detajuar, SUBORDINATE ndaj ADR-029** (`docs/canonical/01-phase0/05_Decision_Gates_ADR.md`). ADR-029 mban vendimin; ky dokument mban detajet. Në konflikt fiton ADR-029.
 **Data:** 27.07.2026 (v1; **corrected pre-merge 27.07.2026 · 28.07.2026** — correction passes të review-t të pavarur mbi PR #26, para merge-it; pa v2 artificial) · **Pronari:** Tech/Platform Owner + PM · **Kufiri:** ASNJË rresht i këtij dokumenti nuk është i implementuar nga PR-ja që e krijon — zero kod, zero dependency, zero migrim.
 
@@ -33,7 +33,7 @@ Grafiku CANONICAL (i provuar nga `DependencyDirectionTests` mbi metadata reale, 
 - `Application → vetëm Domain-i i modulit të vet` (+ abstraksione të aprovuara);
 - `Infrastructure → Application + Domain të modulit + Persistence (neutral/shared)`;
 - `Presentation → Application + Domain të modulit`;
-- **`Persistence` = migration owner NEUTRAL: zero varësi direkte ose transitive ndaj asnjë moduli** (storage records POCO; mapping records↔domain në Infrastructure të modulit);
+- **`Persistence` = technical EF adapter + migration owner i VETËM** (formulim i rekonsiliuar në correction pass të PR #28, i drejtuar nga Pronari): **zero varësi direkte ose transitive ndaj Domain/Application të asnjë moduli** dhe zero logjikë biznesi; storage records POCO + mapping records↔domain në Infrastructure të modulit; **LEJOHET të njohë VETËM mapping/store packages të miratuara nga ADR-028** (ASP.NET Core Identity EF + OpenIddict EF — store mapping, pa OIDC protocol behavior, pa endpoint, pa token issuance/validation, pa credential lifecycle). Ky NUK është "provider exception" blanket — përjashtimi vlen vetëm për store mapping-un EKZAKT të ADR-028; `Modules/Identity/Infrastructure` mban composition/wiring; API host = composition root **pa direct identity PackageReference** (të gjitha të imponuara me architecture tests);
 - **`DbMigrator → Persistence` dhe vetëm unazat e brendshme realisht të nevojshme — JO blanket dependency ndaj Infrastructure** (referenca reale e vetme sot: `Idata.Platform.Persistence`);
 - `Api = composition root` — i vetmi outer host që lidh komponentët;
 - **Zero reachability cross-module, direkt ose transitiv** — komunikim vetëm përmes kontratave të aprovuara.
@@ -46,7 +46,7 @@ Grafiku CANONICAL (i provuar nga `DependencyDirectionTests` mbi metadata reale, 
 | Application | use-cases, ports, commands/queries, responses, handlers | varësi jashtë Domain + abstraksioneve të aprovuara |
 | Infrastructure | implementime adapters/providers/repositories | business rules; transport concerns |
 | Presentation | controllers, transport mapping, HTTP contracts | DbContext/UoW/repository, business logic, tenant resolution |
-| Persistence | DbContext, mappings, migrations (owner i vetëm) | varësi nga Domain i moduleve; logjikë biznesi |
+| Persistence | DbContext, mappings, migrations (owner i vetëm); store mapping i miratuar nga ADR-028 (Identity/OpenIddict EF) | varësi nga Domain/Application i moduleve; logjikë biznesi; protocol/server/validation/client behavior; token issuance/validation; credential lifecycle |
 | API (host) | composition root, DI wiring, pipeline, environment gating | business logic; access i drejtpërdrejtë në DB |
 
 ## 4. Feature-slice template
@@ -105,7 +105,7 @@ Lejohen VETËM për shqetësime realisht horizontale: **validation · telemetry 
 - **Kontrata target e Increment A:** runtime `MapOpenApi()` DHE `MapScalarApiReference()` regjistrohen **VETËM brenda së njëjtës degë EKZAKTE `app.Environment.IsDevelopment()`**; jashtë Development, **as runtime OpenAPI JSON endpoint-i as Scalar UI nuk ekspozohen** (Staging = absent; Production = absent; environment i panjohur/munguar = absent, FAIL-CLOSED); kërkohen **teste negative për Staging/Production**.
 - Build-time OpenAPI generation + generated TypeScript client mbeten **të pavarura** nga runtime documentation endpoints (gjenerohen build-time si sot).
 - Nëse në të ardhmen kërkohet internal non-development documentation UI → **ADR/gate i ri** me authentication, authorization dhe network controls — jo zgjerim i heshtur.
-- **Devijimi i mëparshëm (MapOpenApi i pakushtëzuar në runtime) = CLOSED nga Increment A** — i implementuar në branch-in e PR #27 (pret review + Human Gate; **NUK** quhet MERGED/COMPLETE): `MapOpenApi` + `MapScalarApiReference` tani janë brenda degës ekzakte `app.Environment.IsDevelopment()`; **environment-matrix tests** e provojnë (Development: OpenAPI/Scalar të arritshme + status 200; Staging/Production/environment i panjohur: docs endpoints **404**, statusi mbetet i arritshëm 200); regression i automatizuar në CI provon kontratën byte-identike edhe nën `DOTNET_ENVIRONMENT=Production`.
+- **Devijimi i mëparshëm (MapOpenApi i pakushtëzuar në runtime) = CLOSED nga Increment A** — MERGED me PR #27 (squash `abc2b291`, 28.07.2026): `MapOpenApi` + `MapScalarApiReference` tani janë brenda degës ekzakte `app.Environment.IsDevelopment()`; **environment-matrix tests** e provojnë (Development: OpenAPI/Scalar të arritshme + status 200; Staging/Production/environment i panjohur: docs endpoints **404**, statusi mbetet i arritshëm 200); regression i automatizuar në CI provon kontratën byte-identike edhe nën `DOTNET_ENVIRONMENT=Production`.
 - **Zero Swagger/Swashbuckle paralel** pa ADR të ri.
 
 ## 11. Rregulli i vendimit DDD
