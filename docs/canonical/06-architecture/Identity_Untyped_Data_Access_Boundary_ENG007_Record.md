@@ -1,6 +1,6 @@
 # Identity Untyped Data-Access Boundary — Implementation Record (ENG-007, Pre-B2 Increment 1)
 
-**Statusi:** **IMPLEMENTED_POLICY / PENDING_INDEPENDENT_REVIEW** — policy-ja arkitekturore ekziston dhe imponohet në ArchitectureTests/CI në branch-in `feat/f1-eng007-untyped-data-access-boundary`, **NOT MERGED**. Gate-i `ENG-007` në Outstanding Confirmations Tracker mbetet **OPEN**: mbyllja formale kërkon Fable delta-review → Codex review (PM_REVIEW_PROTOCOL) → Human Gate i Pronarit → merge.
+**Statusi:** **COMPLETED / MERGED** — PR #29 u MERGE-ua me squash `8f7a22c` më 02.08.2026 pas Fable delta-review → Codex review → Human Gate; gate-i `ENG-007` = **CLOSED**. Threat boundary-t, kufijtë e deklaruar dhe evidenca historike më poshtë mbeten të PANDRYSHUARA. **Pointer (03.08.2026):** hapi pasues = Pre-B2 Increment 2 — ENG-008 + ENG-006 (`Identity_Dynamic_Reflection_Boundary_ENG006_Record.md`), të dy **OPEN / PENDING_INDEPENDENT_REVIEW**.
 **Autoriteti:** `ENG-007` (Tracker, regjistruar 01.08.2026 me PR #28 correction R4) + ADR-028/`Identity_Authority_Store_Decision.md` + ADR-029/`Application_Architecture_Convention.md`.
 **Data:** 02.08.2026 · **Increment:** Pre-B2 Increment 1 — architecture-policy VETËM.
 

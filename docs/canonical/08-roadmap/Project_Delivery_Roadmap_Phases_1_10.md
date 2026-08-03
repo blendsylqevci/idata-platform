@@ -1,7 +1,7 @@
 # iData+ — Project Delivery Roadmap, Fazat 1–10
 
 **Status:** canonical / approved (kopja kanonike e roadmap-it — miratuar nga Pronari; merged PR #9, përditësime me PR review)  
-**Data:** 2026-07-07 · **Përditësuar:** 2026-08-02 (PR #28 MERGED `d6ddff2` — Increment B.1 Identity Store Foundation COMPLETED; hapi aktual = Pre-B2 Increment 1 — ENG-007 untyped data-access boundary, IMPLEMENTED_POLICY / PENDING_INDEPENDENT_REVIEW / NOT MERGED; B.2/B.3 = NOT STARTED / BLOCKED derisa ENG-006 + ENG-007 të mbyllen)
+**Data:** 2026-07-07 · **Përditësuar:** 2026-08-02 (PR #28 MERGED `d6ddff2` — Increment B.1 Identity Store Foundation COMPLETED; Pre-B2 Increment 1 / ENG-007 = CLOSED-MERGED (PR #29 `8f7a22c`); hapi aktual = Pre-B2 Increment 2 — ENG-008 + ENG-006, IMPLEMENTED / PENDING_INDEPENDENT_REVIEW / NOT MERGED; B.2/B.3 = NOT STARTED / BLOCKED derisa ENG-006 + ENG-007 të mbyllen)
 **Burime kryesore:** SSOT §3/§8/§12, Feature Status Register, Outstanding Confirmations Tracker, ADR Register, 5 PoC Specs, PRO DATA Evidence Closure, KABI Operational Evidence Update, Accountant Confirmation Pack, Increment 1 PR #4/#6, security PR #8  
 **Rregull i hekurt:** ky roadmap **nuk krijon numërim të ri fazash**. Ndjek 1:1 SSOT §3. Nëse ndryshon numërimi, duhet vendim formal në SSOT + Decisions Log.
 
