@@ -1,4 +1,6 @@
+using System.CodeDom.Compiler;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using Idata.Platform.Persistence;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -103,7 +105,31 @@ internal static class DynamicRuntimeAccessFixtures
         return target.GetType().GetProperty(memberName)?.GetValue(target);
     }
 
-    // ═════ GREEN 15 — operacione SAFE EXACT të tipizuara ═════
+    // ═════ C1/A — format e kodit TONË që kompajleri i shënon vetë ═════
+    // Të gjitha duhet të mbeten BLOCKING (unattributed ose kind i thjeshtë) —
+    // asnjëra nuk fiton trust "generated" nga [CompilerGenerated] i kompajlerit.
+
+    /// <summary>Non-capturing lambda → klasa `+&lt;&gt;c` e kompajlerit.</summary>
+    internal static Func<object?> NonCapturingLambdaFixture()
+        => static () => Type.GetType("System.String");
+
+    /// <summary>Capturing lambda → `+&lt;&gt;c__DisplayClass…` e kompajlerit.</summary>
+    internal static Func<object?> CapturingLambdaFixture(string capturedName)
+        => () => Type.GetType(capturedName);
+
+    /// <summary>Local function → metodë `&lt;M&gt;g__…|…` mbi vetë tipin.</summary>
+    internal static object? LocalFunctionFixture(string typeName)
+    {
+        return Resolve();
+
+        object? Resolve() => Type.GetType(typeName);
+    }
+
+    /// <summary>Lambda brenda LINQ (capturing) → `+&lt;&gt;c__DisplayClass…`.</summary>
+    internal static object?[] LinqLambdaFixture(string prefix, IEnumerable<string> suffixes)
+        => [.. suffixes.Select(suffix => (object?)Type.GetType(prefix + suffix))];
+
+    // ═════════════ GREEN 15 — operacione SAFE EXACT të tipizuara ═════════════
 
     /// <summary>`typeof(...)` → `Type.GetTypeFromHandle`; emër/assembly = lexim metadata.</summary>
     internal static string SafeTypedMetadataFixture()
@@ -156,4 +182,77 @@ public static class TypedMediatedOwnerApiFixture
     public static string Describe(Guid businessId) => businessId.ToString("D");
 
     public static IReadOnlyList<Guid> Empty() => [];
+}
+
+/// <summary>
+/// C1/A RED — klasë MANUALE me `[CompilerGenerated]`: atributi i vetëm nuk jep
+/// KURRË trust; gjetja duhet të mbetet kind i thjeshtë blocking, jo `generated-*`.
+/// </summary>
+[CompilerGenerated]
+internal static class ManualCompilerGeneratedFixture
+{
+    internal static object? Probe() => Type.GetType("System.String");
+}
+
+/// <summary>
+/// C1/A RED — klasë manuale me `[GeneratedCode]` dhe tool TË PANJOHUR: merr
+/// klasifikim `generated-*` me tool-in e dekoduar, POR ledger-i s'e njeh dhe
+/// kind-i dangerous është gjithmonë blocking.
+/// </summary>
+[GeneratedCode("UnknownTool", "9.9")]
+internal static class ManualUnknownToolFixture
+{
+    internal static object? Probe() => Type.GetType("System.String");
+}
+
+/// <summary>
+/// C1/A RED — klasë manuale me tool/version REAL të generatorit të pin-uar:
+/// as ky nuk vetë-autorizon një tip arbitrar — dangerous/service-location janë
+/// gjithmonë blocking dhe unknown-member-i s'ka hyrje ledger-i.
+/// </summary>
+[GeneratedCode("Mediator.SourceGenerator", "3.0.0.0")]
+internal static class ManualRealToolFixture
+{
+    internal static object? ProbeDangerous() => Type.GetType("System.String");
+
+    internal static object? ProbeServiceLocation(IServiceProvider provider, Type serviceType)
+        => provider.GetService(serviceType);
+
+    internal static Type? ProbeUnknown(Type type) => type.GetElementType();
+}
+
+/// <summary>
+/// C1/A RED — nested type I PASHËNUAR nën parent me `[GeneratedCode]`: nuk
+/// trashëgon ASNJË trust nga parent-i (barazi ekzakte, zero ecje '+').
+/// </summary>
+[GeneratedCode("Mediator.SourceGenerator", "3.0.0.0")]
+internal static class GeneratedParentFixture
+{
+    internal static class UnmarkedChild
+    {
+        internal static object? Probe() => Type.GetType("System.String");
+    }
+}
+
+/// <summary>
+/// C1/B RED — FUSHA publike (statike/instance, readonly/të mutueshme, edhe
+/// nested në generic/array) që dorëzojnë tipe nga seti autoritativ
+/// <see cref="DynamicRuntimeAccessTaxonomy.OwnerForbiddenSurfaceTypes"/>.
+/// Fushat Safe* janë inverse GREEN dhe s'duhet të raportohen kurrë.
+/// </summary>
+public sealed class OwnerReflectionFieldEscapeFixtures
+{
+    public static readonly Type LeakedType = typeof(object);
+
+    public IServiceProvider? LeakedProvider;
+
+    public readonly IReadOnlyList<Delegate>? LeakedDelegates;
+
+    public static FieldInfo[]? LeakedFields;
+
+    public int SafeCount;
+
+    public static readonly string SafeLabel = "ok";
+
+    public Guid SafeId;
 }

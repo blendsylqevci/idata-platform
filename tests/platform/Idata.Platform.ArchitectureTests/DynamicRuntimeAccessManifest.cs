@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace Idata.Platform.ArchitectureTests;
 
 /// <summary>
@@ -13,6 +15,26 @@ internal sealed record AllowedDynamicAccess(
     string Reason,
     string Owner,
     string Evidence);
+
+/// <summary>
+/// Correction C1 (Blocker A) — hyrje e LEDGER-it të provenance-ës për mbetjet
+/// REALE të source-generatorëve të pin-uar. **NUK është manifest i kodit tonë**
+/// (ai mbetet BOSH): është inventar EKZAKT i asaj që generatorët e aprovuar
+/// emetojnë sot brenda production assemblies. Identiteti = assembly + tip i
+/// NORMALIZUAR (hash-i volatil 64-hex i OpenAPI-t → `{INPUT_HASH_64}`) + anëtar
+/// + kind + detail + tool + version i DEKODUAR nga metadata + paketa e pin-uar
+/// që e siguron generatorin. Çdo gjetje `generated-*` pa përputhje EKZAKTE =
+/// blocking, pavarësisht kind-it.
+/// </summary>
+internal sealed record GeneratedResidualEntry(
+    string AssemblyName,
+    string NormalizedDeclaringType,
+    string Member,
+    string Kind,
+    string Detail,
+    string Tool,
+    string ToolVersion,
+    string PackageId);
 
 /// <summary>
 /// Manifesti i përjashtimeve ENG-006 dhe validatori i tij fail-closed.
@@ -36,6 +58,13 @@ internal static class DynamicRuntimeAccessManifest
         IReadOnlyList<AllowedDynamicAccess> manifest,
         IReadOnlyList<PlatformProjectCatalog.ProjectEntry> catalog,
         IReadOnlyList<DynamicRuntimeAccessScanner.Finding> findings)
+        => Validate(manifest, catalog, findings, GeneratedResidualLedger);
+
+    internal static IReadOnlyList<string> Validate(
+        IReadOnlyList<AllowedDynamicAccess> manifest,
+        IReadOnlyList<PlatformProjectCatalog.ProjectEntry> catalog,
+        IReadOnlyList<DynamicRuntimeAccessScanner.Finding> findings,
+        IReadOnlyList<GeneratedResidualEntry> ledger)
     {
         var problems = new List<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -87,11 +116,12 @@ internal static class DynamicRuntimeAccessManifest
                 continue;
             }
 
-            // Kodi i GJENERUAR raportohet veçmas si kufi i deklaruar — nuk hyn në
-            // manifestin e kodit tonë dhe nuk e bllokon atë.
+            // Correction C1 (Blocker A): ZERO self-exemption — gjetjet mbi kod me
+            // [GeneratedCode] NUK anashkalohen; ato kontrollohen kundër ledger-it
+            // EKZAKT të provenance-ës në ValidateGeneratedResiduals.
             if (finding.Kind.StartsWith("generated-", StringComparison.Ordinal))
             {
-                continue;
+                continue; // trajtohet nga blloku i ledger-it më poshtë, kurrë i heshtur
             }
 
             if (seen.Contains(identity))
@@ -103,6 +133,8 @@ internal static class DynamicRuntimeAccessManifest
             problems.Add($"uncovered-dynamic-access:{finding.Kind}:{identity}:{finding.Detail}");
         }
 
+        problems.AddRange(ValidateGeneratedResiduals(ledger, findings));
+
         foreach (var identity in seen.Where(candidate => !consumed.Contains(candidate))
             .Order(StringComparer.Ordinal))
         {
@@ -110,5 +142,302 @@ internal static class DynamicRuntimeAccessManifest
         }
 
         return problems;
+    }
+
+    // ═════════ Correction C1 — provenance ledger i mbetjeve generated ═════════
+
+    private const string MediatorTool = "Mediator.SourceGenerator";
+    private const string MediatorToolVersion = "3.0.0.0";
+    private const string OpenApiTool =
+        "Microsoft.AspNetCore.OpenApi.SourceGenerators, Version=10.0.10.0, Culture=neutral, "
+        + "PublicKeyToken=adb9793829ddae60";
+    private const string OpenApiToolVersion = "10.0.10.0";
+
+    private const string OpenApiHelper =
+        "Microsoft.AspNetCore.OpenApi.Generated.<OpenApiXmlCommentSupport_generated>"
+        + GeneratedHashPlaceholder + "__DocumentationCommentIdHelper";
+    private const string OpenApiTransformer =
+        "Microsoft.AspNetCore.OpenApi.Generated.<OpenApiXmlCommentSupport_generated>"
+        + GeneratedHashPlaceholder + "__XmlCommentOperationTransformer";
+
+    private static GeneratedResidualEntry OpenApiEntry(string type, string member, string detail) => new(
+        "Idata.Platform.Api", type, member, "generated-dynamic-unknown-member", detail,
+        OpenApiTool, OpenApiToolVersion, "Microsoft.AspNetCore.OpenApi");
+
+    /// <summary>
+    /// Mbetjet EKZAKTE të generatorëve të pin-uar mbi HEAD-in aktual — të
+    /// rillogaritura NGA ZERO me skanim real (jo numra të trashëguar). Kind-et e
+    /// lejuara në ledger janë vetëm jo-ekzekutuese: `generated-dynamic-dangerous`
+    /// dhe `generated-dynamic-service-location` s'pranohen KURRË këtu (validatori
+    /// i refuzon si hyrje të pavlefshme dhe i bllokon si gjetje).
+    /// </summary>
+    internal static readonly GeneratedResidualEntry[] GeneratedResidualLedger =
+    [
+        new("Idata.Platform.Api", "Mediator.Internals.ContainerMetadata", ".ctor",
+            "generated-dynamic-unknown-member",
+            "Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.CreateScope",
+            MediatorTool, MediatorToolVersion, "Mediator.SourceGenerator"),
+
+        OpenApiEntry(OpenApiHelper, "CreateDocumentationId", "System.Reflection.MethodBase.GetGenericArguments"),
+        OpenApiEntry(OpenApiHelper, "CreateDocumentationId", "System.Reflection.MethodBase.GetParameters"),
+        OpenApiEntry(OpenApiHelper, "CreateDocumentationId", "System.Reflection.MethodBase.get_IsConstructor"),
+        OpenApiEntry(OpenApiHelper, "CreateDocumentationId", "System.Reflection.MethodBase.get_IsGenericMethod"),
+        OpenApiEntry(OpenApiHelper, "CreateDocumentationId", "System.Reflection.MethodBase.get_IsStatic"),
+        OpenApiEntry(OpenApiHelper, "CreateDocumentationId", "System.Reflection.MethodInfo.get_ReturnType"),
+        OpenApiEntry(OpenApiHelper, "CreateDocumentationId", "System.Reflection.MethodInfo.op_Equality"),
+        OpenApiEntry(OpenApiHelper, "CreateDocumentationId", "System.Reflection.PropertyInfo.GetIndexParameters"),
+        OpenApiEntry(OpenApiHelper, "CreateDocumentationId", "System.Reflection.PropertyInfo.op_Equality"),
+        OpenApiEntry(OpenApiHelper, "GetTypeDocId", "System.Reflection.MethodBase.op_Inequality"),
+        OpenApiEntry(OpenApiHelper, "GetTypeDocId", "System.Type.GetGenericArguments"),
+        OpenApiEntry(OpenApiHelper, "GetTypeDocId", "System.Type.GetGenericTypeDefinition"),
+        OpenApiEntry(OpenApiHelper, "GetTypeDocId", "System.Type.get_DeclaringMethod"),
+        OpenApiEntry(OpenApiHelper, "GetTypeDocId", "System.Type.get_GenericParameterPosition"),
+        OpenApiEntry(OpenApiHelper, "GetTypeDocId", "System.Type.get_IsGenericParameter"),
+        OpenApiEntry(OpenApiHelper, "GetTypeDocId", "System.Type.get_IsGenericType"),
+        OpenApiEntry(OpenApiHelper, "GetTypeDocId", "System.Type.get_IsGenericTypeDefinition"),
+        OpenApiEntry(OpenApiTransformer, "TransformAsync", "System.Reflection.MethodBase.GetParameters"),
+    ];
+
+    /// <summary>Kind-e që s'lejohen KURRË në ledger dhe bllokojnë GJITHMONË si gjetje.</summary>
+    internal static readonly IReadOnlySet<string> AlwaysBlockingGeneratedKinds =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "generated-dynamic-dangerous",
+            "generated-dynamic-service-location",
+        };
+
+    /// <summary>
+    /// Gjatësia REALE e run-it hex në emrat e gjeneruar OpenAPI, e MATUR
+    /// mekanikisht nga metadata e HEAD-it (14/14 tipe → 65). DEVIATION e
+    /// deklaruar: prompti i review-t supozoi 64; sipas klauzolës "rillogarit
+    /// nga zero mbi HEAD-in real, mos hardcode numrat e reviewer-it",
+    /// parametri u zëvendësua me vlerën empirike — çdo gjatësi tjetër
+    /// (përfshirë 64 dhe 66) REFUZOHET fail-closed.
+    /// </summary>
+    internal const int OpenApiHashRunLength = 65;
+
+    internal const string GeneratedHashPlaceholder = "{INPUT_HASH_65}";
+
+    private const string OpenApiGeneratedMarker = "<OpenApiXmlCommentSupport_generated>";
+
+    /// <summary>
+    /// Correction C1 (Shtesa A) — normalizim I KUFIZUAR, funksion PURE me
+    /// pattern të ANKORUAR (zero `Replace` i përgjithshëm, zero regex global):
+    /// pranohet VETËM forma `…&lt;OpenApiXmlCommentSupport_generated&gt;` +
+    /// SAKTËSISHT NJË run hex me gjatësinë REALE të matur
+    /// (<see cref="OpenApiHashRunLength"/>) + `__` + suffix jo-bosh.
+    /// Vetëm run-i 64-hex zëvendësohet me <see cref="GeneratedHashPlaceholder"/>;
+    /// çdo segment tjetër mbetet BYTE-IDENTIK. Çdo devijim (pa run, run 63/65,
+    /// karakter jo-hex, run i dytë, hash në pozicion tjetër, suffix bosh) =
+    /// refuzim — emri kthehet i PAPREKUR dhe rrjedhimisht nuk përputhet me
+    /// asnjë hyrje ledger-i (fail-closed). Run 64 (supozimi i review-t) dhe 66
+    /// refuzohen njësoj — vetëm gjatësia empirike kalon.
+    /// </summary>
+    internal static bool TryNormalizeGeneratedTypeName(string typeName, out string normalized)
+    {
+        normalized = typeName;
+        var marker = typeName.IndexOf(OpenApiGeneratedMarker, StringComparison.Ordinal);
+        if (marker < 0)
+        {
+            return false; // s'ka formën OpenAPI — emri nuk preket kurrë
+        }
+
+        if (typeName.IndexOf(OpenApiGeneratedMarker, marker + 1, StringComparison.Ordinal) >= 0)
+        {
+            return false; // dy marker-a = formë e paparashikuar → refuzim
+        }
+
+        var hashStart = marker + OpenApiGeneratedMarker.Length;
+        var index = hashStart;
+        while (index < typeName.Length && Uri.IsHexDigit(typeName[index]))
+        {
+            index++;
+        }
+
+        if (index - hashStart != OpenApiHashRunLength)
+        {
+            return false; // 64/66/jo-hex/mungon = refuzim fail-closed (reale = 65)
+        }
+
+        if (index + 2 > typeName.Length || typeName[index] != '_' || typeName[index + 1] != '_')
+        {
+            return false; // separator-i `__` mungon
+        }
+
+        var suffix = typeName[(index + 2)..];
+        if (suffix.Length == 0)
+        {
+            return false; // suffix bosh
+        }
+
+        if (ContainsHexRun(suffix, OpenApiHashRunLength))
+        {
+            return false; // më shumë se një hash-run = refuzim
+        }
+
+        normalized = string.Concat(typeName.AsSpan(0, hashStart), GeneratedHashPlaceholder, "__", suffix);
+        return true;
+    }
+
+    private static bool ContainsHexRun(string value, int length)
+    {
+        var run = 0;
+        foreach (var character in value)
+        {
+            run = Uri.IsHexDigit(character) ? run + 1 : 0;
+            if (run >= length)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Correction C1 (Blocker A) — pariteti DY-DREJTIMËSH i mbetjeve generated
+    /// kundër ledger-it: çdo gjetje UNIKE konsumon saktësisht një hyrje; çdo
+    /// hyrje konsumohet saktësisht një herë; kind-et gjithmonë-blocking as nuk
+    /// pranohen në ledger as nuk mbulohen; kolizioni i normalizimit (dy tipe
+    /// REALE → i njëjti identitet) = fail-closed.
+    /// </summary>
+    internal static IReadOnlyList<string> ValidateGeneratedResiduals(
+        IReadOnlyList<GeneratedResidualEntry> ledger,
+        IReadOnlyList<DynamicRuntimeAccessScanner.Finding> findings)
+    {
+        var problems = new List<string>();
+
+        static string Key(string assembly, string type, string member, string kind, string detail, string tool, string version)
+            => string.Join("|", assembly, type, member, kind, detail, tool, version);
+
+        var entriesByKey = new Dictionary<string, GeneratedResidualEntry>(StringComparer.Ordinal);
+        foreach (var entry in ledger)
+        {
+            if (AlwaysBlockingGeneratedKinds.Contains(entry.Kind))
+            {
+                problems.Add($"invalid-ledger-kind:{entry.Kind}:{entry.NormalizedDeclaringType}.{entry.Member}");
+                continue;
+            }
+
+            foreach (var (field, value) in new (string, string)[]
+            {
+                ("AssemblyName", entry.AssemblyName), ("NormalizedDeclaringType", entry.NormalizedDeclaringType),
+                ("Member", entry.Member), ("Kind", entry.Kind), ("Detail", entry.Detail),
+                ("Tool", entry.Tool), ("ToolVersion", entry.ToolVersion), ("PackageId", entry.PackageId),
+            })
+            {
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    problems.Add($"empty-ledger-field:{entry.NormalizedDeclaringType}.{entry.Member}:{field}");
+                }
+                else if (value.Contains('*', StringComparison.Ordinal))
+                {
+                    problems.Add($"wildcard-ledger-field:{entry.NormalizedDeclaringType}.{entry.Member}:{field}");
+                }
+            }
+
+            var key = Key(entry.AssemblyName, entry.NormalizedDeclaringType, entry.Member,
+                entry.Kind, entry.Detail, entry.Tool, entry.ToolVersion);
+            if (!entriesByKey.TryAdd(key, entry))
+            {
+                problems.Add($"duplicate-ledger-entry:{entry.NormalizedDeclaringType}.{entry.Member}:{entry.Detail}");
+            }
+        }
+
+        // Gjetjet generated: unike sipas identitetit të plotë; normalizim + kolizion.
+        var generated = findings
+            .Where(finding => finding.Kind.StartsWith("generated-", StringComparison.Ordinal))
+            .DistinctBy(finding => Key(finding.Assembly, finding.DeclaringType, finding.Member,
+                finding.Kind, finding.Detail, finding.GeneratedTool, finding.GeneratedToolVersion))
+            .ToArray();
+
+        var rawByNormalized = new Dictionary<string, string>(StringComparer.Ordinal);
+        var consumedKeys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var finding in generated)
+        {
+            if (AlwaysBlockingGeneratedKinds.Contains(finding.Kind))
+            {
+                problems.Add(
+                    $"generated-blocking:{finding.Kind}:{finding.DeclaringType}.{finding.Member}:{finding.Detail}");
+                continue;
+            }
+
+            var normalizedType = TryNormalizeGeneratedTypeName(finding.DeclaringType, out var candidate)
+                ? candidate
+                : finding.DeclaringType;
+
+            if (normalizedType != finding.DeclaringType)
+            {
+                if (rawByNormalized.TryGetValue(normalizedType, out var existingRaw)
+                    && existingRaw != finding.DeclaringType)
+                {
+                    problems.Add($"normalization-collision:{normalizedType}");
+                    continue;
+                }
+
+                rawByNormalized[normalizedType] = finding.DeclaringType;
+            }
+
+            var key = Key(finding.Assembly, normalizedType, finding.Member,
+                finding.Kind, finding.Detail, finding.GeneratedTool, finding.GeneratedToolVersion);
+            if (!entriesByKey.ContainsKey(key))
+            {
+                problems.Add(
+                    $"uncovered-generated-residual:{finding.Kind}:{finding.Assembly}|{normalizedType}|"
+                    + $"{finding.Member}:{finding.Detail}:tool={finding.GeneratedTool}:version={finding.GeneratedToolVersion}");
+                continue;
+            }
+
+            if (!consumedKeys.Add(key))
+            {
+                problems.Add($"double-consumed-ledger-entry:{normalizedType}.{finding.Member}:{finding.Detail}");
+            }
+        }
+
+        foreach (var pair in entriesByKey.Where(pair => !consumedKeys.Contains(pair.Key))
+            .OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            problems.Add(
+                $"dead-generated-entry:{pair.Value.NormalizedDeclaringType}.{pair.Value.Member}:{pair.Value.Detail}");
+        }
+
+        return problems;
+    }
+
+    /// <summary>
+    /// Paketat e PIN-uara nga lockfile-t REALË të repo-s (id → versione të
+    /// zgjidhura) — burimi mekanik me të cilin meta-testi lidh tool/version-in e
+    /// çdo hyrjeje ledger-i. Vetëm LEXIM; zero prekje e lockfile-ve.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, IReadOnlySet<string>> PinnedPackageVersions()
+    {
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        var pinned = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var lockfile in Directory.EnumerateFiles(
+            Path.Combine(repoRoot, "src"), "packages.lock.json", SearchOption.AllDirectories))
+        {
+            using var document = JsonDocument.Parse(File.ReadAllBytes(lockfile));
+            if (!document.RootElement.TryGetProperty("dependencies", out var frameworks))
+            {
+                throw new InvalidOperationException($"Lockfile pa 'dependencies': {lockfile}");
+            }
+
+            foreach (var framework in frameworks.EnumerateObject())
+            {
+                foreach (var package in framework.Value.EnumerateObject())
+                {
+                    if (package.Value.TryGetProperty("resolved", out var resolved)
+                        && resolved.GetString() is { Length: > 0 } version)
+                    {
+                        (pinned.TryGetValue(package.Name, out var set)
+                            ? set
+                            : pinned[package.Name] = new HashSet<string>(StringComparer.Ordinal)).Add(version);
+                    }
+                }
+            }
+        }
+
+        return pinned.ToDictionary(
+            pair => pair.Key, pair => (IReadOnlySet<string>)pair.Value, StringComparer.OrdinalIgnoreCase);
     }
 }

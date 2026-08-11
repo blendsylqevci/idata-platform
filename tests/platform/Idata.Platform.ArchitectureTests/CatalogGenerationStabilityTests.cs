@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+using System.Collections.Immutable;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using Xunit;
@@ -156,7 +158,10 @@ public sealed class CatalogGenerationStabilityTests
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
         poisonedSha[victim] = new string('0', 64);
 
-        var synthetic = generation with { Sha256ByCanonicalPath = poisonedSha };
+        var synthetic = generation with
+        {
+            Sha256ByCanonicalPath = poisonedSha.ToFrozenDictionary(StringComparer.Ordinal),
+        };
         Assert.Equal([victim], PlatformProjectCatalog.VerifyGenerationFingerprints(synthetic));
 
         var poisonedMvid = generation.MvidByCanonicalPath
@@ -164,7 +169,8 @@ public sealed class CatalogGenerationStabilityTests
         poisonedMvid[victim] = Guid.Empty;
         Assert.Equal(
             [victim],
-            PlatformProjectCatalog.VerifyGenerationFingerprints(generation with { MvidByCanonicalPath = poisonedMvid }));
+            PlatformProjectCatalog.VerifyGenerationFingerprints(
+                generation with { MvidByCanonicalPath = poisonedMvid.ToFrozenDictionary(StringComparer.Ordinal) }));
 
         // Dimensioni i TRETË: koha e shkrimit. Build-et janë DETERMINISTË, prandaj
         // një rindërtim i burimeve të pandryshuara jep bajte identikë — vetëm koha
@@ -175,7 +181,7 @@ public sealed class CatalogGenerationStabilityTests
         Assert.Equal(
             [victim],
             PlatformProjectCatalog.VerifyGenerationFingerprints(
-                generation with { WriteTimeUtcByCanonicalPath = poisonedWrite }));
+                generation with { WriteTimeUtcByCanonicalPath = poisonedWrite.ToFrozenDictionary(StringComparer.Ordinal) }));
 
         // Gjenerata reale mbetet e shëndetshme.
         Assert.Empty(PlatformProjectCatalog.VerifyGenerationFingerprints(generation));
@@ -285,5 +291,221 @@ public sealed class CatalogGenerationStabilityTests
 
         Assert.NotEmpty(names);
         return names;
+    }
+
+    // ═══════ C1 (Blocker C) — kontrata VerifiedFrozenTargetPath ═══════
+
+    private static PlatformProjectCatalog.CatalogGeneration PoisonComponent(
+        PlatformProjectCatalog.CatalogGeneration generation, string victim, string component)
+    {
+        switch (component)
+        {
+            case "sha":
+                var sha = generation.Sha256ByCanonicalPath
+                    .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+                sha[victim] = new string('0', 64);
+                return generation with { Sha256ByCanonicalPath = sha.ToFrozenDictionary(StringComparer.Ordinal) };
+            case "mvid":
+                var mvid = generation.MvidByCanonicalPath
+                    .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+                mvid[victim] = Guid.Empty;
+                return generation with { MvidByCanonicalPath = mvid.ToFrozenDictionary(StringComparer.Ordinal) };
+            default:
+                var write = generation.WriteTimeUtcByCanonicalPath
+                    .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+                write[victim] = DateTime.UnixEpoch;
+                return generation with { WriteTimeUtcByCanonicalPath = write.ToFrozenDictionary(StringComparer.Ordinal) };
+        }
+    }
+
+    /// <summary>
+    /// Kontrata tre-dimensionale, e provuar VEÇMAS për secilin dimension mbi
+    /// gjenerata SINTETIKE (zero output real i prekur): devijim VETËM në SHA,
+    /// VETËM në MVID ose VETËM në mtime → `catalog-generation-drift`;
+    /// target identik → GREEN; target jashtë gjeneratës → refuzim anëtarësie.
+    /// </summary>
+    [Theory]
+    [InlineData("sha")]
+    [InlineData("mvid")]
+    [InlineData("mtime")]
+    public void VerifiedFrozenTargetPath_kap_devijimin_e_secilit_dimension(string component)
+    {
+        var generation = PlatformProjectCatalog.CurrentGeneration();
+        var victim = generation.Projects.OrderBy(entry => entry.CanonicalPath, StringComparer.Ordinal).First();
+
+        // GREEN mbi gjeneratën reale.
+        var path = PlatformProjectCatalog.VerifiedFrozenTargetPath(victim, generation);
+        Assert.True(File.Exists(path));
+
+        var poisoned = PoisonComponent(generation, victim.CanonicalPath, component);
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => PlatformProjectCatalog.VerifiedFrozenTargetPath(victim, poisoned));
+        Assert.Contains("catalog-generation-drift", exception.Message, StringComparison.Ordinal);
+
+        // Projektet e tjera të gjeneratës së helmuar mbeten GREEN (saktësi kirurgjikale).
+        var other = generation.Projects.OrderBy(entry => entry.CanonicalPath, StringComparer.Ordinal).Last();
+        Assert.NotEqual(victim.CanonicalPath, other.CanonicalPath);
+        _ = PlatformProjectCatalog.VerifiedFrozenTargetPath(other, poisoned);
+    }
+
+    [Fact]
+    public void VerifiedFrozenTargetPath_refuzon_target_jashte_gjenerates()
+    {
+        var generation = PlatformProjectCatalog.CurrentGeneration();
+        var outsider = generation.Projects[0] with
+        {
+            CanonicalPath = "src/platform/Synthetic.Outside/Synthetic.Outside.csproj",
+        };
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => PlatformProjectCatalog.VerifiedFrozenTargetPath(outsider, generation));
+        Assert.Contains("jashtë gjeneratës autoritative", exception.Message, StringComparison.Ordinal);
+
+        // Edhe identitet i manipuluar me path kanonik REAL refuzohet (anëtarësia
+        // është mbi HYRJEN e plotë, jo vetëm mbi çelësin).
+        var tampered = generation.Projects[0] with { AssemblyName = "Tampered.Assembly" };
+        Assert.Throws<InvalidOperationException>(
+            () => PlatformProjectCatalog.VerifiedFrozenTargetPath(tampered, generation));
+    }
+
+    /// <summary>
+    /// `LoadVerified` dhe konsumatorët ENG-006 përdorin TË NJËJTËN kontratë:
+    /// provë MEKANIKE mbi IL — metodat e tyre thërrasin
+    /// `VerifiedFrozenTargetPath` (token MethodDef i të njëjtit assembly).
+    /// </summary>
+    [Theory]
+    [InlineData("Idata.Platform.ArchitectureTests.PlatformProjectCatalog", "LoadVerified")]
+    [InlineData("Idata.Platform.ArchitectureTests.DynamicRuntimeAccessBoundaryTests", "ScanProduction")]
+    [InlineData("Idata.Platform.ArchitectureTests.DynamicRuntimeAccessBoundaryTests", "ScanOwnerSurfaces")]
+    public void Konsumatoret_e_production_target_it_thirrin_kontraten_e_ngrire(string typeName, string methodName)
+        => Assert.Contains("VerifiedFrozenTargetPath", CalledMethodDefinitionNames(typeName, methodName));
+
+    /// <summary>Emrat e MethodDef-eve të thirrur nga një metodë e caktuar (IL walk).</summary>
+    private static IReadOnlyCollection<string> CalledMethodDefinitionNames(
+        string declaringTypeFullName, string methodName)
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll");
+        using var stream = File.OpenRead(path);
+        using var portableExecutable = new PEReader(stream);
+        var reader = portableExecutable.GetMetadataReader();
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var matched = false;
+
+        foreach (var methodHandle in reader.MethodDefinitions)
+        {
+            var method = reader.GetMethodDefinition(methodHandle);
+            if (method.RelativeVirtualAddress == 0
+                || reader.GetString(method.Name) != methodName
+                || UntypedDataAccessScanner.FullNameOfTypeDefinition(reader, method.GetDeclaringType())
+                    != declaringTypeFullName)
+            {
+                continue;
+            }
+
+            matched = true;
+            var il = portableExecutable.GetMethodBody(method.RelativeVirtualAddress).GetILBytes()!;
+            foreach (var instruction in IlOperandTable.Walk(il, out _))
+            {
+                if (instruction.MetadataToken == 0)
+                {
+                    continue;
+                }
+
+                var handle = System.Reflection.Metadata.Ecma335.MetadataTokens.EntityHandle(instruction.MetadataToken);
+                if (handle.Kind == HandleKind.MethodDefinition)
+                {
+                    names.Add(reader.GetString(
+                        reader.GetMethodDefinition((MethodDefinitionHandle)handle).Name));
+                }
+            }
+        }
+
+        Assert.True(matched, $"Metoda {declaringTypeFullName}.{methodName} nuk u gjet.");
+        return names;
+    }
+
+    /// <summary>
+    /// C1 (Shtesa E) — provë DETERMINISTIKE (jo wall-clock): fingerprint-et
+    /// llogariten VETËM në API-n e verifikimit të katalogut, KURRË brenda
+    /// loop-it per-finding të skanerit — skaneri ENG-006 nuk thërret asnjë
+    /// API hashimi/mtime. Çifti before/after për artifact jetohet te
+    /// konsumatorët (`ScanProduction`/`ScanOwnerSurfaces`), snapshot-i i ngrirë
+    /// ripërdoret (Assert.Same në testet e gjeneratës) dhe post-scan drift-i
+    /// vazhdon të kapet (testet e helmimit).
+    /// </summary>
+    [Fact]
+    public void Skaneri_ENG006_nuk_llogarit_fingerprint_vete()
+    {
+        var called = CalledMemberNames("Idata.Platform.ArchitectureTests.DynamicRuntimeAccessScanner");
+        foreach (var forbidden in (string[])["HashData", "GetLastWriteTimeUtc", "GetLastWriteTime"])
+        {
+            Assert.DoesNotContain(forbidden, called);
+        }
+    }
+
+    // ═══════ C1 (Hardening D) — deep immutability e gjeneratës ═══════
+
+    /// <summary>
+    /// Asnjë strukturë e gjeneratës — as e jashtme, as NESTED — nuk mund të
+    /// mutohet a downcast-ohet për të helmuar `CurrentGeneration`: hartat/setet
+    /// janë `Frozen*` (mutimi përmes interface-ve hedh `NotSupportedException`),
+    /// sekuencat janë `ImmutableArray` (provuar nga tipi i komponentëve).
+    /// </summary>
+    [Fact]
+    public void Gjenerata_eshte_deep_immutable()
+    {
+        var generation = PlatformProjectCatalog.CurrentGeneration();
+
+        // Hartat kryesore: Frozen + mutimi hedh.
+        Assert.IsAssignableFrom<FrozenDictionary<string, string>>(generation.Sha256ByCanonicalPath);
+        Assert.IsAssignableFrom<FrozenDictionary<string, Guid>>(generation.MvidByCanonicalPath);
+        Assert.IsAssignableFrom<FrozenDictionary<string, DateTime>>(generation.WriteTimeUtcByCanonicalPath);
+        Assert.Throws<NotSupportedException>(() =>
+            ((IDictionary<string, string>)generation.Sha256ByCanonicalPath).Add("x", "y"));
+        Assert.Throws<NotSupportedException>(() =>
+            ((IDictionary<string, Guid>)generation.MvidByCanonicalPath).Clear());
+        Assert.Throws<NotSupportedException>(() =>
+            ((IDictionary<string, DateTime>)generation.WriteTimeUtcByCanonicalPath)
+                .Remove(generation.Projects[0].CanonicalPath));
+
+        // Sekuencat: ImmutableArray si tip komponenti (zero backing array i publikuar).
+        foreach (var (property, expected) in new (string, Type)[]
+        {
+            ("Projects", typeof(System.Collections.Immutable.ImmutableArray<PlatformProjectCatalog.ProjectEntry>)),
+            ("ProjectReferencesByCanonicalPath",
+                typeof(FrozenDictionary<string, System.Collections.Immutable.ImmutableArray<string>>)),
+            ("ResolvedReferencesByCanonicalPath",
+                typeof(FrozenDictionary<string, System.Collections.Immutable.ImmutableArray<PlatformProjectCatalog.ResolvedReference>>)),
+            ("FrameworkAssetsByCanonicalPath", typeof(FrozenDictionary<string, FrozenSet<string>>)),
+        })
+        {
+            Assert.Equal(expected,
+                typeof(PlatformProjectCatalog.CatalogGeneration).GetProperty(property)!.PropertyType);
+        }
+
+        // Nested: FrozenSet për asetet framework; PackageAssetAuthority me
+        // harta/sete të ngrira edhe në vlerat e brendshme.
+        Assert.All(generation.FrameworkAssetsByCanonicalPath.Values, set =>
+        {
+            Assert.IsAssignableFrom<FrozenSet<string>>(set);
+            Assert.Throws<NotSupportedException>(() => ((ICollection<string>)set).Add("x"));
+        });
+        Assert.All(generation.PackageAssetsByCanonicalPath.Values, authority =>
+        {
+            Assert.IsAssignableFrom<FrozenDictionary<(string, string), IReadOnlySet<string>>>(
+                authority.AssetsByTuple);
+            Assert.IsAssignableFrom<FrozenDictionary<string, (string, string)>>(authority.TupleByAsset);
+            Assert.All(authority.AssetsByTuple.Values, assets =>
+            {
+                Assert.IsAssignableFrom<FrozenSet<string>>(assets);
+                Assert.Throws<NotSupportedException>(() => ((ICollection<string>)assets).Add("x"));
+            });
+        });
+
+        // Pas gjithë tentativave të dështuara: e njëjta gjeneratë, i njëjti state.
+        var after = PlatformProjectCatalog.CurrentGeneration();
+        Assert.Same(generation, after);
+        Assert.Same(generation.Sha256ByCanonicalPath, after.Sha256ByCanonicalPath);
+        Assert.Same(generation.PackageAssetsByCanonicalPath, after.PackageAssetsByCanonicalPath);
+        Assert.Empty(PlatformProjectCatalog.VerifyGenerationFingerprints(generation));
     }
 }

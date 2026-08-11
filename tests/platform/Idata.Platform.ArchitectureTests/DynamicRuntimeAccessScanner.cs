@@ -26,7 +26,8 @@ namespace Idata.Platform.ArchitectureTests;
 internal static class DynamicRuntimeAccessScanner
 {
     internal sealed record Finding(
-        string Assembly, string Kind, string DeclaringType, string Member, string Detail, string Reason);
+        string Assembly, string Kind, string DeclaringType, string Member, string Detail, string Reason,
+        string GeneratedTool = "", string GeneratedToolVersion = "");
 
     internal static bool IsNeverAllowable(Finding finding)
         => finding.Kind.StartsWith("unreadable-", StringComparison.Ordinal)
@@ -73,7 +74,7 @@ internal static class DynamicRuntimeAccessScanner
         using (portableExecutable)
         {
             var stateMachines = BuildStateMachineMap(reader, assemblyName, findings);
-            var generatedTypes = BuildGeneratedTypeSet(reader);
+            var generatedTypes = BuildGeneratedTypeMap(reader, assemblyName, findings);
             var classified = new Dictionary<int, (string Kind, string Detail, string Reason)>();
             foreach (var handle in reader.MemberReferences)
             {
@@ -190,7 +191,7 @@ internal static class DynamicRuntimeAccessScanner
     private static void ScanMethodBodies(
         MetadataReader reader, PEReader portableExecutable, string assemblyName,
         Dictionary<string, (string Type, string Member)> stateMachines,
-        IReadOnlySet<string> generatedTypes,
+        IReadOnlyDictionary<string, (string Tool, string Version)> generatedTypes,
         Dictionary<int, (string Kind, string Detail, string Reason)> classified,
         List<Finding> findings)
     {
@@ -261,7 +262,7 @@ internal static class DynamicRuntimeAccessScanner
         string assemblyName, string typeName, string memberName,
         string kind, string detail, string reason,
         Dictionary<string, (string Type, string Member)> stateMachines,
-        IReadOnlySet<string> generatedTypes)
+        IReadOnlyDictionary<string, (string Tool, string Version)> generatedTypes)
     {
         if (stateMachines.TryGetValue(typeName, out var source))
         {
@@ -269,17 +270,20 @@ internal static class DynamicRuntimeAccessScanner
             memberName = source.Member;
         }
 
-        // Kod i GJENERUAR nga source-generator/kompajler brenda të njëjtit
-        // assembly: klasifikohet VEÇMAS dhe në mënyrë MEKANIKE (nga
-        // `[GeneratedCode]`/`[CompilerGenerated]` në metadata — JO nga një listë
-        // namespace-esh). Nuk e shkruajmë ne dhe nuk ndryshohet dot pa prekur
-        // varësitë; prandaj raportohet dhe numërohet, por nuk bllokon manifestin
-        // e kodit TONË. Kufi i DEKLARUAR, jo suppression.
-        if (IsGeneratedOwner(typeName, generatedTypes))
+        // Kod me `[GeneratedCode(tool, version)]` TË DEKODUAR nga metadata:
+        // klasifikohet `generated-*` me tool/version të bartur në gjetje, POR
+        // (correction C1) KJO NUK ËSHTË PËRJASHTIM — çdo gjetje e tillë duhet të
+        // përputhet EKZAKT me ledger-in e provenance-ës në
+        // <see cref="DynamicRuntimeAccessManifest"/>, përndryshe është blocking.
+        // Rregullat strukturore: `[CompilerGenerated]` i vetëm nuk jep KURRË
+        // trust; tipi duhet të mbajë VETË atributin — nested type nuk trashëgon
+        // asgjë nga parent-i (barazi EKZAKTE e emrit të plotë, zero ecje '+').
+        if (generatedTypes.TryGetValue(typeName, out var provenance))
         {
             return new Finding(
                 assemblyName, $"generated-{kind}", typeName, memberName, detail,
-                "Kod i gjeneruar (source-generator/kompajler) brenda assembly-t — kufi i deklaruar ENG-006.");
+                "Kod me [GeneratedCode] në metadata — kërkon përputhje EKZAKTE me provenance ledger-in.",
+                provenance.Tool, provenance.Version);
         }
 
         if (typeName.Contains('<', StringComparison.Ordinal) || memberName.Contains('<', StringComparison.Ordinal))
@@ -292,35 +296,17 @@ internal static class DynamicRuntimeAccessScanner
         return new Finding(assemblyName, kind, typeName, memberName, detail, reason);
     }
 
-    /// <summary>A i përket ky tip (ose ndonjë prej tipeve të tij mbështjellës) kodit të gjeneruar?</summary>
-    private static bool IsGeneratedOwner(string typeName, IReadOnlySet<string> generatedTypes)
-    {
-        var candidate = typeName;
-        while (true)
-        {
-            if (generatedTypes.Contains(candidate))
-            {
-                return true;
-            }
-
-            var nested = candidate.LastIndexOf('+');
-            if (nested < 0)
-            {
-                return false;
-            }
-
-            candidate = candidate[..nested];
-        }
-    }
-
     /// <summary>
-    /// Seti i tipeve TË GJENERUARA, i derivuar nga metadata reale
-    /// (`GeneratedCodeAttribute` / `CompilerGeneratedAttribute`) — pa asnjë
-    /// listë namespace-esh të shkruar dorazi.
+    /// Harta e tipeve me `[GeneratedCode]`, me TOOL dhe VERSION të dekoduar
+    /// REALISHT nga blob-i i atributit në metadata — pa asnjë listë
+    /// namespace-esh. `[CompilerGenerated]` NUK hyn këtu: i vetëm nuk jep trust
+    /// (correction C1 — mbyllja e self-exemption). Blob i palexueshëm =
+    /// gjetje fail-closed, kurrë trust i heshtur.
     /// </summary>
-    private static IReadOnlySet<string> BuildGeneratedTypeSet(MetadataReader reader)
+    private static Dictionary<string, (string Tool, string Version)> BuildGeneratedTypeMap(
+        MetadataReader reader, string assemblyName, List<Finding> findings)
     {
-        var generated = new HashSet<string>(StringComparer.Ordinal);
+        var generated = new Dictionary<string, (string, string)>(StringComparer.Ordinal);
         foreach (var typeHandle in reader.TypeDefinitions)
         {
             var type = reader.GetTypeDefinition(typeHandle);
@@ -340,12 +326,38 @@ internal static class DynamicRuntimeAccessScanner
 
                 var name = UntypedDataAccessScanner.FullNameOfTypeReference(
                     reader, (TypeReferenceHandle)member.Parent);
-                if (name is "System.CodeDom.Compiler.GeneratedCodeAttribute"
-                    or "System.Runtime.CompilerServices.CompilerGeneratedAttribute")
+                if (name != "System.CodeDom.Compiler.GeneratedCodeAttribute")
                 {
-                    generated.Add(UntypedDataAccessScanner.FullNameOfTypeDefinition(reader, typeHandle));
-                    break;
+                    continue;
                 }
+
+                var typeName = UntypedDataAccessScanner.FullNameOfTypeDefinition(reader, typeHandle);
+                try
+                {
+                    var blob = reader.GetBlobReader(attribute.Value);
+                    if (blob.ReadUInt16() != 0x0001)
+                    {
+                        throw new InvalidOperationException("prolog i pavlefshëm");
+                    }
+
+                    var tool = blob.ReadSerializedString();
+                    var version = blob.ReadSerializedString();
+                    if (string.IsNullOrEmpty(tool) || string.IsNullOrEmpty(version))
+                    {
+                        throw new InvalidOperationException("tool/version bosh");
+                    }
+
+                    generated[typeName] = (tool, version);
+                }
+                catch (Exception exception)
+                {
+                    findings.Add(new Finding(
+                        assemblyName, "unreadable-generated-code-attribute", typeName, "-",
+                        exception.GetType().Name,
+                        "Blob i padekodueshëm i [GeneratedCode] — fail-closed, zero trust."));
+                }
+
+                break;
             }
         }
 
@@ -411,11 +423,14 @@ internal static class DynamicRuntimeAccessScanner
     // ─────────────────── §5 — Owner public-surface guard ───────────────────
 
     /// <summary>
-    /// Owner-at nuk lejohen të eksportojnë publikisht `Type`/`Assembly`/
-    /// `MemberInfo`/`Delegate`/`Expression`/`IServiceProvider` — as si parametër,
-    /// as si kthim, as si fushë publike. API-t e tipizuara mbeten GREEN.
+    /// §5 — guard-i i sipërfaqes publike të owner-ave: asnjë anëtar publik/
+    /// `protected` (metodë, property accessor OSE FUSHË — correction C1) nuk
+    /// lejohet të pranojë a dorëzojë tipe nga seti autoritativ I VETËM
+    /// <see cref="DynamicRuntimeAccessTaxonomy.OwnerForbiddenSurfaceTypes"/>.
+    /// Ky docstring NUK mban listë tipesh — autoriteti është vetëm seti në kod.
     ///
-    /// Kufi i deklaruar: mbulohen anëtarët e DEKLARUAR në atë assembly.
+    /// Kufi i deklaruar: mbulohen anëtarët e DEKLARUAR në atë assembly;
+    /// sinjaturë e padekodueshme = gjetje fail-closed.
     /// </summary>
     internal static IReadOnlyList<Finding> ScanOwnerPublicSurface(string assemblyPath)
     {
@@ -487,6 +502,45 @@ internal static class DynamicRuntimeAccessScanner
                             assemblyName, "owner-public-reflection-surface", typeName,
                             reader.GetString(method.Name), forbidden,
                             "Sipërfaqe publike që dorëzon kapacitet reflection te modulet e tjera."));
+                    }
+                }
+
+                // Correction C1 (Blocker B): edhe FUSHAT publike/`protected` —
+                // instance ose statike, readonly ose të mutueshme — skanohen me
+                // të njëjtin set autoritativ dhe me dekodim fail-closed.
+                foreach (var fieldHandle in type.GetFields())
+                {
+                    var field = reader.GetFieldDefinition(fieldHandle);
+                    if ((field.Attributes & FieldAttributes.FieldAccessMask) is not
+                        (FieldAttributes.Public or FieldAttributes.Family or FieldAttributes.FamORAssem))
+                    {
+                        continue;
+                    }
+
+                    var fieldTypes = new HashSet<string>(StringComparer.Ordinal);
+                    try
+                    {
+                        var decoded = field.DecodeSignature(
+                            new CollectingTypeProvider(fieldTypes), genericContext: null);
+                        fieldTypes.UnionWith(UntypedDataAccessScanner.ExtractTypeComponents(decoded));
+                    }
+                    catch (Exception exception)
+                    {
+                        findings.Add(new Finding(
+                            assemblyName, "unreadable-field-signature", typeName,
+                            reader.GetString(field.Name), exception.GetType().Name,
+                            "Sinjaturë fushe e padekodueshme — fail-closed."));
+                        continue;
+                    }
+
+                    foreach (var forbidden in fieldTypes
+                        .Where(DynamicRuntimeAccessTaxonomy.OwnerForbiddenSurfaceTypes.Contains)
+                        .Order(StringComparer.Ordinal))
+                    {
+                        findings.Add(new Finding(
+                            assemblyName, "owner-public-reflection-surface", typeName,
+                            reader.GetString(field.Name), forbidden,
+                            "Fushë publike që dorëzon kapacitet reflection te modulet e tjera."));
                     }
                 }
             }

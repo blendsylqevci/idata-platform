@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
@@ -69,16 +71,23 @@ internal static class PlatformProjectCatalog
     /// fingerprint-et verifikohen PARA dhe PAS gjithë vlerësimit. Çdo devijim =
     /// fail-closed i kontrolluar, kurrë refresh i heshtur.
     /// </summary>
+    /// <remarks>
+    /// Correction C1 (Hardening D): DEEP-IMMUTABLE me tipe KONKRETE BCL —
+    /// `ImmutableArray` për sekuencat (edhe vlerat nested), `FrozenDictionary`/
+    /// `FrozenSet` për hartat/setet. Asnjë backing array/Dictionary/HashSet i
+    /// mutueshëm nuk publikohet; mutimi përmes interface-ve hedh
+    /// `NotSupportedException` dhe s'mund të helmojë `CurrentGeneration`.
+    /// </remarks>
     internal sealed record CatalogGeneration(
         Guid GenerationId,
-        ProjectEntry[] Projects,
-        IReadOnlyDictionary<string, Guid> MvidByCanonicalPath,
-        IReadOnlyDictionary<string, string> Sha256ByCanonicalPath,
-        IReadOnlyDictionary<string, DateTime> WriteTimeUtcByCanonicalPath,
-        IReadOnlyDictionary<string, string[]> ProjectReferencesByCanonicalPath,
-        IReadOnlyDictionary<string, ResolvedReference[]> ResolvedReferencesByCanonicalPath,
-        IReadOnlyDictionary<string, PackageAssetAuthority> PackageAssetsByCanonicalPath,
-        IReadOnlyDictionary<string, IReadOnlySet<string>> FrameworkAssetsByCanonicalPath);
+        ImmutableArray<ProjectEntry> Projects,
+        FrozenDictionary<string, Guid> MvidByCanonicalPath,
+        FrozenDictionary<string, string> Sha256ByCanonicalPath,
+        FrozenDictionary<string, DateTime> WriteTimeUtcByCanonicalPath,
+        FrozenDictionary<string, ImmutableArray<string>> ProjectReferencesByCanonicalPath,
+        FrozenDictionary<string, ImmutableArray<ResolvedReference>> ResolvedReferencesByCanonicalPath,
+        FrozenDictionary<string, PackageAssetAuthority> PackageAssetsByCanonicalPath,
+        FrozenDictionary<string, FrozenSet<string>> FrameworkAssetsByCanonicalPath);
 
     /// <summary>
     /// Një gjeneratë e VETME për proces, e ndërtuar nën `Lazy` me
@@ -105,16 +114,21 @@ internal static class PlatformProjectCatalog
         var before = FingerprintTargets(repoRoot, entries);
 
         // (3) Vlerësimi i plotë — i gjithë READ-ONLY, brenda së njëjtës gjeneratë.
-        var projectReferences = new Dictionary<string, string[]>(StringComparer.Ordinal);
-        var resolvedReferences = new Dictionary<string, ResolvedReference[]>(StringComparer.Ordinal);
+        // Vlerat NESTED ngrihen që në burim (Hardening D): ImmutableArray për
+        // sekuencat, PackageAssetAuthority me harta/sete të ngrira, FrozenSet
+        // për asetet framework.
+        var projectReferences = new Dictionary<string, ImmutableArray<string>>(StringComparer.Ordinal);
+        var resolvedReferences = new Dictionary<string, ImmutableArray<ResolvedReference>>(StringComparer.Ordinal);
         var packageAssets = new Dictionary<string, PackageAssetAuthority>(StringComparer.Ordinal);
-        var frameworkAssets = new Dictionary<string, IReadOnlySet<string>>(StringComparer.Ordinal);
+        var frameworkAssets = new Dictionary<string, FrozenSet<string>>(StringComparer.Ordinal);
         foreach (var entry in entries)
         {
-            projectReferences[entry.CanonicalPath] = EvaluateProjectReferencesCore(repoRoot, entry.CanonicalPath);
-            resolvedReferences[entry.CanonicalPath] = EvaluateResolvedReferencesCore(repoRoot, entry.CanonicalPath);
-            packageAssets[entry.CanonicalPath] = EvaluatePackageAssetAuthorityCore(repoRoot, entry.CanonicalPath);
-            frameworkAssets[entry.CanonicalPath] = EvaluateFrameworkAssetAuthorityCore(repoRoot, entry.CanonicalPath);
+            projectReferences[entry.CanonicalPath] = [.. EvaluateProjectReferencesCore(repoRoot, entry.CanonicalPath)];
+            resolvedReferences[entry.CanonicalPath] = [.. EvaluateResolvedReferencesCore(repoRoot, entry.CanonicalPath)];
+            packageAssets[entry.CanonicalPath] =
+                EvaluatePackageAssetAuthorityCore(repoRoot, entry.CanonicalPath).ToFrozen();
+            frameworkAssets[entry.CanonicalPath] =
+                EvaluateFrameworkAssetAuthorityCore(repoRoot, entry.CanonicalPath).ToFrozenSet(StringComparer.Ordinal);
         }
 
         // (4) Fingerprint-i PAS vlerësimit — devijimi = fail-closed i kontrolluar.
@@ -135,14 +149,14 @@ internal static class PlatformProjectCatalog
 
         return new CatalogGeneration(
             Guid.NewGuid(),
-            entries,
-            before.ToDictionary(pair => pair.Key, pair => pair.Value.Mvid, StringComparer.Ordinal),
-            before.ToDictionary(pair => pair.Key, pair => pair.Value.Sha256, StringComparer.Ordinal),
-            before.ToDictionary(pair => pair.Key, pair => pair.Value.WriteTimeUtc, StringComparer.Ordinal),
-            projectReferences,
-            resolvedReferences,
-            packageAssets,
-            frameworkAssets);
+            [.. entries],
+            before.ToFrozenDictionary(pair => pair.Key, pair => pair.Value.Mvid, StringComparer.Ordinal),
+            before.ToFrozenDictionary(pair => pair.Key, pair => pair.Value.Sha256, StringComparer.Ordinal),
+            before.ToFrozenDictionary(pair => pair.Key, pair => pair.Value.WriteTimeUtc, StringComparer.Ordinal),
+            projectReferences.ToFrozenDictionary(StringComparer.Ordinal),
+            resolvedReferences.ToFrozenDictionary(StringComparer.Ordinal),
+            packageAssets.ToFrozenDictionary(StringComparer.Ordinal),
+            frameworkAssets.ToFrozenDictionary(StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -203,6 +217,54 @@ internal static class PlatformProjectCatalog
         }
 
         return [.. drifted.Order(StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// Correction C1 (Blocker C) — API-ja E VETME autoritative përmes së cilës
+    /// çdo konsumator i një production target-i (skanerët ENG-006, owner
+    /// public-surface guard, `LoadVerified`) merr path-in e artefaktit.
+    ///
+    /// Kontrata: (1) anëtarësi EKZAKTE e `entry`-t në gjeneratën e ngrirë;
+    /// (2) fingerprint-i TRE-DIMENSIONAL i file-it real — SHA-256 + MVID +
+    /// WriteTimeUtc — krahasohet me vlerat E NGRIRA; (3) çdo devijim hidhet si
+    /// `catalog-generation-drift`, KURRË refresh i heshtur. Konsumatorët e
+    /// thërrasin PARA dhe PAS leximit/skanimit, që një ndryshim gjatë scan-it
+    /// të mos kalojë pa u kapur.
+    /// </summary>
+    internal static string VerifiedFrozenTargetPath(ProjectEntry entry)
+        => VerifiedFrozenTargetPath(entry, CurrentGeneration());
+
+    internal static string VerifiedFrozenTargetPath(ProjectEntry entry, CatalogGeneration generation)
+    {
+        if (!generation.Projects.Contains(entry)
+            || !generation.Sha256ByCanonicalPath.TryGetValue(entry.CanonicalPath, out var frozenSha)
+            || !generation.MvidByCanonicalPath.TryGetValue(entry.CanonicalPath, out var frozenMvid)
+            || !generation.WriteTimeUtcByCanonicalPath.TryGetValue(entry.CanonicalPath, out var frozenWrite))
+        {
+            throw new InvalidOperationException(
+                $"Projekt jashtë gjeneratës autoritative të katalogut: {entry.CanonicalPath}");
+        }
+
+        var absolute = Path.Combine(
+            RepoRoot(), entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(absolute))
+        {
+            throw new InvalidOperationException(
+                $"catalog-generation-drift: output-i i ngrirë mungon në disk ({entry.CanonicalPath}).");
+        }
+
+        var sha = Convert.ToHexStringLower(
+            System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(absolute)));
+        var mvid = ReadMvid(absolute);
+        var writeTime = File.GetLastWriteTimeUtc(absolute);
+        if (sha != frozenSha || mvid != frozenMvid || writeTime != frozenWrite)
+        {
+            throw new InvalidOperationException(
+                "catalog-generation-drift: output-i production nuk përputhet me fingerprint-in "
+                + $"e ngrirë SHA-256+MVID+mtime ({entry.CanonicalPath}). Vlerësimi duhet të jetë read-only.");
+        }
+
+        return absolute;
     }
 
     /// <summary>A i përket ky root pemës REALE të repo-s (pra gjeneratës së ngrirë)?</summary>
@@ -311,31 +373,17 @@ internal static class PlatformProjectCatalog
     {
         var repoRoot = RepoRoot();
         VerifyTargetAssembly(repoRoot, entry, approvedOutputRootRelative: "src/platform");
-        var absoluteTarget = Path.Combine(repoRoot, entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar));
 
-        // §4-ENG-008: autoriteti është MVID-i i NGRIRË i gjeneratës, jo një
-        // rilexim i çastit nga disku. Kështu identiteti mbetet po aq i fortë
-        // (kopje stale/decoy kapet njësoj), POR nuk mund të përzihen dy
-        // gjenerata të ndryshme të output-it brenda të njëjtit run.
+        // Correction C1 (Blocker C): e njëjta kontratë e ngrirë si çdo
+        // konsumator tjetër — SHA-256 + MVID + mtime kundrejt gjeneratës,
+        // përmes API-së SË VETME autoritative. Kështu identiteti mbetet po aq
+        // i fortë (kopje stale/decoy kapet njësoj), POR dy gjenerata të
+        // ndryshme të output-it nuk përzihen dot brenda të njëjtit run.
         var generation = CurrentGeneration();
-        if (!generation.MvidByCanonicalPath.TryGetValue(entry.CanonicalPath, out var frozenMvid))
-        {
-            throw new InvalidOperationException(
-                $"Projekt jashtë gjeneratës autoritative të katalogut: {entry.CanonicalPath}");
-        }
-
-        // Devijim i output-it PAS freeze-it = fail-closed i KONTROLLUAR, me
-        // diagnostikë të vetën — kurrë i ngatërruar me një decoy assembly.
-        var currentMvid = ReadMvid(absoluteTarget);
-        if (currentMvid != frozenMvid)
-        {
-            throw new InvalidOperationException(
-                "catalog-generation-drift: output-i production u rindërtua PAS freeze-it të "
-                + $"gjeneratës ({entry.CanonicalPath}). Vlerësimi duhet të jetë read-only.");
-        }
+        _ = VerifiedFrozenTargetPath(entry, generation);
 
         var loaded = Assembly.Load(new AssemblyName(entry.AssemblyName));
-        if (loaded.ManifestModule.ModuleVersionId != frozenMvid)
+        if (loaded.ManifestModule.ModuleVersionId != generation.MvidByCanonicalPath[entry.CanonicalPath])
         {
             throw new InvalidOperationException(
                 $"Assembly i ngarkuar ≠ TargetPath (MVID mismatch — kopje stale/decoy?): {entry.AssemblyName}");
@@ -702,6 +750,18 @@ internal static class PlatformProjectCatalog
         IReadOnlyDictionary<string, (string PackageId, string Version)> TupleByAsset)
     {
         internal IReadOnlySet<string> Assets => TupleByAsset.Keys.ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Correction C1 (Hardening D): kopje me TË GJITHA strukturat — edhe vlerat
+    /// nested — të ngrira (`FrozenDictionary`/`FrozenSet`); përdoret nga
+    /// gjenerata e katalogut që asnjë hartë/set i brendshëm të mos mutohet.
+    /// </summary>
+    internal PackageAssetAuthority ToFrozen()
+        => new(
+            AssetsByTuple.ToFrozenDictionary(
+                pair => pair.Key,
+                pair => (IReadOnlySet<string>)pair.Value.ToFrozenSet(StringComparer.Ordinal)),
+            TupleByAsset.ToFrozenDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal));
 
         /// <summary>Anëtarësi EKZAKTE në asset-set-in e TUPLE-s (id case-insensitive, version ekzakt).</summary>
         internal bool ContainsForTuple(string packageId, string version, string canonicalAssetPath)
