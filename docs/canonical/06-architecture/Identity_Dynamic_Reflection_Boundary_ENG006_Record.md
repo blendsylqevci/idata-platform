@@ -55,7 +55,7 @@ Scanner i **NDARË** nga `IdentityStoreIlScanner` (ai mbron universin e tipeve; 
 
 `System.Object.GetType()` **NUK** ndalohet globalisht — zinxhiri kapet te hapi i dytë real. `GetService`/`GetRequiredService` diskriminohen **me sinjaturë**: vetëm overload-i me `System.Type` është gjetje; varianti gjenerik `<T>` mbetet i lejuar.
 
-**Owner public-surface guard:** owner-at nuk lejohen të eksportojnë `Type`/`Assembly`/`Module`/`MemberInfo`/`MethodBase`/`MethodInfo`/`ConstructorInfo`/`PropertyInfo`/`FieldInfo`/`Delegate`/`Expression`/`IServiceProvider`/`AssemblyLoadContext`. **Rezultati mbi production: 0 gjetje.**
+**Owner public-surface guard:** asnjë anëtar publik/`protected` i owner-ave — metodë, accessor **apo FUSHË (correction C1)** — nuk lejohet të pranojë a dorëzojë tipe nga seti autoritativ I VETËM `DynamicRuntimeAccessTaxonomy.OwnerForbiddenSurfaceTypes` në kod. Ky Record **NUK mban listë të kopjuar** (Shtesa D, forma A): autoriteti është vetëm seti në kod; docstring-u i skanerit bën po ashtu vetëm pointer. **Rezultati mbi production: 0 gjetje.**
 
 ### Manifesti production — BOSH
 
@@ -74,9 +74,19 @@ Efekti i matur: **99 → 19** gjetje production.
 
 Të 19 gjetjet e mbetura i përkasin kodit **të gjeneruar** brenda production assemblies — `Mediator.Internals.*` (source generator i Mediator) dhe `Microsoft.AspNetCore.OpenApi.Generated.*` (source generator i OpenAPI XML comments). Ky kod nuk shkruhet nga ne dhe nuk ndryshohet dot pa prekur varësitë, çka është **jashtë scope-it** të këtij increment-i.
 
-Klasifikimi është **MEKANIK, i derivuar nga metadata** (`System.CodeDom.Compiler.GeneratedCodeAttribute` / `CompilerGeneratedAttribute`) — **jo një listë namespace-esh** dhe **jo auto-allowlist**: gjetjet e tilla marrin prefiksin `generated-`, raportohen dhe numërohen, por nuk hyjnë në manifestin e kodit tonë. **Kod i shkruar prej nesh që shton reflection nuk është i gjeneruar, prandaj bllokon menjëherë.**
+**Correction C1 — mbyllja fail-closed e self-exemption (Blocker A):** klasifikimi i mëparshëm kishte katër dobësi të konfirmuara: (a) `generated-*` anashkalohej me `StartsWith → continue` në validator; (b) `CompilerGenerated`/`GeneratedCode` pranoheshin vetëm nga emri i atributit; (c) nested types trashëgonin trust nga parent-i; (d) çdo lambda/closure e jona (të cilës kompajleri i vë vetë `CompilerGenerated`) mund të fshihte `Type.GetType`. **Modeli i ri:**
 
-**Follow-up i hapur (jo gate i ri):** vlerësimi i reflection-it të source-generator-ëve i takon një vendimi për varësitë/gjeneratorët dhe mbetet për review të pavarur.
+- `[CompilerGenerated]` i vetëm **nuk jep KURRË trust** — kod i tillë mbetet kind i thjeshtë blocking ose `unattributed-compiler-generated` fail-closed (lambda-t/local functions/LINQ tona provohen VEÇMAS me fixtures);
+- `[GeneratedCode(tool, version)]` **dekodohet REALISHT nga blob-i i metadata-s** (blob i palexueshëm = gjetje fail-closed) dhe klasifikon `generated-<kind>` me tool/version të bartur në gjetje — POR kjo **nuk është përjashtim**;
+- **nested type nuk trashëgon asgjë** nga parent-i (barazi EKZAKTE e emrit të plotë, zero ecje `+`);
+- çdo gjetje `generated-*` kontrollohet kundër një **PROVENANCE LEDGER-i EKZAKT** (`GeneratedResidualLedger` në `DynamicRuntimeAccessManifest.cs` — i NDARË nga manifesti ynë production, i cili mbetet BOSH): çelësi = assembly + tip i NORMALIZUAR + anëtar + kind + detail + tool + version; **pariteti është DY-DREJTIMËSH** (çdo gjetje unike konsumon saktësisht një hyrje; çdo hyrje konsumohet; duplicate/unused/unmatched = fail-closed);
+- `generated-dynamic-dangerous` dhe `generated-dynamic-service-location` janë **GJITHMONË blocking** — as nuk pranohen në ledger;
+- çdo hyrje ledger-i lidhet MEKANIKISHT me **paketën e PIN-uar** në lockfile-t realë (tool-i i takon paketës; major.minor i versionit të dekoduar përputhet me versionin e zgjidhur): `Mediator.SourceGenerator/3.0.0.0` ↔ paketa `Mediator.SourceGenerator@3.0.2` (Direct); `Microsoft.AspNetCore.OpenApi.SourceGenerators/10.0.10.0` ↔ paketa `Microsoft.AspNetCore.OpenApi@10.0.10` (Direct);
+- **normalizim I KUFIZUAR i identitetit OpenAPI** (Shtesa A): funksion PURE me pattern të ANKORUAR — prefiks fiks `<OpenApiXmlCommentSupport_generated>` + SAKTËSISHT NJË run hex + `__` + suffix jo-bosh; vetëm run-i zëvendësohet me placeholder, çdo segment tjetër mbetet byte-identik; çdo devijim (run që mungon/i dyfishtë/jo-hex/i gjatësisë tjetër, suffix bosh, kolizion dy tipesh reale) = refuzim/fail-closed. **DEVIATION e deklaruar:** review-i supozoi run 64-hex; matja mekanike mbi metadata (14/14 tipe) = **65** — sipas klauzolës 'rillogarit nga zero, mos hardcode numrat e reviewer-it', parametri është vlera empirike (`OpenApiHashRunLength = 65`), me meta-teste që refuzojnë 63/64/66.
+
+**Counts të rillogaritura nga zero (HEAD real):** 19 gjetje generated UNIKE (1 Mediator + 18 OpenAPI: 9 `CreateDocumentationId`, 8 `GetTypeDocId`, 1 `TransformAsync`), të gjitha `generated-dynamic-unknown-member`; **zero dangerous/service-location**; ledger = 19 hyrje = seti aktual EKZAKT (barazi e provuar edhe eksplicit në test, jo vetëm përmes validatorit); 2 tools · 2 versione · 2 identitete të normalizuara + 1 identitet Mediator.
+
+**Follow-up i hapur (jo gate i ri):** heqja e vetë mbetjeve të generatorëve i takon një vendimi për varësitë dhe mbetet për review të pavarur.
 
 ---
 
@@ -97,6 +107,22 @@ Klasifikimi është **MEKANIK, i derivuar nga metadata** (`System.CodeDom.Compil
 
 **PoC-i historik i ENG-006 nuk u fshi:** statusi i tij ndryshon në *“caught by ENG-006 guard”* sepse një test e provon realisht — skaneri statik i tipeve nuk e sheh, ndërsa ENG-006 e kap te call-site-i.
 
+### Correction C1 — fixtures/prova shtesë (mapping finding → fix → fixture → RED → GREEN)
+
+| Finding | Fix | Fixtures | RED e provuar (heqje dege → teste RED, rikthim byte-identik) |
+|---|---|---|---|
+| Generated self-exemption | provenance ledger + zero `StartsWith→continue` | 11 forma: `<>c`, `<>c__DisplayClass`, local function, LINQ-lambda, `[CompilerGenerated]` manual, `[GeneratedCode("UnknownTool","9.9")]`, tool REAL + tip jashtë ledger-i, nested i pashënuar, generated dangerous, generated service-location, generated unknown jashtë ledger-i; inverse GREEN = output-i real i generatorëve që konsumon ledger-in EKZAKT | validator i anashkaluar → **3 teste RED** |
+| Lambda attribution | dega `unattributed` fail-closed | 4 format e kompajlerit | dega e neutralizuar → **1 test RED** |
+| Owner public fields | field-scan me dekodim fail-closed | `LeakedType` (static readonly `Type`), `LeakedProvider` (instance `IServiceProvider`), `LeakedDelegates` (generic me `Delegate`), `LeakedFields` (array `FieldInfo[]`); GREEN: `SafeCount`/`SafeLabel`/`SafeId` | dega field-scan e fikur → **4 teste RED** |
+| Fingerprint consumer | `VerifiedFrozenTargetPath` para+pas çdo skanimi | drift sintetik SHA-only/MVID-only/mtime-only + outsider + gjeneratë e helmuar kundër `ScanProduction`/owner-scan | krahasimi 3-dimensional i dobësuar → **4 teste RED** |
+| Deep immutability | `ImmutableArray`/`FrozenDictionary`/`FrozenSet` deri në vlerat nested | mutim përmes interface-ve hedh; 32 thirrës paralelë; tipe komponentësh të provuar | `FrameworkAssets` → `HashSet` → **1 test RED** |
+
+**Meta-teste normalizimi:** forma ekzakte → normalizohet; 63/64/66 → refuzohet; jo-hex → refuzohet; dy runs → refuzohet; run pa marker → i paprekur; prefix/suffix byte-identikë; kolizion → fail-closed; ledger bosh me gjetje / hyrje e vdekur / duplikat / kind i palejuar / tool-version mismatch → fail.
+
+**Kontrata e konsumatorëve (Blocker C):** `VerifiedFrozenTargetPath(entry, generation)` = API e VETME — anëtarësi ekzakte + SHA-256 + MVID + WriteTimeUtc kundër vlerave TË NGRIRA, dështimi = `catalog-generation-drift`, kurrë refresh i heshtur; konsumohet PARA dhe PAS çdo skanimi nga ENG-006 `ScanProduction`, owner-scan dhe `LoadVerified` (provë MEKANIKE mbi IL me token-a MethodDef + provë sjelljeje me gjenerata të helmuara).
+
+**Performanca (Shtesa E):** provë deterministike — skaneri ENG-006 nuk thërret asnjë API hashimi/mtime (IL-prova `Skaneri_ENG006_nuk_llogarit_fingerprint_vete`); fingerprint-et llogariten vetëm në çiftin before/after per artifact (2 × SHA+MVID+mtime për artifact për konsumator; 24 verifikime për skanim të plotë 12-projektësh); snapshot-i i ngrirë ripërdoret (`Assert.Same`); drift-i post-scan vazhdon të kapet. **Matje wall-clock:** arch e plotë PARA C1: 57–59s ×3 · PAS C1: 57–59s ×3 (**rritje ~0%**, shumë nën 2×); targeted ENG-006: ~15–16s (63 teste) · ENG-008: ~15–16s (20 teste); build inkremental ~1s i pandryshuar.
+
 ---
 
 ## 6. Evidence — LOKALE vs CI (të ndara)
@@ -105,8 +131,8 @@ Klasifikimi është **MEKANIK, i derivuar nga metadata** (`System.CodeDom.Compil
 
 - `dotnet build src/platform/Idata.Platform.slnx` → **0 warnings, 0 errors**;
 - baseline mekanik para editimit: **178/178**;
-- pas increment-it: **237/237, zero skip**, **tri ekzekutime radhazi**;
-- targeted: ENG-008 **12/12**, ENG-006 **47/47**;
+- pas increment-it: **237/237, zero skip** ×3; pas correction C1: **262/262, zero skip**, **tri ekzekutime radhazi** (+25 teste C1);
+- targeted: ENG-008 **20/20**, ENG-006 **63/63** (para C1: 12/47);
 - permutime me **seed-e fikse 1337 / 20260803 / 42** → rezultate identike, e njëjta gjeneratë;
 - disk: min **6.69 GiB**, max **6.78 GiB** (kurrë nën 2.0 GiB; zero ENOSPC).
 
