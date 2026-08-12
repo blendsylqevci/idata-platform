@@ -1,6 +1,6 @@
 # Dynamic Reflection Boundary & Deterministic Harness — Implementation Record (ENG-006 + ENG-008, Pre-B2 Increment 2)
 
-**Statusi:** **IMPLEMENTED / PENDING_INDEPENDENT_REVIEW** — të dyja kufijtë ekzistojnë dhe imponohen në ArchitectureTests/CI në branch-in `feat/f1-eng006-eng008-preb2-boundary`, **NOT MERGED**.
+**Statusi:** **IMPLEMENTED / PENDING_INDEPENDENT_REVIEW** — të dyja kufijtë ekzistojnë dhe imponohen në ArchitectureTests/CI në **PR #30** (branch `feat/f1-eng006-eng008-preb2-boundary`), **NOT MERGED**.
 
 - **`ENG-006` = OPEN / IMPLEMENTATION IN THIS PR / PENDING_INDEPENDENT_REVIEW** — kufi **SIGURIE**.
 - **`ENG-008` = OPEN / IMPLEMENTATION IN THIS PR / PENDING_INDEPENDENT_REVIEW** — kufi **BESUESHMËRIE / evidence-harness**; **NUK është bypass production i provuar**.
@@ -74,7 +74,7 @@ Efekti i matur: **99 → 19** gjetje production.
 
 Të 19 gjetjet e mbetura i përkasin kodit **të gjeneruar** brenda production assemblies — `Mediator.Internals.*` (source generator i Mediator) dhe `Microsoft.AspNetCore.OpenApi.Generated.*` (source generator i OpenAPI XML comments). Ky kod nuk shkruhet nga ne dhe nuk ndryshohet dot pa prekur varësitë, çka është **jashtë scope-it** të këtij increment-i.
 
-**Correction C1 — mbyllja fail-closed e self-exemption (Blocker A):** klasifikimi i mëparshëm kishte katër dobësi të konfirmuara: (a) `generated-*` anashkalohej me `StartsWith → continue` në validator; (b) `CompilerGenerated`/`GeneratedCode` pranoheshin vetëm nga emri i atributit; (c) nested types trashëgonin trust nga parent-i; (d) çdo lambda/closure e jona (të cilës kompajleri i vë vetë `CompilerGenerated`) mund të fshihte `Type.GetType`. **Modeli i ri:**
+**Correction C1 — mbyllja fail-closed e self-exemption (Blocker A):** klasifikimi i mëparshëm kishte katër dobësi të konfirmuara: (a) validatori e vetë-autorizonte prefiksin `generated-*` me një skip të heshtur (formulimi i saktë: *silent self-exemption u hoq — generated findings nuk autorizohen nga prefiksi dhe kalojnë në exact provenance-ledger validation*; degëzimi `continue` ekziston ende, por drejton te blloku i ledger-it, kurrë në heshtje); (b) `CompilerGenerated`/`GeneratedCode` pranoheshin vetëm nga emri i atributit; (c) nested types trashëgonin trust nga parent-i; (d) çdo lambda/closure e jona (të cilës kompajleri i vë vetë `CompilerGenerated`) mund të fshihte `Type.GetType`. **Modeli i ri:**
 
 - `[CompilerGenerated]` i vetëm **nuk jep KURRË trust** — kod i tillë mbetet kind i thjeshtë blocking ose `unattributed-compiler-generated` fail-closed (lambda-t/local functions/LINQ tona provohen VEÇMAS me fixtures);
 - `[GeneratedCode(tool, version)]` **dekodohet REALISHT nga blob-i i metadata-s** (blob i palexueshëm = gjetje fail-closed) dhe klasifikon `generated-<kind>` me tool/version të bartur në gjetje — POR kjo **nuk është përjashtim**;
@@ -87,6 +87,35 @@ Të 19 gjetjet e mbetura i përkasin kodit **të gjeneruar** brenda production a
 **Counts të rillogaritura nga zero (HEAD real):** 19 gjetje generated UNIKE (1 Mediator + 18 OpenAPI: 9 `CreateDocumentationId`, 8 `GetTypeDocId`, 1 `TransformAsync`), të gjitha `generated-dynamic-unknown-member`; **zero dangerous/service-location**; ledger = 19 hyrje = seti aktual EKZAKT (barazi e provuar edhe eksplicit në test, jo vetëm përmes validatorit); 2 tools · 2 versione · 2 identitete të normalizuara + 1 identitet Mediator.
 
 **Follow-up i hapur (jo gate i ri):** heqja e vetë mbetjeve të generatorëve i takon një vendimi për varësitë dhe mbetet për review të pavarur.
+
+---
+
+## 4a. Correction C2 — kufiri i VETËM i konsumit dhe degët malformed
+
+**Blocker A (root cause i verifikuar):** `LoadVerified` e thërriste verifikuesin vetëm PARA `Assembly.Load`; meta-testi provonte thjesht praninë e emrit në një set (tri rreshta hardcoded); dhe disa konsumatorë e ndërtonin path-in vetë ose rilexonin MVID-in aktual jashtë gjeneratës.
+
+**Fix:** `PlatformProjectCatalog.ConsumeVerifiedFrozenTarget<T>(entry[, generation], consumer)` — KUFIRI I VETËM me semantikë të detyruar: (1) një gjeneratë e pandryshueshme; (2) verifikim entry/path/SHA/MVID/mtime PARA; (3) konsumatori mbi path-in e verifikuar; (4) riverifikim i TË NJËJTIT entry ndaj SË NJËJTËS gjeneratë PAS; (5) rezultati vetëm pas post-check-ut; (6) gabimet e konsumatorit nuk fshihen. Shtohet edhe `LoadReferencedAssembly` që çdo ngarkim i një assembly-je production gjatë ecjeve të grafit kalon nga `LoadVerified`.
+
+**Konsumatorët e rrugtuar (sweep mekanik, jo listë manuale):** `LoadVerified` · ENG-006 `ScanProduction` + owner-scan · ENG-007 `ScanVerified` + owner-scan + dy path-e fixture-sh · `RoleMetadataScanner` (IdentityRoleSurfaceTests) · `IdentityStoreIlScanner` (ConventionEnforcementTests) · `PlatformOutputAuthority` + testi R7-decoy (DependencyDirectionTests) · dy `Assembly.Load` në ConventionEnforcementTests → `LoadVerifiedByName`. **DependencyDirection nuk rilexon më MVID-in aktual:** klasifikimi përdor MVID-in e gjeneratës plus një verifikues të ngrirë (`VerifyFrozen`) që thirret në çdo vendim.
+
+**Provat (§3):**
+
+- **rendi EKZAKT** i vetë kufirit, i lexuar nga IL: `["VerifiedFrozenTargetPath", "Invoke", "VerifiedFrozenTargetPath"]` — dy verifikime REALE me konsumatorin MES tyre, jo prani emri në set;
+- **guard i DERIVUAR i plotësisë:** ecje mbi IL-in e GJITHË assembly-t të testeve — çdo metodë jashtë katalogut që thërret `ReadMvid`, `Assembly.Load`, ose ndërton path targeti (`get_CanonicalTargetPath` + `Path.Combine`) = shkelje → RED. Një konsumator i ri direkt kapet automatikisht. Përjashtim i vetëm i deklaruar: `DynamicRuntimeAccessFixtures` për `Assembly.Load` (fixture RED e vetë skanerit, jo konsumator targeti);
+- **provë BEHAVIORALE** mbi një artefakt SINTETIK (bin i testeve, zero output real): konsumator që e ndryshon artefaktin gjatë konsumimit → `catalog-generation-drift` PAS konsumimit dhe rezultati NUK kthehet; gjeneratë e helmuar → konsumatori NUK thirret fare;
+- drift SHA-only / MVID-only / mtime-only mbeten të provuara veçmas nga C1.
+
+**Blocker B — degët malformed me teste REALE:** u shtua `SyntheticMetadataPe` që emeton një PE me `MetadataBuilder`/Ecma335 me blobs të keqformuar, duke goditur EKZAKTËSISHT `unreadable-generated-code-attribute` (blob `[GeneratedCode]`), `unreadable-field-signature` dhe `unreadable-method-signature` (kjo e fundit = baseline më i vjetër i së njëjtës familje, jo root cause i C1). Varianti VALID i të njëjtit skelet → **zero gjetje `unreadable-*`** (zero false-positive). Fixture-i jo-PE mbulon vetëm `unreadable-assembly` dhe **nuk citohet** si evidencë për këto degë.
+
+**Provat RED të C2 (5, të izoluara; rikthime edit-forward byte-identike):**
+
+| Guard i hequr | RED |
+|---|---|
+| post-check-u i kufirit | **2** (rendi + prova behaviorale) |
+| rend i përmbysur (konsumator para verifikimeve) | **2** |
+| një konsumator kthehet te path-i direkt (RoleSurface) | **2** (guard-i i derivuar + theory-a e konsumatorëve) |
+| dega `unreadable-generated-code-attribute` | **1** |
+| dega `unreadable-field-signature` | **1** |
 
 ---
 
@@ -131,8 +160,8 @@ Të 19 gjetjet e mbetura i përkasin kodit **të gjeneruar** brenda production a
 
 - `dotnet build src/platform/Idata.Platform.slnx` → **0 warnings, 0 errors**;
 - baseline mekanik para editimit: **178/178**;
-- pas increment-it: **237/237, zero skip** ×3; pas correction C1: **262/262, zero skip**, **tri ekzekutime radhazi** (+25 teste C1);
-- targeted: ENG-008 **20/20**, ENG-006 **63/63** (para C1: 12/47);
+- pas increment-it: **237/237, zero skip** ×3; pas correction C1: **262/262**; pas **correction C2: 270/270, zero skip**, **tri ekzekutime radhazi** (+8 teste C2);
+- targeted (të rimatura pas C2): ENG-008 **27/27**, ENG-006 **65/65** (para C2: 21/63 — vlera e mëparshme 20 për ENG-008 ishte e pasaktë; para C1: 12/47);
 - permutime me **seed-e fikse 1337 / 20260803 / 42** → rezultate identike, e njëjta gjeneratë;
 - disk: min **6.69 GiB**, max **6.78 GiB** (kurrë nën 2.0 GiB; zero ENOSPC).
 
