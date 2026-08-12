@@ -516,32 +516,64 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     private const string OpenApiMarkerPrefix =
         "Microsoft.AspNetCore.OpenApi.Generated.<OpenApiXmlCommentSupport_generated>";
 
+    /// <summary>Digest-i REAL i formës file-local, i verifikuar mbi metadata e HEAD-it.</summary>
+    private const string RealDigest = "C4CD76D316BD386513A4B8BB1C5D9F4B483997B30A49BF8FEE7E0D54C8117F1C";
+
+    private static string OpenApiName(string prefixSegment, string suffix)
+        => $"{OpenApiMarkerPrefix}{prefixSegment}__{suffix}";
+
     /// <summary>
-    /// Forma EKZAKTE normalizohet; prefiksi/suffix-i mbeten byte-identikë.
-    /// Gjatësia e run-it është ajo e MATUR nga metadata reale
-    /// (<see cref="DynamicRuntimeAccessManifest.OpenApiHashRunLength"/> = 65) —
-    /// deviation e deklaruar nga supozimi 64 i review-t.
+    /// C3 (§3): pranohet VETËM forma STRUKTURORE `F` + 64 hex. `F` është marker
+    /// i skemës file-local, JO "hex-i i parë" i hash-it. Prefiksi/suffix-i
+    /// mbeten byte-identikë; zëvendësohet vetëm segmenti `F`+digest.
     /// </summary>
     [Fact]
-    public void Normalizimi_pranon_vetem_formen_ekzakte_te_matur()
+    public void Normalizimi_pranon_vetem_marker_F_plus_64_hex()
     {
-        var hash = new string('a', DynamicRuntimeAccessManifest.OpenApiHashRunLength);
-        var raw = $"{OpenApiMarkerPrefix}{hash}__DocumentationCommentIdHelper";
+        var raw = OpenApiName($"F{RealDigest}", "DocumentationCommentIdHelper");
         Assert.True(DynamicRuntimeAccessManifest.TryNormalizeGeneratedTypeName(raw, out var normalized));
         Assert.Equal(
-            $"{OpenApiMarkerPrefix}{DynamicRuntimeAccessManifest.GeneratedHashPlaceholder}__DocumentationCommentIdHelper",
+            OpenApiName(DynamicRuntimeAccessManifest.GeneratedHashPlaceholder, "DocumentationCommentIdHelper"),
             normalized);
         Assert.StartsWith(OpenApiMarkerPrefix, normalized, StringComparison.Ordinal);
         Assert.EndsWith("__DocumentationCommentIdHelper", normalized, StringComparison.Ordinal);
+        Assert.Equal(64, DynamicRuntimeAccessManifest.OpenApiDigestLength);
+        Assert.Equal('F', DynamicRuntimeAccessManifest.OpenApiFileLocalMarker);
     }
 
+    /// <summary>Digest me gjatësi tjetër (63/65/66) → refuzim; emri i paprekur.</summary>
     [Theory]
     [InlineData(63)]
-    [InlineData(64)]
+    [InlineData(65)]
     [InlineData(66)]
-    public void Normalizimi_refuzon_gjatesi_te_gabuar(int hexLength)
+    public void Normalizimi_refuzon_gjatesi_digesti_te_gabuar(int digestLength)
     {
-        var raw = $"{OpenApiMarkerPrefix}{new string('b', hexLength)}__Suffix";
+        var raw = OpenApiName($"F{new string('b', digestLength)}", "Suffix");
+        Assert.False(DynamicRuntimeAccessManifest.TryNormalizeGeneratedTypeName(raw, out var untouched));
+        Assert.Equal(raw, untouched);
+    }
+
+    /// <summary>
+    /// Marker strukturor i gabuar: `A` + 64 hex, `f` i vogël, ose 65 hex
+    /// arbitrare pa markerin — të gjitha refuzohen.
+    /// </summary>
+    [Theory]
+    [InlineData("A")]
+    [InlineData("f")]
+    [InlineData("0")]
+    public void Normalizimi_refuzon_marker_strukturor_te_gabuar(string marker)
+    {
+        var raw = OpenApiName($"{marker}{RealDigest}", "Suffix");
+        Assert.False(DynamicRuntimeAccessManifest.TryNormalizeGeneratedTypeName(raw, out var untouched));
+        Assert.Equal(raw, untouched);
+    }
+
+    [Fact]
+    public void Normalizimi_refuzon_65_hex_arbitrare_pa_marker_strukturor()
+    {
+        // 65 karaktere hex ku i pari NUK është `F` — forma e vjetër (C1/C2) do ta
+        // pranonte; forma strukturore e C3 e refuzon.
+        var raw = OpenApiName(new string('a', 65), "Suffix");
         Assert.False(DynamicRuntimeAccessManifest.TryNormalizeGeneratedTypeName(raw, out var untouched));
         Assert.Equal(raw, untouched);
     }
@@ -549,25 +581,29 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     [Fact]
     public void Normalizimi_refuzon_devijimet_e_formes()
     {
-        var hash = new string('c', DynamicRuntimeAccessManifest.OpenApiHashRunLength);
+        var canonical = $"F{RealDigest}";
 
-        // karakter jo-hex brenda run-it
-        var nonHex = $"{OpenApiMarkerPrefix}{new string('c', 32)}g{new string('c', DynamicRuntimeAccessManifest.OpenApiHashRunLength - 33)}__Suffix";
+        // karakter jo-hex brenda digest-it
+        var nonHex = OpenApiName($"F{RealDigest[..32]}g{RealDigest[33..]}", "Suffix");
         Assert.False(DynamicRuntimeAccessManifest.TryNormalizeGeneratedTypeName(nonHex, out var untouched));
         Assert.Equal(nonHex, untouched);
 
-        // dy hash-runs (i dyti në suffix)
-        var twoRuns = $"{OpenApiMarkerPrefix}{hash}__Suffix{new string('d', DynamicRuntimeAccessManifest.OpenApiHashRunLength)}";
-        Assert.False(DynamicRuntimeAccessManifest.TryNormalizeGeneratedTypeName(twoRuns, out _));
-
-        // suffix bosh / separator që mungon
+        // digest i dytë brenda suffix-it
         Assert.False(DynamicRuntimeAccessManifest.TryNormalizeGeneratedTypeName(
-            $"{OpenApiMarkerPrefix}{hash}__", out _));
-        Assert.False(DynamicRuntimeAccessManifest.TryNormalizeGeneratedTypeName(
-            $"{OpenApiMarkerPrefix}{hash}_Suffix", out _));
+            OpenApiName(canonical, $"Suffix{RealDigest}"), out _));
 
-        // hash-run pa marker-in OpenAPI → emri NUK preket kurrë
-        var elsewhere = $"Some.Namespace.T{hash}__Whatever";  // hash-run PA marker
+        // suffix bosh / separator `__` që mungon
+        Assert.False(DynamicRuntimeAccessManifest.TryNormalizeGeneratedTypeName(
+            $"{OpenApiMarkerPrefix}{canonical}__", out _));
+        Assert.False(DynamicRuntimeAccessManifest.TryNormalizeGeneratedTypeName(
+            $"{OpenApiMarkerPrefix}{canonical}_Suffix", out _));
+
+        // marker OpenAPI i dyfishtë
+        Assert.False(DynamicRuntimeAccessManifest.TryNormalizeGeneratedTypeName(
+            $"{OpenApiMarkerPrefix}{canonical}__{OpenApiMarkerPrefix}Suffix", out _));
+
+        // digest PA markerin OpenAPI → emri NUK preket kurrë
+        var elsewhere = $"Some.Namespace.TF{RealDigest}__Whatever";
         Assert.False(DynamicRuntimeAccessManifest.TryNormalizeGeneratedTypeName(elsewhere, out var same));
         Assert.Equal(elsewhere, same);
     }
@@ -580,7 +616,7 @@ public sealed class DynamicRuntimeAccessBoundaryTests
             .First(entry => entry.Member == "TransformAsync");
         DynamicRuntimeAccessScanner.Finding Fake(char digit) => new(
             ledgerEntry.AssemblyName, ledgerEntry.Kind,
-            $"{OpenApiMarkerPrefix}{new string(digit, DynamicRuntimeAccessManifest.OpenApiHashRunLength)}__XmlCommentOperationTransformer",
+            OpenApiName($"F{new string(digit, DynamicRuntimeAccessManifest.OpenApiDigestLength)}", "XmlCommentOperationTransformer"),
             ledgerEntry.Member, ledgerEntry.Detail, "sintetike", ledgerEntry.Tool, ledgerEntry.ToolVersion);
 
         var problems = DynamicRuntimeAccessManifest.ValidateGeneratedResiduals(
@@ -701,12 +737,22 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     public void Bloget_e_keqformuara_te_metadata_ve_godasin_deget_fail_closed()
     {
         var malformedPath = SyntheticMetadataPe.Write(malformed: true);
+        // Kontratë e dokumentuar e skanerit: fusha `Assembly` derivohet nga emri
+        // i file-it të skanuar (jo nga identiteti i assembly-t në metadata).
+        var expectedAssembly = Path.GetFileNameWithoutExtension(malformedPath);
         try
         {
             var scanFindings = DynamicRuntimeAccessScanner.Scan(malformedPath);
             var attribute = Assert.Single(scanFindings, finding =>
                 finding.Kind == "unreadable-generated-code-attribute");
+            // Fushat me kontratë STABILE asertohen plotësisht; `Detail` mbart emrin
+            // e tipit të përjashtimit të dekoduesit — kontratë e brendshme e BCL-së,
+            // prandaj asertohet vetëm si jo-bosh (pretendim i ngushtuar në Record/PR).
             Assert.Equal(SyntheticMetadataPe.HostTypeFullName, attribute.DeclaringType);
+            Assert.Equal("-", attribute.Member);
+            Assert.Equal(expectedAssembly, attribute.Assembly);
+            Assert.False(string.IsNullOrWhiteSpace(attribute.Detail));
+            Assert.Contains("[GeneratedCode]", attribute.Reason, StringComparison.Ordinal);
             Assert.True(DynamicRuntimeAccessScanner.IsNeverAllowable(attribute));
 
             var surfaceFindings = DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(malformedPath);
@@ -714,12 +760,17 @@ public sealed class DynamicRuntimeAccessBoundaryTests
                 finding.Kind == "unreadable-field-signature");
             Assert.Equal(SyntheticMetadataPe.HostTypeFullName, field.DeclaringType);
             Assert.Equal("ProbeField", field.Member);
+            Assert.Equal(expectedAssembly, field.Assembly);
+            Assert.False(string.IsNullOrWhiteSpace(field.Detail));
+            Assert.Contains("fushe", field.Reason, StringComparison.Ordinal);
             Assert.True(DynamicRuntimeAccessScanner.IsNeverAllowable(field));
 
             var method = Assert.Single(surfaceFindings, finding =>
                 finding.Kind == "unreadable-method-signature");
             Assert.Equal(SyntheticMetadataPe.HostTypeFullName, method.DeclaringType);
             Assert.Equal("ProbeMethod", method.Member);
+            Assert.Equal(expectedAssembly, method.Assembly);
+            Assert.False(string.IsNullOrWhiteSpace(method.Detail));
             Assert.True(DynamicRuntimeAccessScanner.IsNeverAllowable(method));
         }
         finally

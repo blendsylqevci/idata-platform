@@ -1051,7 +1051,8 @@ public sealed class ConventionEnforcementTests
         Assert.Equal(2, catalog.Count(PlatformProjectCatalog.IsStoreOwner));
         // Unikësia e AssemblyName/path/TargetPath garantohet nga Discover (hedh në duplikat).
         Assert.Equal(catalog.Length, catalog.Select(entry => entry.CanonicalPath).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(catalog.Length, catalog.Select(entry => entry.CanonicalTargetPath).Distinct(StringComparer.Ordinal).Count());
+        // C3 (§2B): numërimi bëhet BRENDA katalogut — testi nuk e lexon vetë vetinë.
+        Assert.Equal(catalog.Length, PlatformProjectCatalog.DistinctCanonicalTargetPathCount());
     }
 
     /// <summary>

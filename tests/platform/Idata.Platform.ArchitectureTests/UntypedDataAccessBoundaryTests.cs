@@ -533,16 +533,23 @@ public sealed class UntypedDataAccessBoundaryTests
     public void Heqja_e_cdo_familje_sink_esh_e_zhduk_zbulimin_perkates(
         string target, string member, string detail, string typesToRemove, string membersToRemove)
     {
-        var assemblyPath = target == "self"
-            ? SelfAssemblyPath()
-            : PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
-                PlatformProjectCatalog.DiscoverProduction().Single(entry =>
-                    entry.AssemblyName == "Idata.Platform.Modules.PlatformStatus.Infrastructure"),
-                verifiedPath => verifiedPath);
-
-        bool Detected(UntypedDataAccessScanner.SinkTaxonomy? taxonomy)
-            => UntypedDataAccessScanner.Scan(assemblyPath, taxonomy).Any(finding =>
+        // C3 (§1): skanimi kryhet BRENDA kufirit — path-i i verifikuar nuk del
+        // kurrë prej tij; për target-in production konsumohen TË DYJA skanimet
+        // (me taksonominë e plotë dhe me atë të reduktuar) brenda callback-ut.
+        bool DetectedWith(UntypedDataAccessScanner.SinkTaxonomy? taxonomy)
+        {
+            bool Scan(string path) => UntypedDataAccessScanner.Scan(path, taxonomy).Any(finding =>
                 finding.Member == member && finding.Detail.Contains(detail, StringComparison.Ordinal));
+
+            return target == "self"
+                ? Scan(SelfAssemblyPath())
+                : PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
+                    PlatformProjectCatalog.DiscoverProduction().Single(entry =>
+                        entry.AssemblyName == "Idata.Platform.Modules.PlatformStatus.Infrastructure"),
+                    Scan);
+        }
+
+        bool Detected(UntypedDataAccessScanner.SinkTaxonomy? taxonomy) => DetectedWith(taxonomy);
 
         Assert.True(Detected(null), $"pritej zbulim me taksonominë e plotë: {member}/{detail}");
 
@@ -764,12 +771,13 @@ public sealed class UntypedDataAccessBoundaryTests
         Assert.True(DetectedIn(SelfAssemblyPath(), null));
         Assert.False(DetectedIn(SelfAssemblyPath(), empty));
 
-        var persistence = PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
-            PlatformProjectCatalog.DiscoverProduction()
-                .Single(entry => entry.AssemblyName == "Idata.Platform.Persistence"),
-            verifiedPath => verifiedPath);
-        Assert.True(DetectedIn(persistence, null));
-        Assert.False(DetectedIn(persistence, empty));
+        // C3 (§1): të dyja skanimet e target-it production brenda kufirit.
+        var persistenceEntry = PlatformProjectCatalog.DiscoverProduction()
+            .Single(entry => entry.AssemblyName == "Idata.Platform.Persistence");
+        var (withFull, withEmpty) = PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
+            persistenceEntry, path => (DetectedIn(path, null), DetectedIn(path, empty)));
+        Assert.True(withFull);
+        Assert.False(withEmpty);
     }
 
     // ═══════ C1/B — familja IDataAdapter / NpgsqlDataAdapter ═══════

@@ -1,5 +1,6 @@
 using System.Collections.Frozen;
 using System.Collections.Immutable;
+using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 using Xunit;
@@ -328,28 +329,28 @@ public sealed class CatalogGenerationStabilityTests
     [InlineData("sha")]
     [InlineData("mvid")]
     [InlineData("mtime")]
-    public void VerifiedFrozenTargetPath_kap_devijimin_e_secilit_dimension(string component)
+    public void Kufiri_kap_devijimin_e_secilit_dimension(string component)
     {
         var generation = PlatformProjectCatalog.CurrentGeneration();
         var victim = generation.Projects.OrderBy(entry => entry.CanonicalPath, StringComparer.Ordinal).First();
 
-        // GREEN mbi gjeneratën reale.
-        var path = PlatformProjectCatalog.VerifiedFrozenTargetPath(victim, generation);
-        Assert.True(File.Exists(path));
+        // GREEN mbi gjeneratën reale — konsumimi ndodh BRENDA kufirit (C3).
+        Assert.True(PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
+            victim, generation, File.Exists));
 
         var poisoned = PoisonComponent(generation, victim.CanonicalPath, component);
         var exception = Assert.Throws<InvalidOperationException>(
-            () => PlatformProjectCatalog.VerifiedFrozenTargetPath(victim, poisoned));
+            () => PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(victim, poisoned, File.Exists));
         Assert.Contains("catalog-generation-drift", exception.Message, StringComparison.Ordinal);
 
         // Projektet e tjera të gjeneratës së helmuar mbeten GREEN (saktësi kirurgjikale).
         var other = generation.Projects.OrderBy(entry => entry.CanonicalPath, StringComparer.Ordinal).Last();
         Assert.NotEqual(victim.CanonicalPath, other.CanonicalPath);
-        _ = PlatformProjectCatalog.VerifiedFrozenTargetPath(other, poisoned);
+        Assert.True(PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(other, poisoned, File.Exists));
     }
 
     [Fact]
-    public void VerifiedFrozenTargetPath_refuzon_target_jashte_gjenerates()
+    public void Kufiri_refuzon_target_jashte_gjenerates()
     {
         var generation = PlatformProjectCatalog.CurrentGeneration();
         var outsider = generation.Projects[0] with
@@ -357,14 +358,14 @@ public sealed class CatalogGenerationStabilityTests
             CanonicalPath = "src/platform/Synthetic.Outside/Synthetic.Outside.csproj",
         };
         var exception = Assert.Throws<InvalidOperationException>(
-            () => PlatformProjectCatalog.VerifiedFrozenTargetPath(outsider, generation));
+            () => PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(outsider, generation, File.Exists));
         Assert.Contains("jashtë gjeneratës autoritative", exception.Message, StringComparison.Ordinal);
 
         // Edhe identitet i manipuluar me path kanonik REAL refuzohet (anëtarësia
         // është mbi HYRJEN e plotë, jo vetëm mbi çelësin).
         var tampered = generation.Projects[0] with { AssemblyName = "Tampered.Assembly" };
         Assert.Throws<InvalidOperationException>(
-            () => PlatformProjectCatalog.VerifiedFrozenTargetPath(tampered, generation));
+            () => PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(tampered, generation, File.Exists));
     }
 
     /// <summary>
@@ -379,9 +380,11 @@ public sealed class CatalogGenerationStabilityTests
     [InlineData("Idata.Platform.ArchitectureTests.DynamicRuntimeAccessBoundaryTests", "ScanOwnerSurfaces")]
     [InlineData("Idata.Platform.ArchitectureTests.UntypedDataAccessBoundaryTests", "ScanVerified")]
     [InlineData("Idata.Platform.ArchitectureTests.IdentityRoleSurfaceTests", "Zero_role_referenca_ne_metadata_te_asnje_assembly_production")]
-    [InlineData("Idata.Platform.ArchitectureTests.DependencyDirectionTests", "PlatformOutputAuthority")]
+    [InlineData("Idata.Platform.ArchitectureTests.DependencyDirectionTests", "MatchesAuthoritativeOutput")]
     public void Konsumatoret_e_production_target_it_thirrin_kontraten_e_ngrire(string typeName, string methodName)
-        => Assert.Contains("ConsumeVerifiedFrozenTarget", CalledMethodDefinitionNames(typeName, methodName));
+        => Assert.Contains(
+            CalledMethodDefinitionNames(typeName, methodName),
+            called => called is "ConsumeVerifiedFrozenTarget" or "MatchesVerifiedTarget");
 
     /// <summary>
     /// C2 — RENDI EKZAKT i kufirit, i provuar mbi IL-in e vetë
@@ -580,22 +583,170 @@ public sealed class CatalogGenerationStabilityTests
     }
 
     /// <summary>
-    /// C2 — guard i DERIVUAR i plotësisë (jo listë e hardcoded konsumatorësh):
-    /// primitivet e konsumit të production target-eve lejohen VETËM te kufiri
-    /// qendror/verifikuesi primitiv. Ecet mbi IL-in e GJITHË assembly-t të
-    /// testeve; çdo metodë tjetër që (a) thërret `ReadMvid`, (b) thërret
-    /// `Assembly.Load`, ose (c) ndërton path targeti
-    /// (`get_CanonicalTargetPath` + `Path.Combine`) = shkelje → RED.
-    /// Një konsumator i RI direkt në të ardhmen kapet automatikisht.
-    /// (`DynamicRuntimeAccessFixtures` përjashtohet VETËM për `Assembly.Load`:
-    /// është fixture RED e vetë skanerit ENG-006, jo konsumator targeti.)
+    /// C3 (§1) — path-i i verifikuar NUK del dot nga kufiri: kthimi i tij si
+    /// `string` (drejtpërdrejt ose brenda një koleksioni), ose i një kapaciteti
+    /// të hapur (`FileInfo`/`Stream`/delegate), refuzohet — konsumimi REAL duhet
+    /// të ndodhë brenda callback-ut. Vlerat e DERIVUARA mbeten të lejuara.
+    /// </summary>
+    [Fact]
+    public void Path_i_verifikuar_nuk_del_dot_nga_kufiri()
+    {
+        var entry = PlatformProjectCatalog.DiscoverProduction()[0];
+
+        // (a) kthim i drejtpërdrejtë i path-it → RED.
+        var direct = Assert.Throws<InvalidOperationException>(
+            () => PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, verifiedPath => verifiedPath));
+        Assert.Contains("verified-capability-escape", direct.Message, StringComparison.Ordinal);
+
+        // (b) i fshehur brenda një koleksioni → po ashtu RED.
+        var wrapped = Assert.Throws<InvalidOperationException>(
+            () => PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
+                entry, verifiedPath => new[] { "benign", verifiedPath }));
+        Assert.Contains("verified-capability-escape", wrapped.Message, StringComparison.Ordinal);
+
+        // (c) kapacitete të hapura → refuzohen nga TIPI, para se konsumatori të thirret.
+        var consumerRan = false;
+        Assert.Throws<InvalidOperationException>(() =>
+            PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, verifiedPath =>
+            {
+                consumerRan = true;
+                return new FileInfo(verifiedPath);
+            }));
+        Assert.False(consumerRan);
+        Assert.Throws<InvalidOperationException>(() =>
+            PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
+                entry, _ => (Func<string>)(() => "leak")));
+
+        // (d) GREEN: konsumim REAL brenda kufirit + vlera të derivuara.
+        Assert.True(PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, File.Exists));
+        Assert.NotEmpty(PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
+            entry, path => DynamicRuntimeAccessScanner.Scan(path)));
+        Assert.NotEqual(
+            string.Empty,
+            PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, path => Path.GetFileName(path)));
+    }
+
+    /// <summary>
+    /// C3 (§2A) — familja e ngarkimit të assembly-ve, e DERIVUAR nga BCL-ja e
+    /// target framework-ut: çdo metodë publike e `System.Reflection.Assembly`
+    /// ose `System.Runtime.Loader.AssemblyLoadContext` që **kthen `Assembly`**
+    /// dhe **pranon identity/path/bytes/stream**. Zero listë manuale emrash:
+    /// `Load`, `LoadFrom`, `LoadFile`, `LoadFromAssemblyPath`, … dalin vetë nga
+    /// sinjaturat, prandaj `LoadFrom` s'mund të shpëtojë si "emër tjetër".
+    /// </summary>
+    private static IReadOnlySet<string> DeriveAssemblyLoadingFamily()
+    {
+        var family = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var type in (Type[])[typeof(Assembly), typeof(System.Runtime.Loader.AssemblyLoadContext)])
+        {
+            foreach (var method in type.GetMethods(
+                BindingFlags.Public | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+            {
+                if (!typeof(Assembly).IsAssignableFrom(method.ReturnType))
+                {
+                    continue;
+                }
+
+                var acceptsIdentityOrBytes = method.GetParameters().Any(parameter =>
+                    parameter.ParameterType == typeof(string)
+                    || parameter.ParameterType == typeof(byte[])
+                    || parameter.ParameterType == typeof(AssemblyName)
+                    || typeof(Stream).IsAssignableFrom(parameter.ParameterType));
+                if (acceptsIdentityOrBytes)
+                {
+                    family.Add(method.Name);
+                }
+            }
+        }
+
+        return family;
+    }
+
+    /// <summary>
+    /// Familja e MONITORUAR duhet të jetë IDENTIKE me atë të derivuar nga BCL-ja.
+    /// Një metodë e re relevante e BCL-së → RED derisa të klasifikohet.
+    /// </summary>
+    [Fact]
+    public void Familja_e_assembly_loading_eshte_e_derivuar_nga_BCL()
+    {
+        var derived = DeriveAssemblyLoadingFamily();
+        Assert.Contains("Load", derived);
+        Assert.Contains("LoadFrom", derived);
+        Assert.Contains("LoadFile", derived);
+        Assert.Contains("LoadFromAssemblyPath", derived);
+        Assert.Contains("LoadFromAssemblyName", derived);
+        Assert.Contains("LoadFromStream", derived);
+
+        // Metodat pa identity/path/bytes NUK hyjnë (p.sh. `GetExecutingAssembly`).
+        Assert.DoesNotContain("GetExecutingAssembly", derived);
+
+        Assert.Equal(
+            derived.Order(StringComparer.Ordinal),
+            MonitoredAssemblyLoadingMembers.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>Familja e monitoruar nga guard-i = ajo e derivuar (një burim i vetëm).</summary>
+    private static readonly IReadOnlySet<string> MonitoredAssemblyLoadingMembers = DeriveAssemblyLoadingFamily();
+
+    /// <summary>
+    /// C3 (§2C) — përjashtimet janë mbi METODA EKZAKTE (tip + metodë), të
+    /// shpjeguara dhe të provuara si të përdorura nga meta-testi i minimalitetit.
+    /// </summary>
+    private static readonly (string Type, string Method, string Reason)[] PrimitiveExceptions =
+    [
+        ("Idata.Platform.ArchitectureTests.DynamicRuntimeAccessFixtures",
+         "AssemblyLoadCreateInstanceFixture",
+         "Fixture RED e vetë skanerit ENG-006 (Assembly.Load→GetType→CreateInstance); nuk konsumon production target."),
+    ];
+
+    /// <summary>
+    /// C3 (§2) — guard i DERIVUAR i plotësisë, tani SIGNATURE-BASED:
+    ///  (a) çdo thirrje e familjes së ngarkimit të assembly-ve (e derivuar nga
+    ///      BCL sipas return type + parametrave) jashtë katalogut = shkelje —
+    ///      kap `LoadFrom`, `LoadFile`, `LoadFromAssemblyPath`, jo vetëm `Load`;
+    ///  (b) çdo lexim i `get_CanonicalTargetPath` jashtë katalogut = shkelje,
+    ///      PA kërkuar `Path.Combine` në të njëjtën metodë — kap `Path.Join`,
+    ///      `GetFullPath`, konkatenim dhe helper-a indirektë;
+    ///  (c) çdo thirrje e `ReadMvid` jashtë katalogut = shkelje.
+    /// Përjashtimet janë mbi metoda EKZAKTE dhe provohen minimale.
     /// </summary>
     [Fact]
     public void Vetem_kufiri_qendror_prek_primitivet_e_konsumit()
     {
-        const string catalogType = "Idata.Platform.ArchitectureTests.PlatformProjectCatalog";
-        var allowedAssemblyLoad = new[] { catalogType, "Idata.Platform.ArchitectureTests.DynamicRuntimeAccessFixtures" };
+        var violations = ScanPrimitiveViolations(PrimitiveExceptions);
+        Assert.True(violations.Count == 0, string.Join(" · ", violations.Order(StringComparer.Ordinal)));
+    }
 
+    /// <summary>
+    /// Minimaliteti i përjashtimeve: secili duhet të jetë REALISHT i nevojshëm
+    /// (heqja e tij → shkelje e re) dhe asnjë përjashtim i vdekur nuk lejohet.
+    /// </summary>
+    [Fact]
+    public void Perjashtimet_e_primitiveve_jane_minimale_dhe_te_perdorura()
+    {
+        foreach (var exception in PrimitiveExceptions)
+        {
+            var withoutThis = PrimitiveExceptions.Where(candidate => candidate != exception).ToArray();
+            var violations = ScanPrimitiveViolations(withoutThis);
+            Assert.True(
+                violations.Any(violation =>
+                    violation.Contains($"{exception.Type}.{exception.Method}", StringComparison.Ordinal)),
+                $"Përjashtim i VDEKUR (asnjë shkelje reale pa të): {exception.Type}.{exception.Method}");
+            Assert.False(string.IsNullOrWhiteSpace(exception.Reason));
+        }
+
+        // Përjashtimet janë mbi metoda ekzakte — asnjë wildcard/top-level type.
+        Assert.All(PrimitiveExceptions, exception =>
+        {
+            Assert.DoesNotContain('*', exception.Method);
+            Assert.NotEqual("*", exception.Method);
+        });
+    }
+
+    private static IReadOnlyList<string> ScanPrimitiveViolations(
+        (string Type, string Method, string Reason)[] exceptions)
+    {
+        const string catalogType = "Idata.Platform.ArchitectureTests.PlatformProjectCatalog";
         var violations = new List<string>();
         var path = Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll");
         using var stream = File.OpenRead(path);
@@ -613,8 +764,16 @@ public sealed class CatalogGenerationStabilityTests
             var declaringType = UntypedDataAccessScanner.FullNameOfTypeDefinition(reader, method.GetDeclaringType());
             var topLevelType = declaringType.Split('+')[0];
             var methodName = reader.GetString(method.Name);
+            if (topLevelType == catalogType)
+            {
+                continue; // kufiri qendror + primitivet e tij
+            }
 
-            var called = new List<string>();
+            var isExcepted = exceptions.Any(exception =>
+                exception.Type == topLevelType
+                && (methodName == exception.Method
+                    || methodName.Contains($"<{exception.Method}>", StringComparison.Ordinal)));
+
             var il = portableExecutable.GetMethodBody(method.RelativeVirtualAddress).GetILBytes()!;
             foreach (var instruction in IlOperandTable.Walk(il, out _))
             {
@@ -629,37 +788,50 @@ public sealed class CatalogGenerationStabilityTests
                     handle = reader.GetMethodSpecification((MethodSpecificationHandle)handle).Method;
                 }
 
+                string calledName;
+                string? calledParent = null;
                 switch (handle.Kind)
                 {
                     case HandleKind.MethodDefinition:
-                        called.Add(reader.GetString(
-                            reader.GetMethodDefinition((MethodDefinitionHandle)handle).Name));
+                        var definition = reader.GetMethodDefinition((MethodDefinitionHandle)handle);
+                        calledName = reader.GetString(definition.Name);
+                        calledParent = UntypedDataAccessScanner.FullNameOfTypeDefinition(
+                            reader, definition.GetDeclaringType());
                         break;
                     case HandleKind.MemberReference:
-                        called.Add(reader.GetString(
-                            reader.GetMemberReference((MemberReferenceHandle)handle).Name));
+                        var member = reader.GetMemberReference((MemberReferenceHandle)handle);
+                        calledName = reader.GetString(member.Name);
+                        calledParent = member.Parent.Kind == HandleKind.TypeReference
+                            ? UntypedDataAccessScanner.FullNameOfTypeReference(
+                                reader, (TypeReferenceHandle)member.Parent)
+                            : null;
                         break;
+                    default:
+                        continue;
                 }
-            }
 
-            if (called.Contains("ReadMvid") && topLevelType != catalogType)
-            {
-                violations.Add($"ReadMvid: {declaringType}.{methodName}");
-            }
+                var isAssemblyLoadingFamily =
+                    calledParent is "System.Reflection.Assembly" or "System.Runtime.Loader.AssemblyLoadContext"
+                    && MonitoredAssemblyLoadingMembers.Contains(calledName);
 
-            if (called.Contains("Load") && !allowedAssemblyLoad.Contains(topLevelType))
-            {
-                violations.Add($"Assembly.Load: {declaringType}.{methodName}");
-            }
+                if (isAssemblyLoadingFamily && !isExcepted)
+                {
+                    violations.Add($"assembly-loading[{calledParent}.{calledName}]: {declaringType}.{methodName}");
+                }
 
-            if (called.Contains("get_CanonicalTargetPath") && called.Contains("Combine")
-                && topLevelType != catalogType)
-            {
-                violations.Add($"target-path-build: {declaringType}.{methodName}");
+                if (calledName == "get_CanonicalTargetPath" && !isExcepted)
+                {
+                    violations.Add($"canonical-target-path: {declaringType}.{methodName}");
+                }
+
+                if (calledName == "ReadMvid" && !isExcepted)
+                {
+                    violations.Add($"read-mvid: {declaringType}.{methodName}");
+                }
             }
         }
 
-        Assert.True(violations.Count == 0, string.Join(" · ", violations.Order(StringComparer.Ordinal)));
+        return violations;
     }
 
     // ═══════ C1 (Hardening D) — deep immutability e gjeneratës ═══════

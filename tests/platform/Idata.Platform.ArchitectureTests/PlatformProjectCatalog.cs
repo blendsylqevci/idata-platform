@@ -231,10 +231,7 @@ internal static class PlatformProjectCatalog
     /// thërrasin PARA dhe PAS leximit/skanimit, që një ndryshim gjatë scan-it
     /// të mos kalojë pa u kapur.
     /// </summary>
-    internal static string VerifiedFrozenTargetPath(ProjectEntry entry)
-        => VerifiedFrozenTargetPath(entry, CurrentGeneration());
-
-    internal static string VerifiedFrozenTargetPath(ProjectEntry entry, CatalogGeneration generation)
+    private static string VerifiedFrozenTargetPath(ProjectEntry entry, CatalogGeneration generation)
     {
         if (!generation.Projects.Contains(entry)
             || !generation.Sha256ByCanonicalPath.TryGetValue(entry.CanonicalPath, out var frozenSha)
@@ -288,11 +285,77 @@ internal static class PlatformProjectCatalog
         ProjectEntry entry, CatalogGeneration generation, Func<string, T> consumer)
     {
         ArgumentNullException.ThrowIfNull(consumer);
+
+        // Correction C3 (§1): path-i i verifikuar është KAPACITET, jo vlerë —
+        // nuk lejohet të DALË nga kufiri për konsum të mëvonshëm (përndryshe
+        // post-check-u do të ishte kozmetik). Ndalohen (a) tipet që janë vetë
+        // kapacitet i hapur (`FileSystemInfo`, `Stream`, delegate) dhe (b) çdo
+        // VLERË e kthyer që PËRMBAN path-in e verifikuar. Vlerat e derivuara
+        // (rezultate skanimi, bool, klasifikim) mbeten të lejuara.
+        if (EscapesVerifiedCapabilityType(typeof(T)))
+        {
+            throw new InvalidOperationException(
+                "verified-capability-escape: kufiri i konsumit nuk mund të kthejë "
+                + $"`{typeof(T).Name}` — konsumimi duhet të ndodhë brenda callback-ut.");
+        }
+
         var verifiedPath = VerifiedFrozenTargetPath(entry, generation);
         var result = consumer(verifiedPath);
+
+        if (LeaksVerifiedPath(result, verifiedPath))
+        {
+            throw new InvalidOperationException(
+                "verified-capability-escape: kufiri i konsumit nuk mund ta kthejë path-in e "
+                + "verifikuar — konsumimi duhet të ndodhë brenda callback-ut.");
+        }
+
         _ = VerifiedFrozenTargetPath(entry, generation);
         return result;
     }
+
+    /// <summary>Tipe kthimi që janë VETË kapacitet i hapur mbi artefaktin.</summary>
+    internal static bool EscapesVerifiedCapabilityType(Type returnType)
+        => typeof(FileSystemInfo).IsAssignableFrom(returnType)
+           || typeof(Stream).IsAssignableFrom(returnType)
+           || typeof(Delegate).IsAssignableFrom(returnType);
+
+    /// <summary>A e nxjerr rezultati path-in e verifikuar jashtë kufirit?</summary>
+    internal static bool LeaksVerifiedPath(object? result, string verifiedPath)
+    {
+        var full = Path.GetFullPath(verifiedPath);
+        return result switch
+        {
+            string text => Matches(text),
+            System.Collections.IEnumerable sequence and not string =>
+                sequence.Cast<object?>().Any(item => item is string candidate && Matches(candidate)),
+            _ => false,
+        };
+
+        bool Matches(string candidate)
+            => string.Equals(candidate, verifiedPath, StringComparison.Ordinal)
+               || string.Equals(candidate, full, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Correction C3 (§1/§2B) — krahasim identiteti PA publikuar path: a është
+    /// `candidateFullPath` EKZAKTËSISHT output-i autoritativ i këtij projekti?
+    /// Kryen verify-before → krahasim → verify-after, njësoj si kufiri.
+    /// </summary>
+    internal static bool MatchesVerifiedTarget(
+        ProjectEntry entry, CatalogGeneration generation, string candidateFullPath)
+        => ConsumeVerifiedFrozenTarget(entry, generation, verifiedPath =>
+            string.Equals(
+                Path.GetFullPath(candidateFullPath), Path.GetFullPath(verifiedPath), StringComparison.Ordinal));
+
+    /// <summary>
+    /// Correction C3 (§2B) — numri i `CanonicalTargetPath`-eve DISTINKTE, i
+    /// llogaritur BRENDA katalogut, që asnjë test të mos e lexojë vetë vetinë.
+    /// </summary>
+    internal static int DistinctCanonicalTargetPathCount()
+        => CurrentGeneration().Projects
+            .Select(entry => entry.CanonicalTargetPath)
+            .Distinct(StringComparer.Ordinal)
+            .Count();
 
     /// <summary>
     /// Correction C2 — ngarkim i një assembly-je TË REFERUAR gjatë ecjeve të

@@ -21,7 +21,8 @@ internal sealed record AllowedDynamicAccess(
 /// REALE të source-generatorëve të pin-uar. **NUK është manifest i kodit tonë**
 /// (ai mbetet BOSH): është inventar EKZAKT i asaj që generatorët e aprovuar
 /// emetojnë sot brenda production assemblies. Identiteti = assembly + tip i
-/// NORMALIZUAR (hash-i volatil 64-hex i OpenAPI-t → `{INPUT_HASH_64}`) + anëtar
+/// NORMALIZUAR (identiteti file-local i OpenAPI-t: **literal `F` + 64 hex**
+/// → `F{INPUT_HASH_64}`) + anëtar
 /// + kind + detail + tool + version i DEKODUAR nga metadata + paketa e pin-uar
 /// që e siguron generatorin. Çdo gjetje `generated-*` pa përputhje EKZAKTE =
 /// blocking, pavarësisht kind-it.
@@ -207,31 +208,35 @@ internal static class DynamicRuntimeAccessManifest
         };
 
     /// <summary>
-    /// Gjatësia REALE e run-it hex në emrat e gjeneruar OpenAPI, e MATUR
-    /// mekanikisht nga metadata e HEAD-it (14/14 tipe → 65). DEVIATION e
-    /// deklaruar: prompti i review-t supozoi 64; sipas klauzolës "rillogarit
-    /// nga zero mbi HEAD-in real, mos hardcode numrat e reviewer-it",
-    /// parametri u zëvendësua me vlerën empirike — çdo gjatësi tjetër
-    /// (përfshirë 64 dhe 66) REFUZOHET fail-closed.
+    /// Correction C3 (§3) — forma REALE e emërtimit file-local të OpenAPI
+    /// source-generator-it, e verifikuar mekanikisht mbi metadata e HEAD-it:
+    /// pas marker-it vjen **literali strukturor `F`** dhe pastaj digest-i
+    /// volatil prej **64 karakteresh hex**. `F` NUK është "hex-i i parë" i
+    /// hash-it: është marker i skemës file-local. Matja mbi HEAD: **1 formë/hash
+    /// distinkt**, e ndarë nga **14 tipe** (jo 14 hash-e të pavarura).
     /// </summary>
-    internal const int OpenApiHashRunLength = 65;
+    internal const char OpenApiFileLocalMarker = 'F';
 
-    internal const string GeneratedHashPlaceholder = "{INPUT_HASH_65}";
+    internal const int OpenApiDigestLength = 64;
+
+    internal const string GeneratedHashPlaceholder = "F{INPUT_HASH_64}";
 
     private const string OpenApiGeneratedMarker = "<OpenApiXmlCommentSupport_generated>";
 
     /// <summary>
-    /// Correction C1 (Shtesa A) — normalizim I KUFIZUAR, funksion PURE me
-    /// pattern të ANKORUAR (zero `Replace` i përgjithshëm, zero regex global):
-    /// pranohet VETËM forma `…&lt;OpenApiXmlCommentSupport_generated&gt;` +
-    /// SAKTËSISHT NJË run hex me gjatësinë REALE të matur
-    /// (<see cref="OpenApiHashRunLength"/>) + `__` + suffix jo-bosh.
-    /// Vetëm run-i 64-hex zëvendësohet me <see cref="GeneratedHashPlaceholder"/>;
-    /// çdo segment tjetër mbetet BYTE-IDENTIK. Çdo devijim (pa run, run 63/65,
-    /// karakter jo-hex, run i dytë, hash në pozicion tjetër, suffix bosh) =
-    /// refuzim — emri kthehet i PAPREKUR dhe rrjedhimisht nuk përputhet me
-    /// asnjë hyrje ledger-i (fail-closed). Run 64 (supozimi i review-t) dhe 66
-    /// refuzohen njësoj — vetëm gjatësia empirike kalon.
+    /// Correction C1 (Shtesa A) + C3 (§3) — normalizim I KUFIZUAR, funksion PURE
+    /// me pattern të ANKORUAR (zero `Replace` i përgjithshëm, zero regex global).
+    /// Pranohet VETËM forma STRUKTURORE:
+    /// `…&lt;OpenApiXmlCommentSupport_generated&gt;` + literal
+    /// <see cref="OpenApiFileLocalMarker"/> (`F`) + SAKTËSISHT
+    /// <see cref="OpenApiDigestLength"/> (64) karaktere hex + `__` + suffix
+    /// jo-bosh. Zëvendësohet vetëm segmenti `F`+digest me
+    /// <see cref="GeneratedHashPlaceholder"/>; çdo segment tjetër mbetet
+    /// BYTE-IDENTIK. Refuzohen: marker-i që mungon ose dyfishohet · karakter
+    /// prijës tjetër (p.sh. `A`) ose `f` i vogël · digest 63/65/66 ose jo-hex ·
+    /// run i dytë 64-hex · separator `__` që mungon · suffix bosh. Emri kthehet
+    /// i PAPREKUR dhe rrjedhimisht nuk përputhet me asnjë hyrje ledger-i
+    /// (fail-closed).
     /// </summary>
     internal static bool TryNormalizeGeneratedTypeName(string typeName, out string normalized)
     {
@@ -248,15 +253,21 @@ internal static class DynamicRuntimeAccessManifest
         }
 
         var hashStart = marker + OpenApiGeneratedMarker.Length;
-        var index = hashStart;
+        if (hashStart >= typeName.Length || typeName[hashStart] != OpenApiFileLocalMarker)
+        {
+            return false; // marker-i strukturor `F` mungon (p.sh. `A…` ose `f…`)
+        }
+
+        var digestStart = hashStart + 1;
+        var index = digestStart;
         while (index < typeName.Length && Uri.IsHexDigit(typeName[index]))
         {
             index++;
         }
 
-        if (index - hashStart != OpenApiHashRunLength)
+        if (index - digestStart != OpenApiDigestLength)
         {
-            return false; // 64/66/jo-hex/mungon = refuzim fail-closed (reale = 65)
+            return false; // digest 63/65/66/jo-hex = refuzim fail-closed
         }
 
         if (index + 2 > typeName.Length || typeName[index] != '_' || typeName[index + 1] != '_')
@@ -270,9 +281,9 @@ internal static class DynamicRuntimeAccessManifest
             return false; // suffix bosh
         }
 
-        if (ContainsHexRun(suffix, OpenApiHashRunLength))
+        if (ContainsHexRun(suffix, OpenApiDigestLength))
         {
-            return false; // më shumë se një hash-run = refuzim
+            return false; // më shumë se një digest-run = refuzim
         }
 
         normalized = string.Concat(typeName.AsSpan(0, hashStart), GeneratedHashPlaceholder, "__", suffix);
