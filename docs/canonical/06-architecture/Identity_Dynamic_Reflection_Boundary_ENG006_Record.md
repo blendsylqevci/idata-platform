@@ -119,6 +119,68 @@ Të 19 gjetjet e mbetura i përkasin kodit **të gjeneruar** brenda production a
 
 ---
 
+## 4b. Correction C3 — kufiri pa escape, guard signature-based, forma reale e hash-it
+
+**§1 — path-i i verifikuar nuk del dot nga kufiri.** C2 ende lejonte
+`ConsumeVerifiedFrozenTarget(..., verifiedPath => verifiedPath)` dhe konsumim të
+mëvonshëm jashtë tij (post-check kozmetik). Tani: (a) `VerifiedFrozenTargetPath`
+është **private** — asnjë API nuk publikon raw path; (b) kufiri refuzon
+strukturalisht kthimin e kapaciteteve të hapura (`FileSystemInfo`/`Stream`/
+delegate) **para** se konsumatori të thirret, dhe refuzon **çdo vlerë që përmban
+path-in e verifikuar** (string ose brenda koleksioni) pas tij; (c) autoriteti i
+output-eve platformë nuk mban më path/MVID, por një **predikat identiteti** të
+pronësuar nga katalogu (`MatchesVerifiedTarget`), i cili brenda vetes bën
+verify-before → krahasim EKZAKT → verify-after. Vlerat e derivuara (bool,
+rezultate skanimi, string klasifikimi, emër file-i) mbeten të lejuara.
+
+**§2 — guard SIGNATURE-BASED, jo name-based.** Familja e ngarkimit të
+assembly-ve **derivohet nga BCL-ja** e target framework-ut: çdo metodë publike e
+`System.Reflection.Assembly` / `System.Runtime.Loader.AssemblyLoadContext` që
+**kthen `Assembly`** dhe **pranon identity/path/bytes/stream**. Kështu
+`LoadFrom`, `LoadFile`, `LoadFromAssemblyPath`, `LoadFromStream` hyjnë vetë; një
+metodë e re relevante e BCL-së e skuq meta-testin derisa të klasifikohet.
+`get_CanonicalTargetPath` jashtë katalogut është finding **pa** kërkuar
+`Path.Combine` në të njëjtën metodë — kap `Path.Join`, `GetFullPath`,
+konkatenim dhe helper-a indirektë. Testi benign i unikalitetit e llogarit tani
+numrin **brenda katalogut** (`DistinctCanonicalTargetPathCount`). Përjashtimet
+janë mbi **metoda EKZAKTE** (tip + metodë + arsye) me **meta-test minimaliteti**:
+përjashtim i vdekur ose tepër i gjerë = RED.
+
+**§3 — forma reale e identitetit OpenAPI.** Metadata jep
+`…<OpenApiXmlCommentSupport_generated>` + **literal `F`** + **64 hex** + `__` +
+suffix. `F` është **marker strukturor i skemës file-local**, jo "hex-i i parë".
+Matja mbi HEAD: **1 formë/hash DISTINKT**, e ndarë nga **14 tipe** — jo 14 hash-e
+të pavarura (korrigjim i pretendimit të C2). Placeholder-i është `F{INPUT_HASH_64}`.
+Refuzohen: `A`/`f`/`0` në vend të `F` · **65 hex arbitrare pa marker** · digest
+63/65/66 · jo-hex · digest i dytë · marker i dyfishtë · separator/suffix që
+mungon · kolizion i dy tipeve reale. Ndryshim i ardhshëm i formatit =
+fail-closed + review.
+
+**§4 — pretendimi malformed = assertions.** Të tri degët (`unreadable-generated-code-attribute`,
+`unreadable-field-signature`, `unreadable-method-signature`) asertojnë tani
+`Kind`, `DeclaringType`, `Member`, `Assembly` (kontratë e dokumentuar: emri i
+file-it të skanuar) dhe `Reason`. `Detail` mbart emrin e tipit të përjashtimit të
+dekoduesit — kontratë e brendshme e BCL-së — prandaj asertohet **vetëm si
+jo-bosh** dhe pretendimi ngushtohet përkatësisht.
+
+**§6 — incidenti cold-process 260/262: NOT REPRODUCED.** Sekuenca e kontrolluar:
+`dotnet restore --locked-mode` → `dotnet build` (0W/0E) → `dotnet build-server shutdown`
+→ dy run-e të ftohta me `--no-build`, `MSBUILDDISABLENODEREUSE=1`,
+`DOTNET_CLI_USE_MSBUILD_SERVER=0`. Të dy: **277/277, zero skip**. Numrat e vjetër
+(260/262) nuk riprodhohen dot sepse suita ka ndryshuar; incidenti regjistrohet si
+**jo i riprodhuar** — pa shpikur defekt.
+
+**Provat RED të C3 (4, të izoluara; rikthime edit-forward byte-identike):**
+
+| Guard i hequr / shkelje e futur | RED |
+|---|---|
+| escape-guard-i i vlerës | **1** (`Path_i_verifikuar_nuk_del_dot_nga_kufiri`) |
+| fixture me `Path.Join` + `Assembly.LoadFrom` | **1** — guard-i raportoi TË DYJA shkeljet: `assembly-loading[System.Reflection.Assembly.LoadFrom]` dhe `canonical-target-path` |
+| literali strukturor `F` | **4** teste normalizimi |
+| përjashtim i vdekur/tepër i gjerë | **2** (minimaliteti + guard-i) |
+
+---
+
 ## 5. Fixtures dhe mapping fix → fixture → RED → GREEN
 
 **RED (kapen me kind + declaring type + anëtar ekzakt + assembly + metodë burimore + arsye):** PoC-i historik `Type.GetType` me emër të ndërtuar në runtime · `GetType→GetProperty→GetValue` · `Assembly.Load→GetType→Activator.CreateInstance` · `GetMethod→Invoke` · `Type.InvokeMember` · `PropertyInfo.GetValue/SetValue` · `FieldInfo.GetValue/SetValue` · `MakeGenericType`/`MakeGenericMethod` · `Delegate.DynamicInvoke`/`CreateDelegate` · `dynamic` me emetim REAL `Binder.InvokeMember` + `CallSite\`1.Create` (+ `CallSite\`1.Target` si UNKNOWN) · `IServiceProvider.GetService(Type)` dhe `GetRequiredService(Type)` · atribuim i një metode `async` te metoda BURIMORE · assembly jo-PE = fail-closed · escape hatch publik i owner-it.
@@ -160,8 +222,8 @@ Të 19 gjetjet e mbetura i përkasin kodit **të gjeneruar** brenda production a
 
 - `dotnet build src/platform/Idata.Platform.slnx` → **0 warnings, 0 errors**;
 - baseline mekanik para editimit: **178/178**;
-- pas increment-it: **237/237, zero skip** ×3; pas correction C1: **262/262**; pas **correction C2: 270/270, zero skip**, **tri ekzekutime radhazi** (+8 teste C2);
-- targeted (të rimatura pas C2): ENG-008 **27/27**, ENG-006 **65/65** (para C2: 21/63 — vlera e mëparshme 20 për ENG-008 ishte e pasaktë; para C1: 12/47);
+- pas increment-it: **237/237** ×3; C1: **262/262**; C2: **270/270**; pas **correction C3: 277/277, zero skip**, **tri ekzekutime radhazi** (+7 teste C3), plus **dy cold-run** të ftohta 277/277;
+- targeted (të rimatura pas C3): ENG-008 **30/30**, ENG-006 **69/69** (pas C2: 27/65; para C2: 21/63; para C1: 12/47);
 - permutime me **seed-e fikse 1337 / 20260803 / 42** → rezultate identike, e njëjta gjeneratë;
 - disk: min **6.69 GiB**, max **6.78 GiB** (kurrë nën 2.0 GiB; zero ENOSPC).
 
