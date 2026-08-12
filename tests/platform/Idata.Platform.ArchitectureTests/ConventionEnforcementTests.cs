@@ -1073,17 +1073,15 @@ public sealed class ConventionEnforcementTests
         Assert.NotEmpty(catalog);
         Assert.Equal(2, catalog.Count(PlatformProjectCatalog.IsStoreOwner));
 
-        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        var generation = PlatformProjectCatalog.CurrentGeneration();
         var scanned = 0;
         foreach (var entry in catalog)
         {
-            // §2-R4: skanohet EKZAKTËSISHT TargetPath-i i vlerësuar nga MSBuild
-            // (identiteti i binarit i verifikuar në DiscoverProduction) — zero
-            // lookup sipas basename-it në bin të testeve.
-            var assemblyPath = Path.Combine(
-                repoRoot, entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar));
-
-            var findings = IdentityStoreIlScanner.Scan(assemblyPath, PlatformProjectCatalog.IsStoreOwner(entry));
+            // §2-R4 + C2: skanohet EKZAKTËSISHT TargetPath-i i vlerësuar nga
+            // MSBuild, i marrë NGA KUFIRI i ngrirë (verifikim para+pas skanimit)
+            // — zero ndërtim direkt path-i, zero lookup sipas basename-it.
+            var findings = PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, generation,
+                assemblyPath => IdentityStoreIlScanner.Scan(assemblyPath, PlatformProjectCatalog.IsStoreOwner(entry)));
             Assert.True(findings.Count == 0,
                 $"{entry.CanonicalPath}: {string.Join(" · ", findings.Select(finding => $"{finding.Kind}:{finding.Detail}"))}");
             scanned++;
@@ -1491,7 +1489,7 @@ public sealed class ConventionEnforcementTests
     [Fact]
     public void Controller_i_hollte_merr_vetem_IMediator_dhe_trashegon_bazen_module_local()
     {
-        var presentation = Assembly.Load("Idata.Platform.Modules.PlatformStatus.Presentation");
+        var presentation = LoadVerifiedByName("Idata.Platform.Modules.PlatformStatus.Presentation");
         var controller = presentation.GetType(
             "Idata.Platform.Modules.PlatformStatus.Presentation.Controllers.PlatformStatusController");
         Assert.NotNull(controller);
@@ -1532,7 +1530,7 @@ public sealed class ConventionEnforcementTests
     [Fact]
     public void Minimal_API_i_vjeter_i_statusit_nuk_ekziston_me()
     {
-        var presentation = Assembly.Load("Idata.Platform.Modules.PlatformStatus.Presentation");
+        var presentation = LoadVerifiedByName("Idata.Platform.Modules.PlatformStatus.Presentation");
         Assert.Null(presentation.GetType(
             "Idata.Platform.Modules.PlatformStatus.Presentation.PlatformStatusEndpoints"));
         Assert.DoesNotContain(PlatformAssemblies().SelectMany(a => a.GetTypes()),
@@ -1558,4 +1556,9 @@ public sealed class ConventionEnforcementTests
     /// </summary>
     private static Assembly[] PlatformAssemblies() =>
         [.. PlatformProjectCatalog.DiscoverProduction().Select(PlatformProjectCatalog.LoadVerified)];
+
+    /// <summary>C2: ngarkim production VETËM përmes kufirit të ngrirë të katalogut.</summary>
+    private static Assembly LoadVerifiedByName(string assemblyName)
+        => PlatformProjectCatalog.LoadVerified(PlatformProjectCatalog.DiscoverProduction()
+            .Single(entry => entry.AssemblyName == assemblyName));
 }

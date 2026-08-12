@@ -9,10 +9,11 @@ namespace Idata.Platform.ArchitectureTests;
 ///
 /// Kufij të DEKLARUAR (zero overclaim): mbulohen production assemblies të
 /// inventarizuara nga katalogu dhe call-site-t ekzekutuese + DLR-patterns e
-/// provuara; brendësia e paketave jashtë tyre NUK pretendohet e skanuar; kodi i
-/// GJENERUAR brenda assembly-ve klasifikohet VEÇMAS me metadata reale
-/// (`GeneratedCode`/`CompilerGenerated`) sepse nuk e shkruajmë ne dhe nuk
-/// ndryshohet dot pa prekur varësitë. Zero pretendim "universal" ose
+/// provuara; brendësia e paketave jashtë tyre NUK pretendohet e skanuar. Për
+/// kodin e GJENERUAR: `[GeneratedCode]` me provenance TË LEXUESHME (tool/version
+/// të dekoduar nga blob-i) kalon në VALIDIMIN e ledger-it EKZAKT të
+/// provenance-ës; `[CompilerGenerated]` i vetëm = ZERO trust — dy mekanizma TË
+/// NDARË, kurrë një autorizim i përbashkët. Zero pretendim "universal" ose
 /// "bypass-free". ENG-006 mbetet OPEN deri në review + Human Gate.
 /// </summary>
 public sealed class DynamicRuntimeAccessBoundaryTests
@@ -38,9 +39,9 @@ public sealed class DynamicRuntimeAccessBoundaryTests
         scanned = 0;
         foreach (var entry in generation.Projects)
         {
-            var path = PlatformProjectCatalog.VerifiedFrozenTargetPath(entry, generation);
-            findings.AddRange(DynamicRuntimeAccessScanner.Scan(path));
-            _ = PlatformProjectCatalog.VerifiedFrozenTargetPath(entry, generation);
+            // C2: kufiri I VETËM — verifikim para+pas, e njëjta gjeneratë.
+            findings.AddRange(PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
+                entry, generation, path => DynamicRuntimeAccessScanner.Scan(path)));
             scanned++;
         }
 
@@ -53,9 +54,8 @@ public sealed class DynamicRuntimeAccessBoundaryTests
         var findings = new List<DynamicRuntimeAccessScanner.Finding>();
         foreach (var entry in generation.Projects.Where(PlatformProjectCatalog.IsStoreOwner))
         {
-            var path = PlatformProjectCatalog.VerifiedFrozenTargetPath(entry, generation);
-            findings.AddRange(DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(path));
-            _ = PlatformProjectCatalog.VerifiedFrozenTargetPath(entry, generation);
+            findings.AddRange(PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
+                entry, generation, path => DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(path)));
         }
 
         return findings;
@@ -687,6 +687,70 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     }
 
     // ═══════ C1/C — konsumatorët ENG-006 përdorin fingerprint-in e ngrirë ═══════
+
+    // ═══════ C2 (Blocker B) — degët fail-closed të metadata-ve të palexueshme ═══════
+
+    /// <summary>
+    /// Degët e C1 `unreadable-generated-code-attribute` dhe
+    /// `unreadable-field-signature` (plus `unreadable-method-signature`,
+    /// baseline më i vjetër i së njëjtës familje) tani kanë teste REALE mbi një
+    /// PE SINTETIKE me blobs të keqformuar — fixture-i jo-PE mbulon vetëm
+    /// `unreadable-assembly` dhe NUK citohet si evidencë për këto degë.
+    /// </summary>
+    [Fact]
+    public void Bloget_e_keqformuara_te_metadata_ve_godasin_deget_fail_closed()
+    {
+        var malformedPath = SyntheticMetadataPe.Write(malformed: true);
+        try
+        {
+            var scanFindings = DynamicRuntimeAccessScanner.Scan(malformedPath);
+            var attribute = Assert.Single(scanFindings, finding =>
+                finding.Kind == "unreadable-generated-code-attribute");
+            Assert.Equal(SyntheticMetadataPe.HostTypeFullName, attribute.DeclaringType);
+            Assert.True(DynamicRuntimeAccessScanner.IsNeverAllowable(attribute));
+
+            var surfaceFindings = DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(malformedPath);
+            var field = Assert.Single(surfaceFindings, finding =>
+                finding.Kind == "unreadable-field-signature");
+            Assert.Equal(SyntheticMetadataPe.HostTypeFullName, field.DeclaringType);
+            Assert.Equal("ProbeField", field.Member);
+            Assert.True(DynamicRuntimeAccessScanner.IsNeverAllowable(field));
+
+            var method = Assert.Single(surfaceFindings, finding =>
+                finding.Kind == "unreadable-method-signature");
+            Assert.Equal(SyntheticMetadataPe.HostTypeFullName, method.DeclaringType);
+            Assert.Equal("ProbeMethod", method.Member);
+            Assert.True(DynamicRuntimeAccessScanner.IsNeverAllowable(method));
+        }
+        finally
+        {
+            File.Delete(malformedPath);
+        }
+    }
+
+    /// <summary>Metadata VALIDE ekuivalente → GREEN, zero false-positive.</summary>
+    [Fact]
+    public void Metadata_valide_ekuivalente_nuk_prodhon_asnje_gjetje_unreadable()
+    {
+        var validPath = SyntheticMetadataPe.Write(malformed: false);
+        try
+        {
+            var scanFindings = DynamicRuntimeAccessScanner.Scan(validPath);
+            Assert.DoesNotContain(scanFindings, finding =>
+                finding.Kind.StartsWith("unreadable-", StringComparison.Ordinal));
+
+            var surfaceFindings = DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(validPath);
+            Assert.DoesNotContain(surfaceFindings, finding =>
+                finding.Kind.StartsWith("unreadable-", StringComparison.Ordinal));
+
+            // Blob-i i vlefshëm dekodohet realisht (tool/version i lexuar).
+            Assert.DoesNotContain(scanFindings, DynamicRuntimeAccessScanner.IsNeverAllowable);
+        }
+        finally
+        {
+            File.Delete(validPath);
+        }
+    }
 
     /// <summary>
     /// `ScanProduction` dhe owner-scan konsumojnë REALISHT

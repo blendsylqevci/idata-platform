@@ -1,5 +1,8 @@
 using System.CodeDom.Compiler;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
+using System.Reflection.PortableExecutable;
 using System.Runtime.CompilerServices;
 using Idata.Platform.Persistence;
 using Microsoft.Extensions.DependencyInjection;
@@ -231,6 +234,103 @@ internal static class GeneratedParentFixture
     internal static class UnmarkedChild
     {
         internal static object? Probe() => Type.GetType("System.String");
+    }
+}
+
+/// <summary>
+/// C2 (Blocker B) — PE SINTETIKE e emetuar me `MetadataBuilder`/Ecma335, që
+/// arrin EKZAKTËSISHT degët fail-closed të metadata-ve të palexueshme, të cilat
+/// s'prodhohen dot nga C# valid: (a) blob i keqformuar i `[GeneratedCode]`,
+/// (b) sinjaturë fushe e keqformuar, (c) sinjaturë metode e keqformuar.
+/// Varianti VALID (i njëjti skelet me blobs të vlefshëm) provon zero
+/// false-positive. Zero prekje e ndonjë output-i real.
+/// </summary>
+internal static class SyntheticMetadataPe
+{
+    internal const string HostTypeFullName = "Synthetic.MalformedHost";
+
+    /// <summary>Emeton PE-në (në OS-temp, ose në directory-n e dhënë) dhe kthen path-in.</summary>
+    internal static string Write(bool malformed, string? directory = null)
+    {
+        var metadata = new MetadataBuilder();
+        metadata.AddModule(0, metadata.GetOrAddString("SynMalformed.dll"),
+            metadata.GetOrAddGuid(Guid.NewGuid()), default, default);
+        metadata.AddAssembly(metadata.GetOrAddString("SynMalformed"), new Version(1, 0, 0, 0),
+            default, default, 0, AssemblyHashAlgorithm.None);
+
+        var corlib = metadata.AddAssemblyReference(metadata.GetOrAddString("System.Runtime"),
+            new Version(10, 0, 0, 0), default, default, 0, default);
+        var objectRef = metadata.AddTypeReference(
+            corlib, metadata.GetOrAddString("System"), metadata.GetOrAddString("Object"));
+        var attributeRef = metadata.AddTypeReference(
+            corlib, metadata.GetOrAddString("System.CodeDom.Compiler"),
+            metadata.GetOrAddString("GeneratedCodeAttribute"));
+
+        // .ctor(string, string) i atributit — sinjaturë E VLEFSHME metode.
+        var constructorSignature = new BlobBuilder();
+        new BlobEncoder(constructorSignature).MethodSignature(isInstanceMethod: true)
+            .Parameters(2,
+                returnType => returnType.Void(),
+                parameters =>
+                {
+                    parameters.AddParameter().Type().String();
+                    parameters.AddParameter().Type().String();
+                });
+        var attributeConstructor = metadata.AddMemberReference(
+            attributeRef, metadata.GetOrAddString(".ctor"),
+            metadata.GetOrAddBlob(constructorSignature));
+
+        // Fusha: sinjaturë e vlefshme (string) OSE e cunguar (vetëm prolog-u FIELD).
+        var validFieldSignature = new BlobBuilder();
+        new BlobEncoder(validFieldSignature).Field().Type().String();
+        var fieldDefinition = metadata.AddFieldDefinition(
+            FieldAttributes.Public | FieldAttributes.Static,
+            metadata.GetOrAddString("ProbeField"),
+            malformed ? metadata.GetOrAddBlob(new byte[] { 0x06 })
+                      : metadata.GetOrAddBlob(validFieldSignature));
+
+        // Metoda: sinjaturë e vlefshme `static void()` OSE bosh e pavlefshme.
+        var validMethodSignature = new BlobBuilder();
+        new BlobEncoder(validMethodSignature).MethodSignature()
+            .Parameters(0, returnType => returnType.Void(), parameters => { });
+        var methodDefinition = metadata.AddMethodDefinition(
+            MethodAttributes.Public | MethodAttributes.Static | MethodAttributes.Abstract,
+            MethodImplAttributes.IL,
+            metadata.GetOrAddString("ProbeMethod"),
+            malformed ? metadata.GetOrAddBlob(new byte[] { 0x00 })
+                      : metadata.GetOrAddBlob(validMethodSignature),
+            bodyOffset: -1,
+            parameterList: MetadataTokens.ParameterHandle(1));
+
+        var hostType = metadata.AddTypeDefinition(
+            TypeAttributes.Public | TypeAttributes.Class | TypeAttributes.Abstract | TypeAttributes.Sealed,
+            metadata.GetOrAddString("Synthetic"), metadata.GetOrAddString("MalformedHost"),
+            objectRef, fieldDefinition, methodDefinition);
+
+        // [GeneratedCode(...)] mbi tipin: blob i VLEFSHËM (prolog + 2 SerString +
+        // zero named) OSE një bajt i vetëm i pavlefshëm.
+        var validAttributeBlob = new BlobBuilder();
+        validAttributeBlob.WriteUInt16(0x0001);
+        validAttributeBlob.WriteSerializedString("SynTool");
+        validAttributeBlob.WriteSerializedString("1.0");
+        validAttributeBlob.WriteUInt16(0x0000);
+        metadata.AddCustomAttribute(hostType, attributeConstructor,
+            malformed ? metadata.GetOrAddBlob(new byte[] { 0xFF })
+                      : metadata.GetOrAddBlob(validAttributeBlob));
+
+        var peBuilder = new ManagedPEBuilder(
+            PEHeaderBuilder.CreateLibraryHeader(),
+            new MetadataRootBuilder(metadata),
+            ilStream: new BlobBuilder(),
+            flags: CorFlags.ILOnly);
+        var peBlob = new BlobBuilder();
+        peBuilder.Serialize(peBlob);
+
+        var path = Path.Combine(
+            directory ?? Path.GetTempPath(),
+            $"eng006-syn-{(malformed ? "malformed" : "valid")}-{Guid.NewGuid():N}.dll");
+        File.WriteAllBytes(path, peBlob.ToArray());
+        return path;
     }
 }
 

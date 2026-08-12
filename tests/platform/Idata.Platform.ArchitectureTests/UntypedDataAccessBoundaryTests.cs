@@ -25,10 +25,10 @@ public sealed class UntypedDataAccessBoundaryTests
     private static string SelfAssemblyPath()
         => Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll");
 
-    private static string AbsoluteTargetPath(PlatformProjectCatalog.ProjectEntry entry)
-        => Path.Combine(
-            PlatformProjectCatalog.RepoRoot(),
-            entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar));
+    /// <summary>C2: çdo konsumim production kalon nga kufiri i ngrirë (para+pas).</summary>
+    private static IReadOnlyList<UntypedDataAccessScanner.Finding> ScanVerified(
+        PlatformProjectCatalog.ProjectEntry entry)
+        => PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, path => UntypedDataAccessScanner.Scan(path));
 
     private static IReadOnlyList<UntypedDataAccessScanner.Finding> ScanProduction(out int scanned)
     {
@@ -37,7 +37,7 @@ public sealed class UntypedDataAccessBoundaryTests
         scanned = 0;
         foreach (var entry in catalog)
         {
-            findings.AddRange(UntypedDataAccessScanner.Scan(AbsoluteTargetPath(entry)));
+            findings.AddRange(ScanVerified(entry));
             scanned++;
         }
 
@@ -176,7 +176,7 @@ public sealed class UntypedDataAccessBoundaryTests
         var visited = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entry in catalog)
         {
-            var findings = UntypedDataAccessScanner.Scan(AbsoluteTargetPath(entry));
+            var findings = ScanVerified(entry);
             Assert.DoesNotContain(findings, finding => finding.Kind == "unreadable-assembly");
             Assert.True(visited.Add(entry.CanonicalPath), entry.CanonicalPath);
         }
@@ -201,7 +201,8 @@ public sealed class UntypedDataAccessBoundaryTests
 
         foreach (var owner in owners)
         {
-            var findings = UntypedDataAccessScanner.ScanOwnerPublicSurface(AbsoluteTargetPath(owner));
+            var findings = PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
+                owner, UntypedDataAccessScanner.ScanOwnerPublicSurface);
             Assert.True(findings.Count == 0,
                 $"{owner.CanonicalPath}: {string.Join(" · ", findings.Select(f => $"{f.Kind}:{f.DeclaringType}.{f.Member}({f.Detail})"))}");
         }
@@ -534,8 +535,10 @@ public sealed class UntypedDataAccessBoundaryTests
     {
         var assemblyPath = target == "self"
             ? SelfAssemblyPath()
-            : AbsoluteTargetPath(PlatformProjectCatalog.DiscoverProduction().Single(entry =>
-                entry.AssemblyName == "Idata.Platform.Modules.PlatformStatus.Infrastructure"));
+            : PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
+                PlatformProjectCatalog.DiscoverProduction().Single(entry =>
+                    entry.AssemblyName == "Idata.Platform.Modules.PlatformStatus.Infrastructure"),
+                verifiedPath => verifiedPath);
 
         bool Detected(UntypedDataAccessScanner.SinkTaxonomy? taxonomy)
             => UntypedDataAccessScanner.Scan(assemblyPath, taxonomy).Any(finding =>
@@ -761,8 +764,10 @@ public sealed class UntypedDataAccessBoundaryTests
         Assert.True(DetectedIn(SelfAssemblyPath(), null));
         Assert.False(DetectedIn(SelfAssemblyPath(), empty));
 
-        var persistence = AbsoluteTargetPath(PlatformProjectCatalog.DiscoverProduction()
-            .Single(entry => entry.AssemblyName == "Idata.Platform.Persistence"));
+        var persistence = PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
+            PlatformProjectCatalog.DiscoverProduction()
+                .Single(entry => entry.AssemblyName == "Idata.Platform.Persistence"),
+            verifiedPath => verifiedPath);
         Assert.True(DetectedIn(persistence, null));
         Assert.False(DetectedIn(persistence, empty));
     }

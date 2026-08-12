@@ -159,7 +159,7 @@ public sealed class DependencyDirectionTests
                     continue;
                 }
 
-                queue.Enqueue(Assembly.Load(name));
+                queue.Enqueue(PlatformProjectCatalog.LoadReferencedAssembly(new AssemblyName(name)));
             }
         }
 
@@ -410,7 +410,7 @@ public sealed class DependencyDirectionTests
         IReadOnlyDictionary<string, string> ApprovedPackages,
         PlatformProjectCatalog.PackageAssetAuthority PackageAssets,
         IReadOnlySet<string> FrameworkAssetSet,
-        IReadOnlyDictionary<string, (string AbsoluteTargetPath, Guid Mvid)> PlatformOutputs);
+        IReadOnlyDictionary<string, (string AbsoluteTargetPath, Guid Mvid, Func<bool> VerifyFrozen)> PlatformOutputs);
 
     /// <summary>
     /// §2/§3-R7 — klasifikimi PER-OWNER nga ANËTARËSIA në authority-set-e
@@ -454,24 +454,16 @@ public sealed class DependencyDirectionTests
                 return null;
             }
 
-            // Output-i autoritativ i ATIJ projekti — path EKZAKT + MVID.
-            // Output-i autoritativ i ATIJ projekti — path EKZAKT + MVID.
+            // Output-i autoritativ i ATIJ projekti — path EKZAKT + identitet i
+            // NGRIRË. Correction C2: klasifikimi NUK rilexon MVID-in aktual —
+            // verifikuesi i autoritetit (kufiri i ngrirë për output-et reale)
+            // provon që file-i në atë path përputhet me gjeneratën; devijim ose
+            // palexueshmëri = i paklasifikueshëm (fail-closed).
             if (!authority.PlatformOutputs.TryGetValue(entry.AssemblyName, out var output)
-                || !string.Equals(candidatePath, output.AbsoluteTargetPath, StringComparison.Ordinal))
+                || !string.Equals(candidatePath, output.AbsoluteTargetPath, StringComparison.Ordinal)
+                || !output.VerifyFrozen())
             {
                 return null;
-            }
-
-            try
-            {
-                if (PlatformProjectCatalog.ReadMvid(candidatePath) != output.Mvid)
-                {
-                    return null;
-                }
-            }
-            catch (Exception)
-            {
-                return null; // i palexueshëm = i paklasifikueshëm (fail-closed)
             }
 
             return "platform";
@@ -574,19 +566,45 @@ public sealed class DependencyDirectionTests
             PlatformProjectCatalog.EvaluateFrameworkAssetAuthority(repoRoot, ownerCanonicalPath),
             PlatformOutputAuthority(repoRoot, catalogByPath));
 
-    /// <summary>§2-R7: output-et autoritative të projekteve platformë — path EKZAKT + MVID.</summary>
-    private static IReadOnlyDictionary<string, (string AbsoluteTargetPath, Guid Mvid)> PlatformOutputAuthority(
-        string repoRoot, IReadOnlyDictionary<string, PlatformProjectCatalog.ProjectEntry> catalogByPath)
+    /// <summary>
+    /// §2-R7 + C2: output-et autoritative të projekteve platformë — path i marrë
+    /// NGA KUFIRI i ngrirë (verifikim para+pas), MVID nga GJENERATA (kurrë
+    /// rilexim i çastit), dhe një verifikues i ngrirë që klasifikimi e thërret
+    /// në çdo vendim.
+    /// </summary>
+    private static IReadOnlyDictionary<string, (string AbsoluteTargetPath, Guid Mvid, Func<bool> VerifyFrozen)>
+        PlatformOutputAuthority(
+            string repoRoot, IReadOnlyDictionary<string, PlatformProjectCatalog.ProjectEntry> catalogByPath)
     {
-        var outputs = new Dictionary<string, (string, Guid)>(StringComparer.Ordinal);
+        var generation = PlatformProjectCatalog.CurrentGeneration();
+        var outputs = new Dictionary<string, (string, Guid, Func<bool>)>(StringComparer.Ordinal);
         foreach (var entry in catalogByPath.Values)
         {
-            var absolute = Path.GetFullPath(Path.Combine(
-                repoRoot, entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar)));
-            outputs[entry.AssemblyName] = (absolute, PlatformProjectCatalog.ReadMvid(absolute));
+            var frozenEntry = entry;
+            var absolute = Path.GetFullPath(PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
+                frozenEntry, generation, verifiedPath => verifiedPath));
+            outputs[entry.AssemblyName] = (
+                absolute,
+                generation.MvidByCanonicalPath[entry.CanonicalPath],
+                () => FrozenTargetStillValid(frozenEntry, generation));
         }
 
         return outputs;
+    }
+
+    /// <summary>Verifikuesi i ngrirë i një output-i real — konsumon kufirin e katalogut.</summary>
+    private static bool FrozenTargetStillValid(
+        PlatformProjectCatalog.ProjectEntry entry, PlatformProjectCatalog.CatalogGeneration generation)
+    {
+        try
+        {
+            _ = PlatformProjectCatalog.VerifiedFrozenTargetPath(entry, generation);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false; // drift/palexueshmëri = jo i vlefshëm (fail-closed)
+        }
     }
 
     /// <summary>Paketat e APROVUARA të NJË owner-i (nga lockfile-i i tij që kalon klasifikimin total §2).</summary>
@@ -716,7 +734,7 @@ public sealed class DependencyDirectionTests
 
         try
         {
-            var loaded = Assembly.Load(new AssemblyName(referenceName));
+            var loaded = PlatformProjectCatalog.LoadReferencedAssembly(new AssemblyName(referenceName));
             if (!string.IsNullOrEmpty(loaded.Location)
                 && Path.GetFullPath(loaded.Location)
                     .StartsWith(SharedFrameworkRoot + Path.DirectorySeparatorChar, StringComparison.Ordinal))
@@ -925,7 +943,7 @@ public sealed class DependencyDirectionTests
         IReadOnlyDictionary<string, string>? approvedPackages = null,
         PlatformProjectCatalog.PackageAssetAuthority? packageAssets = null,
         IReadOnlySet<string>? frameworkAssets = null,
-        IReadOnlyDictionary<string, (string AbsoluteTargetPath, Guid Mvid)>? platformOutputs = null)
+        IReadOnlyDictionary<string, (string AbsoluteTargetPath, Guid Mvid, Func<bool> VerifyFrozen)>? platformOutputs = null)
         => new(
             catalogByPath,
             closure ?? new HashSet<string>(StringComparer.Ordinal),
@@ -934,7 +952,7 @@ public sealed class DependencyDirectionTests
                 new Dictionary<(string, string), IReadOnlySet<string>>(),
                 new Dictionary<string, (string, string)>(StringComparer.Ordinal)),
             frameworkAssets ?? new HashSet<string>(StringComparer.Ordinal),
-            platformOutputs ?? new Dictionary<string, (string, Guid)>(StringComparer.Ordinal));
+            platformOutputs ?? new Dictionary<string, (string, Guid, Func<bool>)>(StringComparer.Ordinal));
 
     [Fact]
     public void R7_RED_platform_decoy_me_metadata_te_sakte_por_path_tjeter()
@@ -945,11 +963,13 @@ public sealed class DependencyDirectionTests
         const string persistencePath = "src/platform/Idata.Platform.Persistence/Idata.Platform.Persistence.csproj";
         var closure = new HashSet<string>(StringComparer.Ordinal) { persistencePath };
         var entry = catalog.Single(candidate => candidate.CanonicalPath == persistencePath);
-        var realOutput = Path.GetFullPath(Path.Combine(
-            repoRoot, entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar)));
-        var outputs = new Dictionary<string, (string, Guid)>(StringComparer.Ordinal)
+        var generation = PlatformProjectCatalog.CurrentGeneration();
+        var realOutput = Path.GetFullPath(PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
+            entry, generation, verifiedPath => verifiedPath));
+        var outputs = new Dictionary<string, (string, Guid, Func<bool>)>(StringComparer.Ordinal)
         {
-            [entry.AssemblyName] = (realOutput, PlatformProjectCatalog.ReadMvid(realOutput)),
+            [entry.AssemblyName] = (realOutput, generation.MvidByCanonicalPath[entry.CanonicalPath],
+                () => FrozenTargetStillValid(entry, generation)),
         };
         var authority = SyntheticAuthority(catalogByPath, closure, platformOutputs: outputs);
 

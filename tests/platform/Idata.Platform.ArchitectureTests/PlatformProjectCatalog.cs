@@ -267,6 +267,73 @@ internal static class PlatformProjectCatalog
         return absolute;
     }
 
+    /// <summary>
+    /// Correction C2 (Blocker A) — KUFIRI I VETËM i konsumimit të një production
+    /// target-i. Semantika e detyruar:
+    ///  (1) kap NJË `CatalogGeneration` të pandryshueshme;
+    ///  (2) verifikon entry/path/SHA/MVID/mtime PARA konsumimit;
+    ///  (3) ekzekuton konsumatorin mbi path-in e verifikuar;
+    ///  (4) riverifikon TË NJËJTIN entry kundër SË NJËJTËS gjeneratë PAS
+    ///      konsumimit — ndryshimi GJATË konsumimit nuk kalon pa u kapur;
+    ///  (5) rezultati kthehet VETËM pas post-check-ut;
+    ///  (6) gabimet e konsumatorit NUK fshihen dhe NUK zëvendësohen.
+    /// Çdo konsumator i production target-eve në këtë suitë (LoadVerified,
+    /// skanerët ENG-006/ENG-007/role/IL, autoritetet e output-eve) DETYROHET
+    /// të kalojë këtej — e imponuar nga completeness guard i derivuar nga IL.
+    /// </summary>
+    internal static T ConsumeVerifiedFrozenTarget<T>(ProjectEntry entry, Func<string, T> consumer)
+        => ConsumeVerifiedFrozenTarget(entry, CurrentGeneration(), consumer);
+
+    internal static T ConsumeVerifiedFrozenTarget<T>(
+        ProjectEntry entry, CatalogGeneration generation, Func<string, T> consumer)
+    {
+        ArgumentNullException.ThrowIfNull(consumer);
+        var verifiedPath = VerifiedFrozenTargetPath(entry, generation);
+        var result = consumer(verifiedPath);
+        _ = VerifiedFrozenTargetPath(entry, generation);
+        return result;
+    }
+
+    /// <summary>
+    /// Correction C2 — ngarkim i një assembly-je TË REFERUAR gjatë ecjeve të
+    /// grafit: nëse emri i përket katalogut production, kalon DETYRIMISHT nga
+    /// <see cref="LoadVerified"/> (pra nga kufiri i ngrirë); përndryshe është
+    /// assembly framework-u/pakete dhe ngarkohet normalisht. Kështu asnjë
+    /// ecje grafi nuk e ngarkon një target production jashtë kufirit.
+    /// </summary>
+    internal static Assembly LoadReferencedAssembly(AssemblyName assemblyName)
+    {
+        var simpleName = assemblyName.Name ?? string.Empty;
+        var entry = CurrentGeneration().Projects
+            .FirstOrDefault(candidate => candidate.AssemblyName == simpleName);
+        return entry is not null ? LoadVerified(entry) : Assembly.Load(assemblyName);
+    }
+
+    /// <summary>
+    /// C2 — gjeneratë SINTETIKE minimale mbi një artefakt të dhënë (nën rrënjën
+    /// e repo-s), për testet e kufirit të konsumit: fingerprint-et llogariten
+    /// KËTU (primitivet e leximit mbeten vetëm në katalog), hartat e tjera janë
+    /// bosh. Zero prekje e katalogut real.
+    /// </summary>
+    internal static CatalogGeneration SyntheticGenerationFor(ProjectEntry entry)
+    {
+        var fingerprints = FingerprintTargets(RepoRoot(), [entry]);
+        var (sha, mvid, writeTime) = fingerprints[entry.CanonicalPath];
+        return new CatalogGeneration(
+            Guid.NewGuid(),
+            [entry],
+            new Dictionary<string, Guid> { [entry.CanonicalPath] = mvid }
+                .ToFrozenDictionary(StringComparer.Ordinal),
+            new Dictionary<string, string> { [entry.CanonicalPath] = sha }
+                .ToFrozenDictionary(StringComparer.Ordinal),
+            new Dictionary<string, DateTime> { [entry.CanonicalPath] = writeTime }
+                .ToFrozenDictionary(StringComparer.Ordinal),
+            new Dictionary<string, ImmutableArray<string>>().ToFrozenDictionary(StringComparer.Ordinal),
+            new Dictionary<string, ImmutableArray<ResolvedReference>>().ToFrozenDictionary(StringComparer.Ordinal),
+            new Dictionary<string, PackageAssetAuthority>().ToFrozenDictionary(StringComparer.Ordinal),
+            new Dictionary<string, FrozenSet<string>>().ToFrozenDictionary(StringComparer.Ordinal));
+    }
+
     /// <summary>A i përket ky root pemës REALE të repo-s (pra gjeneratës së ngrirë)?</summary>
     private static bool IsRealRepoRoot(string repoRoot)
         => Path.GetFullPath(repoRoot) == Path.GetFullPath(RepoRoot());
@@ -374,22 +441,22 @@ internal static class PlatformProjectCatalog
         var repoRoot = RepoRoot();
         VerifyTargetAssembly(repoRoot, entry, approvedOutputRootRelative: "src/platform");
 
-        // Correction C1 (Blocker C): e njëjta kontratë e ngrirë si çdo
-        // konsumator tjetër — SHA-256 + MVID + mtime kundrejt gjeneratës,
-        // përmes API-së SË VETME autoritative. Kështu identiteti mbetet po aq
-        // i fortë (kopje stale/decoy kapet njësoj), POR dy gjenerata të
-        // ndryshme të output-it nuk përzihen dot brenda të njëjtit run.
+        // Correction C2 (Blocker A): ngarkimi kalon NGA KUFIRI I VETËM —
+        // verifikim i të njëjtës gjeneratë PARA ngarkimit DHE PAS tij: një
+        // drift post-read e bën të pamundur kthimin e assembly-t (fail-closed
+        // brenda kufirit, jo vetëm para tij).
         var generation = CurrentGeneration();
-        _ = VerifiedFrozenTargetPath(entry, generation);
-
-        var loaded = Assembly.Load(new AssemblyName(entry.AssemblyName));
-        if (loaded.ManifestModule.ModuleVersionId != generation.MvidByCanonicalPath[entry.CanonicalPath])
+        return ConsumeVerifiedFrozenTarget(entry, generation, _ =>
         {
-            throw new InvalidOperationException(
-                $"Assembly i ngarkuar ≠ TargetPath (MVID mismatch — kopje stale/decoy?): {entry.AssemblyName}");
-        }
+            var loaded = Assembly.Load(new AssemblyName(entry.AssemblyName));
+            if (loaded.ManifestModule.ModuleVersionId != generation.MvidByCanonicalPath[entry.CanonicalPath])
+            {
+                throw new InvalidOperationException(
+                    $"Assembly i ngarkuar ≠ TargetPath (MVID mismatch — kopje stale/decoy?): {entry.AssemblyName}");
+            }
 
-        return loaded;
+            return loaded;
+        });
     }
 
     private static ProjectEntry Evaluate(string canonicalRepoRoot, string projectPath)

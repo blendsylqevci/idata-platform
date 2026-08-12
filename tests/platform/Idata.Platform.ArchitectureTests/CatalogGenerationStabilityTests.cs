@@ -368,16 +368,93 @@ public sealed class CatalogGenerationStabilityTests
     }
 
     /// <summary>
-    /// `LoadVerified` dhe konsumatorët ENG-006 përdorin TË NJËJTËN kontratë:
-    /// provë MEKANIKE mbi IL — metodat e tyre thërrasin
-    /// `VerifiedFrozenTargetPath` (token MethodDef i të njëjtit assembly).
+    /// C2 (Blocker A): ÇDO konsumator i production target-eve thërret KUFIRIN E
+    /// VETËM `ConsumeVerifiedFrozenTarget` — provë MEKANIKE mbi IL (token-a
+    /// MethodDef të të njëjtit assembly). Vetë kufiri provohet veçmas se ka
+    /// rendin verify-before → consumer → verify-after.
     /// </summary>
     [Theory]
     [InlineData("Idata.Platform.ArchitectureTests.PlatformProjectCatalog", "LoadVerified")]
     [InlineData("Idata.Platform.ArchitectureTests.DynamicRuntimeAccessBoundaryTests", "ScanProduction")]
     [InlineData("Idata.Platform.ArchitectureTests.DynamicRuntimeAccessBoundaryTests", "ScanOwnerSurfaces")]
+    [InlineData("Idata.Platform.ArchitectureTests.UntypedDataAccessBoundaryTests", "ScanVerified")]
+    [InlineData("Idata.Platform.ArchitectureTests.IdentityRoleSurfaceTests", "Zero_role_referenca_ne_metadata_te_asnje_assembly_production")]
+    [InlineData("Idata.Platform.ArchitectureTests.DependencyDirectionTests", "PlatformOutputAuthority")]
     public void Konsumatoret_e_production_target_it_thirrin_kontraten_e_ngrire(string typeName, string methodName)
-        => Assert.Contains("VerifiedFrozenTargetPath", CalledMethodDefinitionNames(typeName, methodName));
+        => Assert.Contains("ConsumeVerifiedFrozenTarget", CalledMethodDefinitionNames(typeName, methodName));
+
+    /// <summary>
+    /// C2 — RENDI EKZAKT i kufirit, i provuar mbi IL-in e vetë
+    /// `ConsumeVerifiedFrozenTarget&lt;T&gt;`: dy thirrje REALE të verifikuesit
+    /// primitiv dhe SAKTËSISHT një `Invoke` i konsumatorit MES tyre —
+    /// jo thjesht prani emrash në një set.
+    /// </summary>
+    [Fact]
+    public void Kufiri_ka_rendin_ekzakt_verify_consumer_verify()
+    {
+        var sequence = CalledSequenceOf(
+            "Idata.Platform.ArchitectureTests.PlatformProjectCatalog", "ConsumeVerifiedFrozenTarget",
+            name => name is "VerifiedFrozenTargetPath" or "Invoke")
+            .ToArray();
+
+        Assert.Equal(["VerifiedFrozenTargetPath", "Invoke", "VerifiedFrozenTargetPath"], sequence);
+    }
+
+    /// <summary>
+    /// Sekuenca E RENDITUR e thirrjeve të filtruara brenda IL-it të një metode
+    /// (mbi TË GJITHA overload-et me atë emër që kanë trup).
+    /// </summary>
+    private static IEnumerable<string> CalledSequenceOf(
+        string declaringTypeFullName, string methodName, Func<string, bool> filter)
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll");
+        using var stream = File.OpenRead(path);
+        using var portableExecutable = new PEReader(stream);
+        var reader = portableExecutable.GetMetadataReader();
+        var sequence = new List<string>();
+        foreach (var methodHandle in reader.MethodDefinitions)
+        {
+            var method = reader.GetMethodDefinition(methodHandle);
+            if (method.RelativeVirtualAddress == 0
+                || reader.GetString(method.Name) != methodName
+                || UntypedDataAccessScanner.FullNameOfTypeDefinition(reader, method.GetDeclaringType())
+                    != declaringTypeFullName)
+            {
+                continue;
+            }
+
+            var il = portableExecutable.GetMethodBody(method.RelativeVirtualAddress).GetILBytes()!;
+            foreach (var instruction in IlOperandTable.Walk(il, out _))
+            {
+                if (instruction.MetadataToken == 0)
+                {
+                    continue;
+                }
+
+                var handle = System.Reflection.Metadata.Ecma335.MetadataTokens.EntityHandle(instruction.MetadataToken);
+                if (handle.Kind == HandleKind.MethodSpecification)
+                {
+                    handle = reader.GetMethodSpecification((MethodSpecificationHandle)handle).Method;
+                }
+
+                string? name = handle.Kind switch
+                {
+                    HandleKind.MethodDefinition => reader.GetString(
+                        reader.GetMethodDefinition((MethodDefinitionHandle)handle).Name),
+                    HandleKind.MemberReference => reader.GetString(
+                        reader.GetMemberReference((MemberReferenceHandle)handle).Name),
+                    _ => null,
+                };
+                if (name is not null && filter(name))
+                {
+                    sequence.Add(name);
+                }
+            }
+        }
+
+        Assert.NotEmpty(sequence);
+        return sequence;
+    }
 
     /// <summary>Emrat e MethodDef-eve të thirrur nga një metodë e caktuar (IL walk).</summary>
     private static IReadOnlyCollection<string> CalledMethodDefinitionNames(
@@ -411,6 +488,13 @@ public sealed class CatalogGenerationStabilityTests
                 }
 
                 var handle = System.Reflection.Metadata.Ecma335.MetadataTokens.EntityHandle(instruction.MetadataToken);
+                if (handle.Kind == HandleKind.MethodSpecification)
+                {
+                    // Thirrjet ndaj metodave GJENERIKE (p.sh. kufiri
+                    // `ConsumeVerifiedFrozenTarget<T>`) enkodohen si MethodSpec.
+                    handle = reader.GetMethodSpecification((MethodSpecificationHandle)handle).Method;
+                }
+
                 if (handle.Kind == HandleKind.MethodDefinition)
                 {
                     names.Add(reader.GetString(
@@ -440,6 +524,142 @@ public sealed class CatalogGenerationStabilityTests
         {
             Assert.DoesNotContain(forbidden, called);
         }
+    }
+
+    /// <summary>
+    /// C2 — prova BEHAVIORALE e post-check-ut mbi një artefakt SINTETIK nën
+    /// rrënjën e repo-s (bin e testeve; zero prekje e output-eve reale):
+    /// (a) konsumator që e NDRYSHON artefaktin gjatë konsumimit → kufiri hedh
+    /// `catalog-generation-drift` PAS konsumimit dhe rezultati nuk kthehet;
+    /// (b) gjeneratë e helmuar → konsumatori NUK thirret fare (pre-check).
+    /// </summary>
+    [Fact]
+    public void Kufiri_kap_ndryshimin_gjate_konsumimit_dhe_bllokon_para_tij()
+    {
+        var syntheticPath = SyntheticMetadataPe.Write(malformed: false, AppContext.BaseDirectory);
+        try
+        {
+            var canonical = Path.GetRelativePath(PlatformProjectCatalog.RepoRoot(), syntheticPath)
+                .Replace(Path.DirectorySeparatorChar, '/');
+            var entry = new PlatformProjectCatalog.ProjectEntry(
+                "tests/platform/Synthetic.Probe/Synthetic.Probe.csproj",
+                "Synthetic.Probe", "SynMalformed", canonical);
+            var generation = PlatformProjectCatalog.SyntheticGenerationFor(entry);
+
+            // GREEN: konsumim i pandryshuar kthen rezultatin pas post-check-ut.
+            Assert.Equal(42, PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, generation, _ => 42));
+
+            // (a) mutacion GJATË konsumimit → drift PAS konsumimit, zero kthim.
+            var consumerRan = false;
+            var exception = Assert.Throws<InvalidOperationException>(() =>
+                PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, generation, path =>
+                {
+                    consumerRan = true;
+                    File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(5));
+                    return 0;
+                }));
+            Assert.True(consumerRan);
+            Assert.Contains("catalog-generation-drift", exception.Message, StringComparison.Ordinal);
+
+            // (b) gjeneratë e helmuar → pre-check ndal PARA konsumatorit.
+            var freshGeneration = PlatformProjectCatalog.SyntheticGenerationFor(entry);
+            var poisoned = PoisonComponent(freshGeneration, entry.CanonicalPath, "mtime");
+            var invoked = false;
+            Assert.Throws<InvalidOperationException>(() =>
+                PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, poisoned, _ =>
+                {
+                    invoked = true;
+                    return 0;
+                }));
+            Assert.False(invoked);
+        }
+        finally
+        {
+            File.Delete(syntheticPath);
+        }
+    }
+
+    /// <summary>
+    /// C2 — guard i DERIVUAR i plotësisë (jo listë e hardcoded konsumatorësh):
+    /// primitivet e konsumit të production target-eve lejohen VETËM te kufiri
+    /// qendror/verifikuesi primitiv. Ecet mbi IL-in e GJITHË assembly-t të
+    /// testeve; çdo metodë tjetër që (a) thërret `ReadMvid`, (b) thërret
+    /// `Assembly.Load`, ose (c) ndërton path targeti
+    /// (`get_CanonicalTargetPath` + `Path.Combine`) = shkelje → RED.
+    /// Një konsumator i RI direkt në të ardhmen kapet automatikisht.
+    /// (`DynamicRuntimeAccessFixtures` përjashtohet VETËM për `Assembly.Load`:
+    /// është fixture RED e vetë skanerit ENG-006, jo konsumator targeti.)
+    /// </summary>
+    [Fact]
+    public void Vetem_kufiri_qendror_prek_primitivet_e_konsumit()
+    {
+        const string catalogType = "Idata.Platform.ArchitectureTests.PlatformProjectCatalog";
+        var allowedAssemblyLoad = new[] { catalogType, "Idata.Platform.ArchitectureTests.DynamicRuntimeAccessFixtures" };
+
+        var violations = new List<string>();
+        var path = Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll");
+        using var stream = File.OpenRead(path);
+        using var portableExecutable = new PEReader(stream);
+        var reader = portableExecutable.GetMetadataReader();
+
+        foreach (var methodHandle in reader.MethodDefinitions)
+        {
+            var method = reader.GetMethodDefinition(methodHandle);
+            if (method.RelativeVirtualAddress == 0)
+            {
+                continue;
+            }
+
+            var declaringType = UntypedDataAccessScanner.FullNameOfTypeDefinition(reader, method.GetDeclaringType());
+            var topLevelType = declaringType.Split('+')[0];
+            var methodName = reader.GetString(method.Name);
+
+            var called = new List<string>();
+            var il = portableExecutable.GetMethodBody(method.RelativeVirtualAddress).GetILBytes()!;
+            foreach (var instruction in IlOperandTable.Walk(il, out _))
+            {
+                if (instruction.MetadataToken == 0)
+                {
+                    continue;
+                }
+
+                var handle = System.Reflection.Metadata.Ecma335.MetadataTokens.EntityHandle(instruction.MetadataToken);
+                if (handle.Kind == HandleKind.MethodSpecification)
+                {
+                    handle = reader.GetMethodSpecification((MethodSpecificationHandle)handle).Method;
+                }
+
+                switch (handle.Kind)
+                {
+                    case HandleKind.MethodDefinition:
+                        called.Add(reader.GetString(
+                            reader.GetMethodDefinition((MethodDefinitionHandle)handle).Name));
+                        break;
+                    case HandleKind.MemberReference:
+                        called.Add(reader.GetString(
+                            reader.GetMemberReference((MemberReferenceHandle)handle).Name));
+                        break;
+                }
+            }
+
+            if (called.Contains("ReadMvid") && topLevelType != catalogType)
+            {
+                violations.Add($"ReadMvid: {declaringType}.{methodName}");
+            }
+
+            if (called.Contains("Load") && !allowedAssemblyLoad.Contains(topLevelType))
+            {
+                violations.Add($"Assembly.Load: {declaringType}.{methodName}");
+            }
+
+            if (called.Contains("get_CanonicalTargetPath") && called.Contains("Combine")
+                && topLevelType != catalogType)
+            {
+                violations.Add($"target-path-build: {declaringType}.{methodName}");
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join(" · ", violations.Order(StringComparer.Ordinal)));
     }
 
     // ═══════ C1 (Hardening D) — deep immutability e gjeneratës ═══════

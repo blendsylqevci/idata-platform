@@ -168,13 +168,13 @@ public sealed class IdentityRoleSurfaceTests
     [Fact]
     public void Zero_role_referenca_ne_metadata_te_asnje_assembly_production()
     {
-        var repoRoot = PlatformProjectCatalog.RepoRoot();
-        var catalog = PlatformProjectCatalog.DiscoverProduction();
-        Assert.NotEmpty(catalog);
-        foreach (var entry in catalog)
+        var generation = PlatformProjectCatalog.CurrentGeneration();
+        Assert.NotEmpty(generation.Projects);
+        foreach (var entry in generation.Projects)
         {
-            var findings = RoleMetadataScanner.Scan(Path.Combine(
-                repoRoot, entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar)));
+            // C2: path-i merret NGA KUFIRI i ngrirë (verifikim para+pas skanimit).
+            var findings = PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
+                entry, generation, RoleMetadataScanner.Scan);
             Assert.True(findings.Count == 0,
                 $"{entry.CanonicalPath}: {string.Join(" · ", findings.Select(f => $"{f.Table}[{f.Token}]:{f.Detail}"))}");
         }
