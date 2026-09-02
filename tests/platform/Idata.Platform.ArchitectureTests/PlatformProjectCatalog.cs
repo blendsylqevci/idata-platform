@@ -87,7 +87,69 @@ internal static class PlatformProjectCatalog
         FrozenDictionary<string, ImmutableArray<string>> ProjectReferencesByCanonicalPath,
         FrozenDictionary<string, ImmutableArray<ResolvedReference>> ResolvedReferencesByCanonicalPath,
         FrozenDictionary<string, PackageAssetAuthority> PackageAssetsByCanonicalPath,
-        FrozenDictionary<string, FrozenSet<string>> FrameworkAssetsByCanonicalPath);
+        FrozenDictionary<string, FrozenSet<string>> FrameworkAssetsByCanonicalPath)
+    {
+        // ═══════════════ Correction C7 — STATE AUTORITATIV PRIVAT ═══════════════
+        //
+        // Root cause i riprodhuar (Codex, mbi C6): `Projects` ishte veti
+        // pozicionale që kthente VETË `ImmutableArray`-n e ruajtur, ndaj
+        // `ImmutableCollectionsMarshal.AsArray(generation.Projects)` jepte
+        // backing-un REAL `ProjectEntry[]` dhe një thirrës mund të zëvendësonte
+        // një entry real me `entry with { AssemblyName = "Tampered.Assembly" }`
+        // (path-e reale) → `ReadVerifiedImage(forged)` mint-onte snapshot me
+        // SHA/MVID reale. E njëjta rrugë ekzistonte për vlerat `ImmutableArray`
+        // të adjacency-t dhe të referencave të zgjidhura.
+        //
+        // Modeli i ri: autoriteti jeton në fusha PRIVATE, të kopjuara NJË herë
+        // nga argumentet e konstruktorit (as ndërtuesi nuk e mban dot backing-un).
+        // Vendimet autoritative (anëtarësia në `VerifiedFrozenTargetPath`)
+        // lexojnë VETËM këtë state. Vetitë me të njëjtin emër/signature mbeten
+        // për enumerim si PROJEKSIONE DEFENSIVE: çdo getter kthen storage TË RI,
+        // ndaj AsArray mbi rezultatin nuk prek as leximin e dytë, as autoritetin.
+        private readonly ImmutableArray<ProjectEntry> projectsAuthority =
+            ImmutableArray.Create(Projects.AsSpan());
+
+        private readonly FrozenDictionary<string, ImmutableArray<string>> projectReferencesAuthority =
+            CopySequences(ProjectReferencesByCanonicalPath);
+
+        private readonly FrozenDictionary<string, ImmutableArray<ResolvedReference>> resolvedReferencesAuthority =
+            CopySequences(ResolvedReferencesByCanonicalPath);
+
+        /// <summary>Projeksion DEFENSIV i anëtarësisë — storage i ri në çdo lexim.</summary>
+        public ImmutableArray<ProjectEntry> Projects
+        {
+            get => ImmutableArray.Create(projectsAuthority.AsSpan());
+            init => projectsAuthority = ImmutableArray.Create(value.AsSpan());
+        }
+
+        /// <summary>Projeksion DEFENSIV i adjacency-t — çdo sekuencë e kopjuar në çdo lexim.</summary>
+        public FrozenDictionary<string, ImmutableArray<string>> ProjectReferencesByCanonicalPath
+        {
+            get => CopySequences(projectReferencesAuthority);
+            init => projectReferencesAuthority = CopySequences(value);
+        }
+
+        /// <summary>Projeksion DEFENSIV i referencave të zgjidhura — çdo sekuencë e kopjuar në çdo lexim.</summary>
+        public FrozenDictionary<string, ImmutableArray<ResolvedReference>> ResolvedReferencesByCanonicalPath
+        {
+            get => CopySequences(resolvedReferencesAuthority);
+            init => resolvedReferencesAuthority = CopySequences(value);
+        }
+
+        /// <summary>
+        /// C7 — VENDIMI autoritativ i anëtarësisë, mbi state-in PRIVAT: asnjë
+        /// projeksion i ekspozuar nuk merr pjesë. Anëtarësia është mbi HYRJEN e
+        /// plotë (record equality), jo vetëm mbi çelësin.
+        /// </summary>
+        internal bool IsAuthoritativeMember(ProjectEntry entry) => projectsAuthority.Contains(entry);
+
+        private static FrozenDictionary<string, ImmutableArray<T>> CopySequences<T>(
+            FrozenDictionary<string, ImmutableArray<T>> source)
+            => source.ToFrozenDictionary(
+                pair => pair.Key,
+                pair => ImmutableArray.Create(pair.Value.AsSpan()),
+                StringComparer.Ordinal);
+    }
 
     /// <summary>
     /// Një gjeneratë e VETME për proces, e ndërtuar nën `Lazy` me
@@ -236,7 +298,9 @@ internal static class PlatformProjectCatalog
     /// </summary>
     private static string VerifiedFrozenTargetPath(ProjectEntry entry, CatalogGeneration generation)
     {
-        if (!generation.Projects.Contains(entry)
+        // C7: anëtarësia vendoset mbi STATE-IN PRIVAT të gjeneratës, jo mbi
+        // projeksionin `Projects` (i cili është kopje defensive për enumerim).
+        if (!generation.IsAuthoritativeMember(entry)
             || !generation.Sha256ByCanonicalPath.TryGetValue(entry.CanonicalPath, out var frozenSha)
             || !generation.MvidByCanonicalPath.TryGetValue(entry.CanonicalPath, out var frozenMvid)
             || !generation.WriteTimeUtcByCanonicalPath.TryGetValue(entry.CanonicalPath, out var frozenWrite))
@@ -1097,7 +1161,12 @@ internal static class PlatformProjectCatalog
         IReadOnlyDictionary<(string PackageId, string Version), IReadOnlySet<string>> AssetsByTuple,
         IReadOnlyDictionary<string, (string PackageId, string Version)> TupleByAsset)
     {
-        internal IReadOnlySet<string> Assets => TupleByAsset.Keys.ToHashSet(StringComparer.Ordinal);
+        /// <summary>
+        /// C7 — gjetje e meta-testit reflection-driven: kthente `HashSet` të
+        /// mutueshëm nën `IReadOnlySet`. Tani FrozenSet (i pamutueshëm, pa
+        /// backing të nxjerrshëm), i llogaritur nga autoriteti i tuple-ve.
+        /// </summary>
+        internal IReadOnlySet<string> Assets => TupleByAsset.Keys.ToFrozenSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Correction C1 (Hardening D): kopje me TË GJITHA strukturat — edhe vlerat

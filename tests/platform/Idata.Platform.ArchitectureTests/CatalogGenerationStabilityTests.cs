@@ -1990,4 +1990,329 @@ public sealed class CatalogGenerationStabilityTests
         Assert.True(matched, $"Metoda {declaringTypeFullName}.{methodName} nuk u gjet.");
         return literals;
     }
+
+    // ═══════════════════ CORRECTION C7 — CALLER-MUTABLE GENERATION ═══════════════════
+
+    /// <summary>
+    /// C7 (§5) — PoC PERMANENT, RED mbi `49cc110`: `ImmutableCollectionsMarshal
+    /// .AsArray(generation.Projects)` kthente backing-un REAL; zëvendësimi i një
+    /// entry-je reale me `AssemblyName = "Tampered.Assembly"` (path-e reale)
+    /// helmonte anëtarësinë dhe `ReadVerifiedImage(forged)` mint-onte snapshot me
+    /// SHA/MVID reale. Tani projeksioni është kopje defensive dhe vendimi i
+    /// anëtarësisë lexon vetëm state-in privat: forged refuzohet, real GREEN,
+    /// gjenerata identike; mutimi rikthehet në `finally`.
+    /// </summary>
+    [Fact]
+    public void PoC_AsArray_nuk_helmon_anetaresine_e_gjenerates()
+    {
+        var generation = PlatformProjectCatalog.CurrentGeneration();
+        var before = generation.Projects.ToArray();
+        var real = before.OrderBy(entry => entry.CanonicalPath, StringComparer.Ordinal).First();
+        var forged = real with { AssemblyName = "Tampered.Assembly" };
+
+        var projection = generation.Projects;
+        var backing = System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsArray(projection)!;
+        var index = Array.IndexOf(backing, real);
+        Assert.True(index >= 0);
+
+        try
+        {
+            backing[index] = forged; // helmim i backing-ut të nxjerrë me AsArray
+
+            var refused = Assert.Throws<InvalidOperationException>(
+                () => PlatformProjectCatalog.ReadVerifiedImage(forged));
+            Assert.Contains("jashtë gjeneratës autoritative", refused.Message, StringComparison.Ordinal);
+
+            var image = PlatformProjectCatalog.ReadVerifiedImage(real);
+            Assert.Equal(real.AssemblyName, image.AssemblyName);
+            Assert.True(image.Length > 0);
+
+            // Leximi i dytë i projeksionit dhe autoriteti nuk e shohin mutimin.
+            Assert.DoesNotContain(forged, PlatformProjectCatalog.CurrentGeneration().Projects);
+            Assert.Contains(real, PlatformProjectCatalog.CurrentGeneration().Projects);
+            Assert.DoesNotContain(
+                PlatformProjectCatalog.DiscoverProduction(), entry => entry.AssemblyName == "Tampered.Assembly");
+        }
+        finally
+        {
+            backing[index] = real;
+        }
+
+        Assert.Same(generation, PlatformProjectCatalog.CurrentGeneration());
+        Assert.Equal(before, PlatformProjectCatalog.CurrentGeneration().Projects.ToArray());
+    }
+
+    /// <summary>
+    /// C7 (§5) — dy lexime të projeksionit nuk ndajnë backing të mutueshëm, dhe
+    /// 32 lexues paralelë shohin TË NJËJTIN objekt gjenerate me state identik
+    /// (asnjë refresh, asnjë gjeneratë e dytë).
+    /// </summary>
+    [Fact]
+    public void Projeksionet_nuk_ndajne_backing_dhe_lexuesit_paralele_shohin_state_identik()
+    {
+        var root = PlatformProjectCatalog.CurrentGeneration();
+        Assert.NotEmpty(root.Projects);
+        Assert.NotSame(
+            System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsArray(root.Projects),
+            System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsArray(root.Projects));
+
+        // Sekuencat BOSH janë singleton-i i pamutueshëm `ImmutableArray<T>.Empty`
+        // (Length 0 — s'ka çfarë të helmohet); provohen vetëm ato jo-boshe.
+        var nonEmptyKeys = root.ProjectReferencesByCanonicalPath
+            .Where(pair => pair.Value.Length > 0).Select(pair => pair.Key).ToArray();
+        Assert.NotEmpty(nonEmptyKeys);
+        foreach (var key in nonEmptyKeys)
+        {
+            Assert.NotSame(
+                System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsArray(root.ProjectReferencesByCanonicalPath[key]),
+                System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsArray(root.ProjectReferencesByCanonicalPath[key]));
+        }
+
+        var expected = root.Projects.ToArray();
+        Parallel.For(0, 32, _ =>
+        {
+            var generation = PlatformProjectCatalog.CurrentGeneration();
+            Assert.Same(root, generation);
+            Assert.Equal(expected, generation.Projects.ToArray());
+            Assert.Same(root.Sha256ByCanonicalPath, generation.Sha256ByCanonicalPath);
+            Assert.Same(root.MvidByCanonicalPath, generation.MvidByCanonicalPath);
+        });
+    }
+
+    /// <summary>
+    /// C7 (§4) — META-TEST REFLECTION-DRIVEN, ZERO LISTË EMRASH: ecën grafin REAL
+    /// të objektit `CurrentGeneration()` — çdo veti non-private, tipet
+    /// project-owned që arrihen prej tyre, generic arguments, value tuples dhe
+    /// koleksionet e ngulitura brenda dictionary/set — pa hyrë në internals të
+    /// BCL-së. Dështon për çdo backing live/i ekspozuar: `T[]`, koleksion i
+    /// mutueshëm (`ICollection&lt;T&gt;.IsReadOnly == false`), `Memory`/
+    /// `ReadOnlyMemory`, interface read-only mbi implementim jo-frozen, dhe
+    /// `ImmutableArray&lt;T&gt;` backing-u i të cilit ndikon autoritetin pas
+    /// `AsArray`. Për çdo `ImmutableArray` provohet BEHAVIORALISHT: merret
+    /// projeksioni → nxirret backing-u → mutohet → rilexohet i njëjti nyje nga
+    /// rrënja dhe vendimi autoritativ → asgjë nuk ka ndryshuar.
+    /// </summary>
+    [Fact]
+    public void Gjenerata_nuk_ekspozon_backing_te_helmueshem_reflection_driven()
+    {
+        var witness = PlatformProjectCatalog.DiscoverProduction()
+            .OrderBy(entry => entry.CanonicalPath, StringComparer.Ordinal).First();
+        var violations = new List<string>();
+        var stats = new AuthorityWalkStats();
+
+        WalkAuthority(
+            PlatformProjectCatalog.CurrentGeneration(), "CurrentGeneration()",
+            () => PlatformProjectCatalog.CurrentGeneration(),
+            new HashSet<object>(ReferenceEqualityComparer.Instance), violations, stats, witness, depth: 0);
+
+        Assert.True(violations.Count == 0, string.Join(" · ", violations.Order(StringComparer.Ordinal)));
+        Assert.True(stats.Sequences > 0, "asnjë sekuencë e ekspozuar nuk u gjet — meta-testi do të ishte bosh");
+        Assert.True(stats.SequencesProved > 0, "asnjë sekuencë nuk u provua behavioralisht");
+        Assert.True(stats.FrozenCollections > 0, "asnjë koleksion frozen nuk u gjet");
+        Assert.True(stats.ProjectOwnedTypes > 1, "traversal-i nuk arriti tipet e ngulitura project-owned");
+    }
+
+    private static bool DerivesFromGeneric(Type type, Type genericDefinition)
+    {
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            if (current.IsGenericType && current.GetGenericTypeDefinition() == genericDefinition)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private sealed class AuthorityWalkStats
+    {
+        internal int Sequences;
+        internal int SequencesProved;
+        internal int FrozenCollections;
+        internal int ProjectOwnedTypes;
+    }
+
+    private static void WalkAuthority(
+        object? value, string path, Func<object?> reread, HashSet<object> visited,
+        List<string> violations, AuthorityWalkStats stats, PlatformProjectCatalog.ProjectEntry witness, int depth)
+    {
+        if (value is null || depth > 12)
+        {
+            return;
+        }
+
+        var type = value.GetType();
+        if (type.IsPrimitive || type.IsEnum || type == typeof(string) || type == typeof(Guid)
+            || type == typeof(DateTime) || type == typeof(decimal))
+        {
+            return;
+        }
+
+        if (!type.IsValueType && !visited.Add(value))
+        {
+            return;
+        }
+
+        // ── Backing live / i mutueshëm: dështim i menjëhershëm ──
+        if (type.IsArray)
+        {
+            violations.Add($"{path}: array i ekspozuar ({type.Name})");
+            return;
+        }
+
+        var genericDefinition = type.IsGenericType ? type.GetGenericTypeDefinition() : null;
+        if (genericDefinition == typeof(Memory<>) || genericDefinition == typeof(ReadOnlyMemory<>)
+            || genericDefinition == typeof(ArraySegment<>))
+        {
+            violations.Add($"{path}: {type.Name} i ekspozuar");
+            return;
+        }
+
+        var collectionInterface = type.GetInterfaces().FirstOrDefault(candidate =>
+            candidate.IsGenericType && candidate.GetGenericTypeDefinition() == typeof(ICollection<>));
+        if (collectionInterface is not null
+            && collectionInterface.GetProperty("IsReadOnly")!.GetValue(value) is false)
+        {
+            violations.Add($"{path}: koleksion i mutueshëm ({type.Name})");
+            return;
+        }
+
+        // ── ImmutableArray<T>: lejohet VETËM si projeksion defensiv (provë behaviorale) ──
+        if (genericDefinition == typeof(ImmutableArray<>))
+        {
+            stats.Sequences++;
+            var elementType = type.GetGenericArguments()[0];
+            var asArray = typeof(System.Runtime.InteropServices.ImmutableCollectionsMarshal)
+                .GetMethod("AsArray")!.MakeGenericMethod(elementType);
+            var backing = (Array?)asArray.Invoke(null, [value]);
+            if (backing is { Length: > 0 })
+            {
+                var original = backing.GetValue(0);
+                Array.Clear(backing, 0, 1);
+                try
+                {
+                    var again = reread();
+                    var againBacking = (Array?)asArray.Invoke(null, [again]);
+                    if (againBacking is null || ReferenceEquals(againBacking, backing)
+                        || !Equals(againBacking.GetValue(0), original))
+                    {
+                        violations.Add($"{path}: backing-u i ImmutableArray<{elementType.Name}> është LIVE — AsArray e helmon autoritetin");
+                    }
+
+                    // Vendimi autoritativ nuk ndryshon ndërsa backing-u i nxjerrë është i helmuar.
+                    PlatformProjectCatalog.VerifyFrozenTarget(witness, PlatformProjectCatalog.CurrentGeneration());
+                    stats.SequencesProved++;
+                }
+                finally
+                {
+                    backing.SetValue(original, 0);
+                }
+            }
+
+            var index = 0;
+            foreach (var element in (System.Collections.IEnumerable)value)
+            {
+                var captured = index;
+                WalkAuthority(element, $"{path}[{captured}]",
+                    () => ((System.Collections.IList)reread()!)[captured],
+                    visited, violations, stats, witness, depth + 1);
+                index++;
+            }
+
+            return;
+        }
+
+        // ── Dictionary: runtime-i duhet të jetë FrozenDictionary; vlerat ecen me çelës ──
+        var readOnlyDictionary = type.GetInterfaces().FirstOrDefault(candidate =>
+            candidate.IsGenericType && candidate.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>));
+        if (readOnlyDictionary is not null)
+        {
+            // Runtime-i i FrozenDictionary është nënklasë interne e BCL-së
+            // (p.sh. `LengthBucketsFrozenDictionary`) — kontrollohet base type-i.
+            if (!DerivesFromGeneric(type, typeof(FrozenDictionary<,>)))
+            {
+                violations.Add($"{path}: dictionary jo-frozen ({type.Name})");
+                return;
+            }
+
+            stats.FrozenCollections++;
+            var indexer = type.GetProperty("Item")!;
+            foreach (var pair in (System.Collections.IEnumerable)value)
+            {
+                var pairType = pair!.GetType();
+                var key = pairType.GetProperty("Key")!.GetValue(pair);
+                var entryValue = pairType.GetProperty("Value")!.GetValue(pair);
+                WalkAuthority(key, $"{path}.Key", () => key, visited, violations, stats, witness, depth + 1);
+                WalkAuthority(entryValue, $"{path}[{key}]",
+                    () => indexer.GetValue(reread(), [key]),
+                    visited, violations, stats, witness, depth + 1);
+            }
+
+            return;
+        }
+
+        // ── Set: runtime-i duhet të jetë FrozenSet ──
+        var readOnlySet = type.GetInterfaces().FirstOrDefault(candidate =>
+            candidate.IsGenericType && candidate.GetGenericTypeDefinition() == typeof(IReadOnlySet<>));
+        if (readOnlySet is not null)
+        {
+            if (!DerivesFromGeneric(type, typeof(FrozenSet<>)))
+            {
+                violations.Add($"{path}: set jo-frozen ({type.Name})");
+                return;
+            }
+
+            stats.FrozenCollections++;
+            foreach (var element in (System.Collections.IEnumerable)value)
+            {
+                // Elementet e set-it nuk kanë rrugë rileximi me çelës; një sekuencë
+                // brenda set-i do të raportohej si e paprovueshme (fail-closed).
+                WalkAuthority(element, $"{path}{{}}",
+                    () => throw new InvalidOperationException($"{path}: element set-i pa rrugë rileximi"),
+                    visited, violations, stats, witness, depth + 1);
+            }
+
+            return;
+        }
+
+        // ── Value tuple: fushat publike ──
+        if (type.IsValueType && type.IsGenericType && type.FullName!.StartsWith("System.ValueTuple`", StringComparison.Ordinal))
+        {
+            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance))
+            {
+                WalkAuthority(field.GetValue(value), $"{path}.{field.Name}",
+                    () => field.GetValue(reread()), visited, violations, stats, witness, depth + 1);
+            }
+
+            return;
+        }
+
+        // ── Tipe project-owned: çdo veti non-private, rekursivisht ──
+        if (type.Assembly == typeof(PlatformProjectCatalog).Assembly)
+        {
+            stats.ProjectOwnedTypes++;
+            foreach (var property in type.GetProperties(
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+            {
+                var getter = property.GetMethod;
+                if (getter is null || getter.IsPrivate || property.GetIndexParameters().Length > 0
+                    || property.PropertyType == typeof(Type))
+                {
+                    continue;
+                }
+
+                WalkAuthority(property.GetValue(value), $"{path}.{property.Name}",
+                    () => property.GetValue(reread()), visited, violations, stats, witness, depth + 1);
+            }
+
+            return;
+        }
+
+        // Çdo koleksion tjetër i BCL-së që nuk është frozen/immutable = i papranueshëm.
+        if (value is System.Collections.IEnumerable)
+        {
+            violations.Add($"{path}: koleksion BCL jo-frozen ({type.Name})");
+        }
+    }
 }
