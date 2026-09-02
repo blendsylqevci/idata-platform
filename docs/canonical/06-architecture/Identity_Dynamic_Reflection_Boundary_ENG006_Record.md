@@ -360,6 +360,47 @@ Prompti lejonte **maksimumi dy** file të tjera nën ArchitectureTests "vetëm n
 
 ---
 
+## 4f. Correction C7 — `CatalogGeneration` nuk është më caller-mutable
+
+Scope i kufizuar: vetëm root cause-i i riprodhuar nga Codex mbi C6. Zero audit i ri, zero zgjerim.
+
+### Root cause i riprodhuar (mbi `49cc110`)
+
+`CurrentGeneration().Projects` ekspozohej si veti pozicionale `ImmutableArray<ProjectEntry>` që kthente VETË array-n e ruajtur. `ImmutableCollectionsMarshal.AsArray(generation.Projects)` jepte backing-un REAL `ProjectEntry[]`; thirrësi zëvendësonte një entry reale me `entry with { AssemblyName = "Tampered.Assembly" }` (path-e reale), dhe `ReadVerifiedImage(forged)` **mint-onte** `VerifiedAssemblyImage` me `AssemblyName = Tampered.Assembly`, SHA-256 dhe MVID reale. PoC i Codex në klon të izoluar: 1/1 PASS. Testi `Gjenerata_eshte_deep_immutable` kontrollonte vetëm mutimin përmes interface-ve — jo `AsArray`. E njëjta rrugë ekzistonte për vlerat `ImmutableArray` të adjacency-t (`ProjectReferencesByCanonicalPath`) dhe të referencave të zgjidhura (`ResolvedReferencesByCanonicalPath`).
+
+**[HISTORIKE — TË KUALIFIKUARA NGA C7]:** pretendimet e mëparshme "deep immutability: `ImmutableArray`/`FrozenDictionary`/`FrozenSet` deri në vlerat nested" (C1 Shtesa C, §5 tabela) ishin të sakta për mutimin përmes interface-ve, por **jo** për nxjerrjen e backing-ut me `AsArray` mbi projeksionet pozicionale.
+
+### Modeli i ri i autoritetit
+
+- **State autoritativ PRIVAT:** `CatalogGeneration` ruan anëtarësinë, adjacency-n dhe referencat e zgjidhura në fusha private, të kopjuara NJË herë nga argumentet e konstruktorit (as ndërtuesi nuk mban dot backing-un). Identitetet, MVID/SHA-256/mtime dhe autoriteti package/framework mbeten `FrozenDictionary`/`FrozenSet` (pa backing të nxjerrshëm).
+- **Vendimi autoritativ lexon vetëm state-in privat:** anëtarësia në `VerifiedFrozenTargetPath` kalon te `IsAuthoritativeMember(entry)` (mbi hyrjen e plotë, record equality) — asnjë projeksion i ekspozuar nuk merr pjesë.
+- **Projeksione DEFENSIVE me signature të pandryshuar:** `Projects`, `ProjectReferencesByCanonicalPath`, `ResolvedReferencesByCanonicalPath` mbeten `ImmutableArray`/`FrozenDictionary<string, ImmutableArray<T>>`, por çdo getter kthen storage **të ri** (`ImmutableArray.Create(span)`); `AsArray` mbi rezultatin nuk prek as leximin e dytë, as autoritetin. Zero ndryshim tipesh, zero call-site tjetër — kompajleri nuk kërkoi asnjë file të tretë.
+- **Gjetje e meta-testit, brenda invariantit §2 (package authority):** `PackageAssetAuthority.Assets` kthente `HashSet<string>` të mutueshëm nën `IReadOnlySet` → tani `FrozenSet`.
+
+### PoC AsArray (permanent, RED mbi `49cc110`)
+
+`PoC_AsArray_nuk_helmon_anetaresine_e_gjenerates`: merr `CurrentGeneration()`, zgjedh entry reale, nxjerr backing-un e `Projects` me `AsArray`, e zëvendëson me `AssemblyName = "Tampered.Assembly"` (path-e reale) → `ReadVerifiedImage(forged)` **refuzohet** ("jashtë gjeneratës autoritative"), entry-ja reale mbetet GREEN me `AssemblyName` real, leximi i dytë i projeksionit dhe `DiscoverProduction()` nuk e shohin mutimin; `CurrentGeneration()` pas provës është i njëjti objekt me të njëjtën sekuencë; mutimi rikthehet në `finally`. Plus: dy lexime të projeksionit nuk ndajnë backing (jo-bosh; sekuencat bosh janë singleton-i `ImmutableArray<T>.Empty`, Length 0) dhe **32 lexues paralelë** shohin të njëjtin objekt me state identik.
+
+### Meta-testi reflection-driven (zero listë emrash)
+
+`Gjenerata_nuk_ekspozon_backing_te_helmueshem_reflection_driven` ecën grafin REAL të objektit `CurrentGeneration()`: çdo veti non-private, tipet project-owned që arrihen prej tyre, generic arguments, value tuples, dhe koleksionet e ngulitura brenda dictionary (me çelës) / set — pa hyrë në internals të BCL-së. Dështon për `T[]`, `Memory`/`ReadOnlyMemory`/`ArraySegment`, çdo `ICollection<T>` me `IsReadOnly == false`, interface read-only mbi implementim jo-frozen, dhe çdo koleksion tjetër BCL jo-frozen. Për **çdo** `ImmutableArray<T>` (edhe nested) provon behavioralisht: AsArray → mutim → rilexim i së njëjtës nyje nga rrënja (rrugë vetish + çelësash) → nyja e rilexuar ka backing tjetër dhe element identik → `VerifyFrozenTarget(witness, CurrentGeneration())` kalon. Meta-testi provon vetë se nuk është bosh (sekuenca > 0, të provuara > 0, koleksione frozen > 0, tipe project-owned > 1).
+
+### RED → GREEN
+
+Mbi `49cc110` PoC-ja dhe meta-testi do të dilnin RED (backing live). Prova removal e izoluar: getter-i i `Projects` u kthye përkohësisht te live backing → **të tre** testet C7 RED → rikthim vetëm me edit forward → SHA byte-identik (`3cc4546d…`). Zero RED i commit-uar. Dy defekte të **testit** u gjetën dhe u ndrequn para GREEN-it (runtime-i i `FrozenDictionary`/`FrozenSet` është nënklasë interne; sekuencat bosh janë singleton) — të deklaruara, jo të numëruara si prova.
+
+### Kufiri i threat model-it të harness-it
+
+**Jashtë modelit:** sabotimi i qëllimshëm nga dikush me write access që fshin/dobëson testin; reflection mbi private fields/methods; patching runtime ose ndryshim arbitrar i binarit të testit.
+
+**Brenda modelit dhe BLOCKING:** çdo API public/internal/non-private e harness-it; BCL API normale si `ImmutableCollectionsMarshal.AsArray`; mutation/capability që mund të ndodhë pa reflection/private access; keqpërdorim aksidental nga fixtures, helpers ose teste të ardhshme; çdo rrugë që ndryshon vendimet autoritative të guard-it.
+
+Pas C7, vetëm gjetjet që kërkojnë sabotim të qëllimshëm, reflection mbi private state ose fshirje/dobësim të testit kalojnë si follow-up jo-bllokues. Ky kufi **nuk** përdoret për të përjashtuar bypass-e përmes API-ve non-private.
+
+**Counts (sipas §8, një run pas build-it të freskët):** targeted C7 **3/3** · ENG-006 **69/69** · ENG-008 **47/47** · ArchitectureTests **294/294, zero skip** (71 s).
+
+---
+
 ## 5. Fixtures dhe mapping fix → fixture → RED → GREEN
 
 **RED (kapen me kind + declaring type + anëtar ekzakt + assembly + metodë burimore + arsye):** PoC-i historik `Type.GetType` me emër të ndërtuar në runtime · `GetType→GetProperty→GetValue` · `Assembly.Load→GetType→Activator.CreateInstance` · `GetMethod→Invoke` · `Type.InvokeMember` · `PropertyInfo.GetValue/SetValue` · `FieldInfo.GetValue/SetValue` · `MakeGenericType`/`MakeGenericMethod` · `Delegate.DynamicInvoke`/`CreateDelegate` · `dynamic` me emetim REAL `Binder.InvokeMember` + `CallSite\`1.Create` (+ `CallSite\`1.Target` si UNKNOWN) · `IServiceProvider.GetService(Type)` dhe `GetRequiredService(Type)` · atribuim i një metode `async` te metoda BURIMORE · assembly jo-PE = fail-closed · escape hatch publik i owner-it.
@@ -385,7 +426,7 @@ Prompti lejonte **maksimumi dy** file të tjera nën ArchitectureTests "vetëm n
 | Lambda attribution | dega `unattributed` fail-closed | 4 format e kompajlerit | dega e neutralizuar → **1 test RED** |
 | Owner public fields | field-scan me dekodim fail-closed | `LeakedType` (static readonly `Type`), `LeakedProvider` (instance `IServiceProvider`), `LeakedDelegates` (generic me `Delegate`), `LeakedFields` (array `FieldInfo[]`); GREEN: `SafeCount`/`SafeLabel`/`SafeId` | dega field-scan e fikur → **4 teste RED** |
 | Fingerprint consumer | `VerifiedFrozenTargetPath` para+pas çdo skanimi | drift sintetik SHA-only/MVID-only/mtime-only + outsider + gjeneratë e helmuar kundër `ScanProduction`/owner-scan | krahasimi 3-dimensional i dobësuar → **4 teste RED** |
-| Deep immutability | `ImmutableArray`/`FrozenDictionary`/`FrozenSet` deri në vlerat nested | mutim përmes interface-ve hedh; 32 thirrës paralelë; tipe komponentësh të provuar | `FrameworkAssets` → `HashSet` → **1 test RED** |
+| Deep immutability | `ImmutableArray`/`FrozenDictionary`/`FrozenSet` deri në vlerat nested **[KUALIFIKUAR NGA C7 §4f: mutimi përmes interface-ve ishte i mbuluar, nxjerrja e backing-ut me `AsArray` jo]** | mutim përmes interface-ve hedh; 32 thirrës paralelë; tipe komponentësh të provuar | `FrameworkAssets` → `HashSet` → **1 test RED** |
 
 **Meta-teste normalizimi:** forma ekzakte → normalizohet; 63/64/66 → refuzohet; jo-hex → refuzohet; dy runs → refuzohet; run pa marker → i paprekur; prefix/suffix byte-identikë; kolizion → fail-closed; ledger bosh me gjetje / hyrje e vdekur / duplikat / kind i palejuar / tool-version mismatch → fail.
 
@@ -401,8 +442,8 @@ Prompti lejonte **maksimumi dy** file të tjera nën ArchitectureTests "vetëm n
 
 - `dotnet build src/platform/Idata.Platform.slnx` → **0 warnings, 0 errors**;
 - baseline mekanik para editimit: **178/178**;
-- pas increment-it: **237/237** ×3; C1 **262/262**; C2 **270/270**; C3 **277/277**; C4 **282/282**; C5 **289/289** ×3 + dy cold-run; pas **correction C6: 291/291, zero skip** (një run, sipas §5 të C6);
-- targeted (të rimatura pas C6, një run): ENG-008 **44/44**, ENG-006 **69/69** (pas C5: 42/69; pas C4: 35/69; pas C3: 30/69; pas C2: 27/65; para C1: 12/47);
+- pas increment-it: **237/237** ×3; C1 **262/262**; C2 **270/270**; C3 **277/277**; C4 **282/282**; C5 **289/289** ×3 + dy cold-run; C6 **291/291**; pas **correction C7: 294/294, zero skip** (një run pas build-it të freskët, sipas §8 të C7);
+- targeted (të rimatura pas C7, një run): ENG-008 **47/47**, ENG-006 **69/69** (pas C6: 44/69; pas C5: 42/69; pas C4: 35/69; pas C3: 30/69; pas C2: 27/65; para C1: 12/47);
 - **performanca ndaj baseline-it të matur në worktree të izoluar te `ded8325`, me komanda IDENTIKE** (mediana e 3 ekzekutimeve): ArchitectureTests **63s → 61s**, ENG-006 **19s → 18s**, ENG-008 **18s → 18s**, cold-process **64.5s → 63.5s** — zero regresion, jo më pak edhe pse suita u rrit me 7 teste;
 - permutime me **seed-e fikse 1337 / 20260803 / 42** → rezultate identike, e njëjta gjeneratë;
 - disk: min **6.69 GiB**, max **6.78 GiB** (kurrë nën 2.0 GiB; zero ENOSPC).
