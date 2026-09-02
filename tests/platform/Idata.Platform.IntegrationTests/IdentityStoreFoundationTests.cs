@@ -143,7 +143,7 @@ public sealed class IdentityStoreFoundationTests
         Environment.SetEnvironmentVariable("PLATFORM_PGDATABASE", db.DatabaseName);
         try
         {
-            await using var factory = new WebApplicationFactory<Program>();
+            await using var factory = new PlatformTestHostFactory();
             _ = factory.CreateClient();
             using var scope = factory.Services.CreateScope();
             var manager = scope.ServiceProvider.GetRequiredService<UserManager<UserAccountRecord>>();
@@ -249,7 +249,7 @@ public sealed class IdentityStoreFoundationTests
         Environment.SetEnvironmentVariable("PLATFORM_PGDATABASE", db.DatabaseName);
         try
         {
-            await using var factory = new WebApplicationFactory<Program>();
+            await using var factory = new PlatformTestHostFactory();
             _ = factory.CreateClient();
 
             // Faza 1 (scope i parë): krijim user + DY claims.
@@ -320,7 +320,7 @@ public sealed class IdentityStoreFoundationTests
         Environment.SetEnvironmentVariable("PLATFORM_PGDATABASE", db.DatabaseName);
         try
         {
-            await using var factory = new WebApplicationFactory<Program>();
+            await using var factory = new PlatformTestHostFactory();
             _ = factory.CreateClient();
             using var scope = factory.Services.CreateScope();
 
@@ -369,7 +369,7 @@ public sealed class IdentityStoreFoundationTests
     [Fact]
     public async Task Route_table_nuk_fiton_asnje_endpoint_identity_oidc_nga_B1()
     {
-        await using var factory = new WebApplicationFactory<Program>();
+        await using var factory = new PlatformTestHostFactory();
         _ = factory.CreateClient();
         var dataSource = factory.Services.GetRequiredService<Microsoft.AspNetCore.Routing.EndpointDataSource>();
         var patterns = dataSource.Endpoints

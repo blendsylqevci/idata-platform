@@ -17,10 +17,14 @@ namespace Idata.Platform.IntegrationTests;
 /// ClaimsIdentity PA authenticationType (IsAuthenticated=false) me claims të
 /// vlefshme — për të provuar që claims të pa-autentikuara refuzohen.
 /// </summary>
-public class AccessControlApiFactory : WebApplicationFactory<Program>
+public class AccessControlApiFactory : PlatformTestHostFactory
 {
     protected override void ConfigureWebHost(IWebHostBuilder builder)
-        => builder.ConfigureServices(services => services.AddSingleton<IStartupFilter>(new TestActorStartupFilter()));
+    {
+        // B.2a: konfigurim identity eksplicit (startup fail-closed pa të).
+        base.ConfigureWebHost(builder);
+        builder.ConfigureServices(services => services.AddSingleton<IStartupFilter>(new TestActorStartupFilter()));
+    }
 
     private sealed class TestActorStartupFilter : IStartupFilter
     {

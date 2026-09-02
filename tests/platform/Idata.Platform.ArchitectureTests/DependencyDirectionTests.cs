@@ -1285,7 +1285,7 @@ public sealed class DependencyDirectionTests
     [Fact]
     public void Identity_paketat_vetem_assemblies_e_aprovuara_dhe_vetem_ne_projektet_e_aprovuara()
     {
-        string[] approvedIdentityAssemblies =
+        string[] approvedStoreAssemblies =
             ["Microsoft.AspNetCore.Identity.EntityFrameworkCore",
              "Microsoft.Extensions.Identity.Core",
              "Microsoft.Extensions.Identity.Stores",
@@ -1293,9 +1293,22 @@ public sealed class DependencyDirectionTests
              "OpenIddict.Core",
              "OpenIddict.EntityFrameworkCore",
              "OpenIddict.EntityFrameworkCore.Models"];
+        // B.2a (zëvendësim i KONTROLLUAR, ADR-028 §7): assemblies të PROTOKOLLIT —
+        // të lejuara VETËM te owner-i i protokollit (Identity.Infrastructure).
+        string[] approvedProtocolAssemblies =
+            ["OpenIddict.Server",
+             "OpenIddict.Server.AspNetCore",
+             "OpenIddict.Validation",
+             "OpenIddict.Validation.AspNetCore",
+             "OpenIddict.Validation.ServerIntegration",
+             "Microsoft.IdentityModel.Tokens",
+             "Microsoft.IdentityModel.JsonWebTokens",
+             "Microsoft.IdentityModel.Protocols"];
         // §3-R5: owner-at DERIVOHEN nga path-et kanonike përmes katalogut
         // MSBuild-real — zero literal basename/emri (heqja e `approvedProjects`).
         var approvedProjects = DerivedStoreOwnerAssemblyNames();
+        var protocolOwner = ByCanonicalPath(IdentitySecurityDependencyInventory.ProtocolOwnerCanonicalPath).GetName().Name;
+        var protocolReferencedByOwner = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var assembly in AllPlatformAssemblies)
         {
@@ -1309,9 +1322,25 @@ public sealed class DependencyDirectionTests
                     continue;
                 }
 
-                Assert.Contains(name, approvedIdentityAssemblies);
+                if (approvedProtocolAssemblies.Contains(name, StringComparer.Ordinal))
+                {
+                    // Protokolli: VETËM owner-i i protokollit; kurrë Persistence/Api/të tjerë.
+                    Assert.Equal(protocolOwner, owner);
+                    protocolReferencedByOwner.Add(name);
+                    continue;
+                }
+
+                Assert.Contains(name, approvedStoreAssemblies);
                 Assert.Contains(owner, approvedProjects);
             }
+        }
+
+        // Allowlist-i i protokollit nuk është i vdekur: bërthama referohet REALISHT.
+        foreach (var required in (string[])
+            ["OpenIddict.Server", "OpenIddict.Validation", "OpenIddict.Validation.ServerIntegration",
+             "OpenIddict.Validation.AspNetCore", "OpenIddict.Server.AspNetCore"])
+        {
+            Assert.Contains(required, protocolReferencedByOwner);
         }
     }
 
