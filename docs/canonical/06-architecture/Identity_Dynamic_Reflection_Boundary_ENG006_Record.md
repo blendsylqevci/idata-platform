@@ -82,7 +82,7 @@ Të 19 gjetjet e mbetura i përkasin kodit **të gjeneruar** brenda production a
 - çdo gjetje `generated-*` kontrollohet kundër një **PROVENANCE LEDGER-i EKZAKT** (`GeneratedResidualLedger` në `DynamicRuntimeAccessManifest.cs` — i NDARË nga manifesti ynë production, i cili mbetet BOSH): çelësi = assembly + tip i NORMALIZUAR + anëtar + kind + detail + tool + version; **pariteti është DY-DREJTIMËSH** (çdo gjetje unike konsumon saktësisht një hyrje; çdo hyrje konsumohet; duplicate/unused/unmatched = fail-closed);
 - `generated-dynamic-dangerous` dhe `generated-dynamic-service-location` janë **GJITHMONË blocking** — as nuk pranohen në ledger;
 - çdo hyrje ledger-i lidhet MEKANIKISHT me **paketën e PIN-uar** në lockfile-t realë (tool-i i takon paketës; major.minor i versionit të dekoduar përputhet me versionin e zgjidhur): `Mediator.SourceGenerator/3.0.0.0` ↔ paketa `Mediator.SourceGenerator@3.0.2` (Direct); `Microsoft.AspNetCore.OpenApi.SourceGenerators/10.0.10.0` ↔ paketa `Microsoft.AspNetCore.OpenApi@10.0.10` (Direct);
-- **normalizim I KUFIZUAR i identitetit OpenAPI** (Shtesa A): funksion PURE me pattern të ANKORUAR — prefiks fiks `<OpenApiXmlCommentSupport_generated>` + SAKTËSISHT NJË run hex + `__` + suffix jo-bosh; vetëm run-i zëvendësohet me placeholder, çdo segment tjetër mbetet byte-identik; çdo devijim (run që mungon/i dyfishtë/jo-hex/i gjatësisë tjetër, suffix bosh, kolizion dy tipesh reale) = refuzim/fail-closed. **DEVIATION e deklaruar:** review-i supozoi run 64-hex; matja mekanike mbi metadata (14/14 tipe) = **65** — sipas klauzolës 'rillogarit nga zero, mos hardcode numrat e reviewer-it', parametri është vlera empirike (`OpenApiHashRunLength = 65`), me meta-teste që refuzojnë 63/64/66.
+- **normalizim I KUFIZUAR i identitetit OpenAPI** (Shtesa A): funksion PURE me pattern të ANKORUAR — prefiks fiks `<OpenApiXmlCommentSupport_generated>` + SAKTËSISHT NJË run hex + `__` + suffix jo-bosh; vetëm run-i zëvendësohet me placeholder, çdo segment tjetër mbetet byte-identik; çdo devijim (run që mungon/i dyfishtë/jo-hex/i gjatësisë tjetër, suffix bosh, kolizion dy tipesh reale) = refuzim/fail-closed. **[HISTORICAL — SUPERSEDED BY C3 §3]** Interpretimi i C1 ishte: run i vetëm prej **65 karakteresh hex** (`OpenApiHashRunLength = 65`), i matur mbi 14 tipe. **Rregulli AKTIV është ai i C3 §3:** marker strukturor **literal `F` + 64 hex**, placeholder `F{INPUT_HASH_64}`, me **1 formë/digest DISTINKT** të ndarë nga 14 tipe. Interpretimi i vjetër nuk është më autoritet.
 
 **Counts të rillogaritura nga zero (HEAD real):** 19 gjetje generated UNIKE (1 Mediator + 18 OpenAPI: 9 `CreateDocumentationId`, 8 `GetTypeDocId`, 1 `TransformAsync`), të gjitha `generated-dynamic-unknown-member`; **zero dangerous/service-location**; ledger = 19 hyrje = seti aktual EKZAKT (barazi e provuar edhe eksplicit në test, jo vetëm përmes validatorit); 2 tools · 2 versione · 2 identitete të normalizuara + 1 identitet Mediator.
 
@@ -94,7 +94,7 @@ Të 19 gjetjet e mbetura i përkasin kodit **të gjeneruar** brenda production a
 
 **Blocker A (root cause i verifikuar):** `LoadVerified` e thërriste verifikuesin vetëm PARA `Assembly.Load`; meta-testi provonte thjesht praninë e emrit në një set (tri rreshta hardcoded); dhe disa konsumatorë e ndërtonin path-in vetë ose rilexonin MVID-in aktual jashtë gjeneratës.
 
-**Fix:** `PlatformProjectCatalog.ConsumeVerifiedFrozenTarget<T>(entry[, generation], consumer)` — KUFIRI I VETËM me semantikë të detyruar: (1) një gjeneratë e pandryshueshme; (2) verifikim entry/path/SHA/MVID/mtime PARA; (3) konsumatori mbi path-in e verifikuar; (4) riverifikim i TË NJËJTIT entry ndaj SË NJËJTËS gjeneratë PAS; (5) rezultati vetëm pas post-check-ut; (6) gabimet e konsumatorit nuk fshihen. Shtohet edhe `LoadReferencedAssembly` që çdo ngarkim i një assembly-je production gjatë ecjeve të grafit kalon nga `LoadVerified`.
+**[HISTORICAL — SUPERSEDED BY C4 §3]** Fix-i i C2 ishte `PlatformProjectCatalog.ConsumeVerifiedFrozenTarget<T>(entry[, generation], consumer)` si kufi i vetëm, me semantikë: (1) një gjeneratë e pandryshueshme; (2) verifikim entry/path/SHA/MVID/mtime PARA; (3) konsumatori mbi path-in e verifikuar; (4) riverifikim i TË NJËJTIT entry ndaj SË NJËJTËS gjeneratë PAS; (5) rezultati vetëm pas post-check-ut; (6) gabimet e konsumatorit nuk fshihen. Shtohet edhe `LoadReferencedAssembly` që çdo ngarkim i një assembly-je production gjatë ecjeve të grafit kalon nga `LoadVerified`.
 
 **Konsumatorët e rrugtuar (sweep mekanik, jo listë manuale):** `LoadVerified` · ENG-006 `ScanProduction` + owner-scan · ENG-007 `ScanVerified` + owner-scan + dy path-e fixture-sh · `RoleMetadataScanner` (IdentityRoleSurfaceTests) · `IdentityStoreIlScanner` (ConventionEnforcementTests) · `PlatformOutputAuthority` + testi R7-decoy (DependencyDirectionTests) · dy `Assembly.Load` në ConventionEnforcementTests → `LoadVerifiedByName`. **DependencyDirection nuk rilexon më MVID-in aktual:** klasifikimi përdor MVID-in e gjeneratës plus një verifikues të ngrirë (`VerifyFrozen`) që thirret në çdo vendim.
 
@@ -121,7 +121,7 @@ Të 19 gjetjet e mbetura i përkasin kodit **të gjeneruar** brenda production a
 
 ## 4b. Correction C3 — kufiri pa escape, guard signature-based, forma reale e hash-it
 
-**§1 — path-i i verifikuar nuk del dot nga kufiri.** C2 ende lejonte
+**§1 — path-i i verifikuar nuk del dot nga kufiri.** **[HISTORICAL / PARTIALLY SUPERSEDED BY C4 §3]** — ky pretendim i C3 u RRËZUA nga dy bypass-e reale: `T=object` që kthen `new FileInfo(path)`, dhe capture i path-it në closure/static/log me side-effect që ndodh PARA post-check-ut. Mbyllja reale erdhi vetëm në C4, me heqjen e vetë API-së që ia jepte path-in kodit arbitrar. Formulimi i C3 ishte: C2 ende lejonte
 `ConsumeVerifiedFrozenTarget(..., verifiedPath => verifiedPath)` dhe konsumim të
 mëvonshëm jashtë tij (post-check kozmetik). Tani: (a) `VerifiedFrozenTargetPath`
 është **private** — asnjë API nuk publikon raw path; (b) kufiri refuzon
@@ -181,6 +181,90 @@ jo-bosh** dhe pretendimi ngushtohet përkatësisht.
 
 ---
 
+## 4c. Correction C4 — heqja e API-së që dorëzonte verified raw path
+
+**Root cause i mbyllur.** C3 ende ekspozonte
+`ConsumeVerifiedFrozenTarget<T>(…, Func<string,T>)`: sapo path-i i verifikuar i
+jepet kodit arbitrar, çdo kontroll runtime mbi `T`/rezultatin është i vonuar.
+Tre bypass-e reale e provuan këtë: (1) `T=object` që kthen `new FileInfo(path)`;
+(2) wrapper/koleksion nested që e ruan path-in; (3) capture i path-it në
+closure/static/log — efekti anësor ka ndodhur **para** post-check-ut. Prandaj C4
+**nuk zgjeroi** `EscapesVerifiedCapabilityType`/`LeaksVerifiedPath` as ndonjë
+deny-list: të dyja u **hoqën si kod i vdekur** dhe u hoq vetë API-ja.
+
+**Kontrata e re.** `VerifiedFrozenTargetPath` mbetet **private**; asnjë anëtar
+non-private i katalogut nuk kthen path/`FileSystemInfo`/`Stream`/delegate, nuk
+pranon delegate që merr verified path, dhe nuk publikon `byte[]` të mutueshëm.
+Konsumatorët punojnë me:
+
+- **`VerifiedAssemblyImage`** — snapshot **deep-immutable**: `AssemblyName`,
+  `ImmutableArray<byte> Bytes`, `Sha256` dhe `Mvid` të ngrira. **Zero path**,
+  zero `FileInfo`, zero `Stream`, zero delegate, zero `byte[]`.
+- **`ReadVerifiedImage(entry[, generation])`** — verify-before → lexim i vetëm →
+  **SHA-256 dhe MVID të llogaritur PIKËRISHT nga ato bajte** dhe të krahasuar me
+  gjeneratën (kap variantin **ABA**) → verify-after → snapshot. Zero temp-copy.
+- **`LoadVerified`** dhe **`MatchesVerifiedTarget`** — operacione të ngushta
+  catalog-owned: hyn kërkesa, del `Assembly` ose `bool`; asnjë path autoritativ
+  nuk del.
+
+Skanerët ENG-006/ENG-007, owner-surface, `RoleMetadataScanner` dhe
+`IdentityStoreIlScanner` kanë tani bërthamë mbi **stream të imazhit**; rruga
+production konsumon `VerifiedAssemblyImage`, ndërsa overload-et me path janë
+riemërtuar shprehimisht `…FixtureFile` dhe lejohen **vetëm** për fixtures
+sintetike/self-assembly.
+
+**Pretendimi i ri, i kufizuar:** *API-ja e mbështetur nuk publikon raw verified
+target path; konsumatorët punojnë mbi snapshot immutable të përmbajtjes së
+verifikuar ose mbi operacione të ngushta catalog-owned.* Nuk pretendohet
+universalitet, "bypass-free", mbulim i reflection-it keqdashës mbi anëtarë
+privatë, as pamundësi e çdo capability-je arbitrare.
+
+**Testet diskriminuese (§4):** API-shape (callback-API inekzistent · verifikues
+primitiv PRIVATE · zero kthim path/`FileSystemInfo`/`Stream`/delegate · zero
+`byte[]` në snapshot · asnjë veti e snapshot-it nuk mbart path) · bypass-et e C3
+të regjistruara si root cause · integriteti i snapshot-it (SHA-only, MVID-only,
+mtime-only, outsider/tampered, **ABA mbi seam-in `VerifyImageBytes`**, gjeneratë
+e helmuar → leximi nuk fillon) · deep-immutability + **32 konsumatorë paralelë**
+me identitet/rezultat identik · **parity i 5 skanerëve** snapshot ↔ fixture-file
+mbi të njëjtin binar · completeness (asnjë call-site fixture nuk ndodhet në një
+metodë që lexon `CanonicalTargetPath`) · rendi EKZAKT verify→read→verify dhe
+verify→load→verify mbi IL.
+
+**Provat RED (5, të izoluara; rikthime edit-forward byte-identike; zero RED i commit-uar):**
+
+| Guard i hequr / shkelje e futur | RED |
+|---|---|
+| rikthim sintetik i një API-je me `Func<string,T>` | **2** (API-shape + bypass-surface) |
+| verifikuesi primitiv i kthyer në `internal` | **1** |
+| kontrolli SHA/MVID mbi bajtet e lexuara | **1** (ABA) |
+| post-check-u i `ReadVerifiedImage` | **1** (rendi EKZAKT) |
+| konsumator production përmes overload-it fixture | **1** |
+
+**§4H:** fixture-i `unreadable-method-signature` aserton `Kind`,
+`DeclaringType`, `Member`, `Assembly` dhe **`Reason` me semantikë stabile**;
+`Detail` mbart emrin e tipit të përjashtimit të BCL-së, prandaj asertohet vetëm
+si jo-bosh — testi nuk lidhet me emrin ekzakt të atij tipi.
+
+**Performanca (mediana, komanda identike me baseline-in):** ArchitectureTests
+**58s → 58s** · ENG-006 **18s → 16s** · ENG-008 **16s → 16s** · cold-process
+**58s → 59.5s**. Zero rritje >20%; asnjë kontroll nuk u hoq për shpejtësi.
+
+**Ratifikim i ngushtë i Pronarit:**
+`HG-PR30-C4-DEPENDENCY-DIRECTION-SCOPE-RATIFICATION` — mbulon vetëm deltën e C3
+dhe përshtatjet e domosdoshme të C4 në `DependencyDirectionTests.cs`, sepse ai
+file është konsumator i autoritetit të katalogut dhe duhej përshtatur kur raw
+path/MVID u zëvendësuan me snapshot/predikat catalog-owned. Nuk autorizon
+production code, dependency, migration, workflow, B.2/B.3 apo refactor tjetër;
+nuk krijon precedent dhe nuk dobëson PROJECT_RULES.
+
+**Devijim procedural i regjistruar:** në momentin e nisjes së C4, `PlatformProjectCatalog.cs`
+kishte tashmë një ndryshim tracked të pakomituar (puna e nisur e C4 para një
+ndalese të Pronarit); meqë `checkout/restore/reset` janë të ndaluar, C4 vazhdoi
+**forward** mbi atë gjendje. Baseline-i para-C4 u mat në një **worktree të
+izoluar** te `98196f4` (jo-destruktive), jo nga pemja e punës.
+
+---
+
 ## 5. Fixtures dhe mapping fix → fixture → RED → GREEN
 
 **RED (kapen me kind + declaring type + anëtar ekzakt + assembly + metodë burimore + arsye):** PoC-i historik `Type.GetType` me emër të ndërtuar në runtime · `GetType→GetProperty→GetValue` · `Assembly.Load→GetType→Activator.CreateInstance` · `GetMethod→Invoke` · `Type.InvokeMember` · `PropertyInfo.GetValue/SetValue` · `FieldInfo.GetValue/SetValue` · `MakeGenericType`/`MakeGenericMethod` · `Delegate.DynamicInvoke`/`CreateDelegate` · `dynamic` me emetim REAL `Binder.InvokeMember` + `CallSite\`1.Create` (+ `CallSite\`1.Target` si UNKNOWN) · `IServiceProvider.GetService(Type)` dhe `GetRequiredService(Type)` · atribuim i një metode `async` te metoda BURIMORE · assembly jo-PE = fail-closed · escape hatch publik i owner-it.
@@ -222,8 +306,8 @@ jo-bosh** dhe pretendimi ngushtohet përkatësisht.
 
 - `dotnet build src/platform/Idata.Platform.slnx` → **0 warnings, 0 errors**;
 - baseline mekanik para editimit: **178/178**;
-- pas increment-it: **237/237** ×3; C1: **262/262**; C2: **270/270**; pas **correction C3: 277/277, zero skip**, **tri ekzekutime radhazi** (+7 teste C3), plus **dy cold-run** të ftohta 277/277;
-- targeted (të rimatura pas C3): ENG-008 **30/30**, ENG-006 **69/69** (pas C2: 27/65; para C2: 21/63; para C1: 12/47);
+- pas increment-it: **237/237** ×3; C1 **262/262**; C2 **270/270**; C3 **277/277**; pas **correction C4: 282/282, zero skip**, **tri ekzekutime radhazi** (+5 teste C4), plus **dy cold-run** 282/282;
+- targeted (të rimatura pas C4): ENG-008 **35/35**, ENG-006 **69/69** (pas C3: 30/69; pas C2: 27/65; para C1: 12/47);
 - permutime me **seed-e fikse 1337 / 20260803 / 42** → rezultate identike, e njëjta gjeneratë;
 - disk: min **6.69 GiB**, max **6.78 GiB** (kurrë nën 2.0 GiB; zero ENOSPC).
 
