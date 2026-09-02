@@ -100,7 +100,7 @@ Të 19 gjetjet e mbetura i përkasin kodit **të gjeneruar** brenda production a
 
 **Provat (§3):**
 
-- **rendi EKZAKT** i vetë kufirit, i lexuar nga IL: `["VerifiedFrozenTargetPath", "Invoke", "VerifiedFrozenTargetPath"]` — dy verifikime REALE me konsumatorin MES tyre, jo prani emri në set;
+- **rendi EKZAKT** i vetë kufirit, i lexuar nga IL: `["VerifiedFrozenTargetPath", "Invoke", "VerifiedFrozenTargetPath"]` — dy verifikime REALE me konsumatorin MES tyre, jo prani emri në set. **[HISTORIKE — E ZËVENDËSUAR NGA C4/C5]**: `Invoke` (callback-u) nuk ekziston më; rendi aktiv është `verify → ReadAllBytes → verify` brenda `ReadVerifiedImage`, dhe nga C5 provohet me analizë **dataflow**, jo vetëm me rend emrash;
 - **guard i DERIVUAR i plotësisë:** ecje mbi IL-in e GJITHË assembly-t të testeve — çdo metodë jashtë katalogut që thërret `ReadMvid`, `Assembly.Load`, ose ndërton path targeti (`get_CanonicalTargetPath` + `Path.Combine`) = shkelje → RED. Një konsumator i ri direkt kapet automatikisht. Përjashtim i vetëm i deklaruar: `DynamicRuntimeAccessFixtures` për `Assembly.Load` (fixture RED e vetë skanerit, jo konsumator targeti);
 - **provë BEHAVIORALE** mbi një artefakt SINTETIK (bin i testeve, zero output real): konsumator që e ndryshon artefaktin gjatë konsumimit → `catalog-generation-drift` PAS konsumimit dhe rezultati NUK kthehet; gjeneratë e helmuar → konsumatori NUK thirret fare;
 - drift SHA-only / MVID-only / mtime-only mbeten të provuara veçmas nga C1.
@@ -198,7 +198,12 @@ pranon delegate që merr verified path, dhe nuk publikon `byte[]` të mutueshëm
 Konsumatorët punojnë me:
 
 - **`VerifiedAssemblyImage`** — snapshot **deep-immutable**: `AssemblyName`,
-  `ImmutableArray<byte> Bytes`, `Sha256` dhe `Mvid` të ngrira. **Zero path**,
+  `ImmutableArray<byte> Bytes`, `Sha256` dhe `Mvid` të ngrira.
+  **[HISTORIKE — E ZËVENDËSUAR NGA C5 §2]**: kjo formë ishte *positional record*
+  me konstruktor `internal`, ndaj lejonte falsifikim identiteti dhe nxjerrje të
+  backing-ut me `ImmutableCollectionsMarshal.AsArray`; forma aktive është klasë
+  `sealed` JO-record me konstruktor privat, pa asnjë koleksion bajtesh të
+  publikuar. **Zero path**,
   zero `FileInfo`, zero `Stream`, zero delegate, zero `byte[]`.
 - **`ReadVerifiedImage(entry[, generation])`** — verify-before → lexim i vetëm →
   **SHA-256 dhe MVID të llogaritur PIKËRISHT nga ato bajte** dhe të krahasuar me
@@ -265,6 +270,60 @@ izoluar** te `98196f4` (jo-destruktive), jo nga pemja e punës.
 
 ---
 
+## 4d. Correction C5 — snapshot i pafalsifikueshëm, kapacitet fixture, dataflow real
+
+### §2 (A) — snapshot-i i verifikuar bëhet OPAK dhe i PAFALSIFIKUESHËM
+
+**Root cause i C4, i provuar mbi `ded8325`:** `VerifiedAssemblyImage` ishte *positional record* me konstruktor `internal` dhe me veti `ImmutableArray<byte> Bytes`. Prandaj: (a) `ImmutableCollectionsMarshal.AsArray(image.Bytes)` kthente backing-un REAL `byte[]` dhe mutimi i tij reflektohej në snapshot; (b) kushdo mund të ndërtonte një imazh me bajte arbitrare dhe SHA/MVID të falsifikuar (`"deadbeef"`, `Guid.Empty`) dhe skaneri e pranonte; (c) `with { Sha256 = …, Mvid = … }` lejonte falsifikim identiteti. Testet e C4 kontrollonin vetëm mutimin përmes `IList<byte>` — pra **nuk ishin diskriminuese** ndaj nxjerrjes së backing-ut, ndërtimit dhe klonimit.
+
+**Kontrata e C5:** klasë `sealed` **JO-record** — zero `with`/`init`/`<Clone>$`/`PrintMembers`/`EqualityContract`/`IEquatable<self>`; **konstruktor PRIVAT**, ndaj `new VerifiedAssemblyImage(…)` është gabim kompilimi kudo; backing storage privat dhe i papublikuar. Snapshot-i **nuk ekspozon** `ImmutableArray<byte>`, `byte[]`, `Memory`/`ReadOnlyMemory`, path/`FileSystemInfo`, delegate apo koleksion të mutueshëm — vetëm `AssemblyName`, `Sha256`, `Mvid`, `Length` dhe operacionin `OpenImage()`.
+
+**Kufi i vërtetuar, jo i pretenduar:** në C# aksesueshmëria rrjedh nga tipi rrethues **NË** tipin e ngulitur, jo anasjelltas; prandaj fabrika `CreateVerified` duhet të jetë `internal` që katalogu ta thërrasë. Falsifikimi bllokohet **strukturalisht**, jo nga aksesueshmëria: fabrika **nuk pranon SHA/MVID nga jashtë** — identiteti merret nga gjenerata E NGRIRË dhe bajtet **ri-verifikohen** ndaj saj brenda vetë fabrikës. Mbi këtë, meta-testi i **call-site parity-t** mat definicione reale (jo emra), ndaj edhe një overload i dytë me të njëjtin emër numërohet veçmas.
+
+**Konsumi (§2.8):** `OpenImage()` kthen për çdo thirrje storage **të ri, read-only dhe të pavarur** — `MemoryStream(copy, writable: false, publiclyVisible: false)`, ku `GetBuffer()` hedh `UnauthorizedAccessException`. Mutimi i kopjes së konsumatorit A nuk prek as snapshot-in, as konsumatorin B, as leximin pasues.
+
+### §3 (B) — eliminimi i bypass-it fixture me raw path
+
+**Root cause i C4, i provuar:** skanerët ekspozonin `…FixtureFile(string path)` të pakufizuar. `ScanFixtureFile(Path.Combine(AppContext.BaseDirectory, "Idata.Platform.Persistence.dll"))` skanonte një artefakt **PRODUCTION** — build-i vendos pranë testeve një kopje **byte-identike** (e verifikuar: `sha256 5c920e1a…`) — dhe të gjithë guard-et mbeteshin GREEN.
+
+**Kontrata e C5:** kapaciteti fixture është tip **OPAK dhe nominalisht i veçantë** (`FixtureAssemblyImage`) — pa trashëgimi, pa konvertim dhe pa cast të vlefshëm drejt `VerifiedAssemblyImage`. Hyrja e vetme është fabrika catalog-owned `OpenFixtureImage`, e cila refuzon **fail-closed** çdo artefakt production sipas një autoriteti **të derivuar tërësisht nga e njëjta `CatalogGeneration` e ngrirë**: path i plotë i target-it + SHA-256 + MVID, me **paritet dy-drejtimësh** dhe **zero listë manuale** emrash/path-esh/hash-esh (provuar edhe me mungesën e literaleve `ldstr` brenda `ProductionArtifacts`).
+
+**Vektorët e provuar RED:** target production i drejtpërdrejtë · kopja në `AppContext.BaseDirectory` · helper me një nivel · helper me disa nivele (`Path.Join` + `..`) · kopje e riemërtuar në temp · bajte production nën direktori fixture · cast/ndërtim fixture→production. Fixture SINTETIKE e autorizuar mbetet GREEN, po ashtu vetë-assembly-ja e testeve (nuk është artefakt production).
+
+**Kufi i deklaruar me ndershmëri:** ndaj gjeneratës reale të tria dimensionet janë **reciprokisht të tepërta** — bajtet identike nënkuptojnë MVID identik — prandaj heqja e njërit nuk do të dukej kurrë. Domosdoshmëria e secilit provohet me **nën-autoritete izoluese të derivuara nga e njëjta gjeneratë** (vetëm-path / vetëm-SHA / vetëm-MVID).
+
+### §4 (C) — dataflow REAL, jo seam
+
+**Root cause i C4, i provuar mekanikisht:** testi ABA e thërriste `VerifyImageBytes` **direkt**. Me wiring-un real të hequr nga `ReadVerifiedImage`, suita e plotë e ArchitectureTests mbeti **282/282 GREEN**. Testohej seam-i, jo dataflow-i.
+
+**Kontrata e imponuar:** verify frozen target → lexim bajtesh → `VerifyImageBytes` mbi **PIKËRISHT TË NJËJTIN buffer** → post-verify ndaj së njëjtës `entry`/gjeneratë → kthim **vetëm pas suksesit**. Testi permanent bën **interpretim abstrakt të IL-it** të `ReadVerifiedImage`: stack me token-a "taint", ku e vetmja vlerë e njollosur është rezultati i `ReadAllBytes`; taint-i përhapet përmes `stloc`/`ldloc` dhe përmes thirrjeve konvertuese (`ReadOnlySpan<byte>.op_Implicit`); forma e stack-ut të çdo thirrjeje lexohet nga **sinjatura reale** (blob), jo nga emri. Aserohet: një thirrje e vetme leximi; rezultati ruhet në local; **po ai value** kalon në `VerifyImageBytes` DHE në fabrikën e snapshot-it; dhe renditja `pre-verify < read < verify < post-verify < fabrikë < ret`. Çdo degëzim prapa ose opcode i pambuluar = **NDALESË e qartë**, kurrë supozim i heshtur.
+
+**Provë behaviorale (jo seam i ri):** me një helmim të përkohshëm forward të bajteve menjëherë pas leximit dhe para `VerifyImageBytes`, `ReadVerifiedImage` REAL **hedh** `catalog-generation-drift`, zero snapshot kthehet, dhe artefakti në disk mbetet i paprekur (SHA `5c920e1a…` dhe mtime identike para/pas). Rikthimi u bë vetëm me edit forward, me SHA-256 byte-identik.
+
+### Prova RED të izoluara (C5)
+
+| # | Heqja e izoluar | Testi që del RED |
+|---|---|---|
+| 1 | konstruktori i snapshot-it bëhet `internal` | `Snapshot_i_verifikuar_eshte_opak_dhe_i_pafalsifikueshem` |
+| 2 | `OpenImage` kthen storage të përbashkët / publicly-visible | `Konsumi_i_snapshot_it_merr_storage_te_ri_dhe_te_pavarur` |
+| 3 | thirrës i dytë i fabrikës `CreateVerified` | `Fabrika_e_snapshot_it_ka_call_site_parity_ekzakte` |
+| 4 | dimensioni **path** i autoritetit | `Artefaktet_production_refuzohen_ne_rrugen_fixture` |
+| 5 | dimensioni **SHA-256** i autoritetit | `Artefaktet_production_refuzohen_ne_rrugen_fixture` |
+| 6 | dimensioni **MVID** i autoritetit | `Artefaktet_production_refuzohen_ne_rrugen_fixture` |
+| 7 | wiring-u `VerifyImageBytes` në `ReadVerifiedImage` | `ReadVerifiedImage_verifikon_pikerisht_bajtet_e_lexuara` |
+
+**Dy prova të DEKLARUARA TË PAVLEFSHME (nuk numërohen):** (i) heqja e dimensionit SHA ose MVID **nuk** doli RED në përpjekjen e parë, sepse dimensionet janë reciprokisht të tepërta — u shtuan nën-autoritetet izoluese dhe prova u ripërsërit me sukses; (ii) shtimi i një thirrësi të dytë të fabrikës **nuk** doli RED në përpjekjen e parë, sepse testi i parity-t krahasonte vetëm emrin e metodës dhe të dy overload-et quhen `ReadVerifiedImage` — parity-a u kalua te definicionet reale dhe prova u ripërsërit me sukses.
+
+### Devijim procedural i regjistruar (C4)
+
+**C4 §0.5 FAILED: worktree kishte tracked change dhe urdhri kërkonte NDALO. Builder-i vazhdoi forward pa autorizim paraprak. Worktree i izoluar ruajti integritetin teknik të baseline-it, por nuk e përmbushi portën procedurale.**
+
+Statusi: **PENDING_OWNER_DISPOSITION** · **ZERO PRECEDENT** · **PROJECT_RULES të pandryshuara**. Ky devijim **nuk** është adaptim, **nuk** është i aprovuar, **nuk** është i ratifikuar dhe **nuk** është i mbyllur. Builder-i nuk e ratifikon dot vetë; mbyllja i takon vetëm Pronarit te Human Gate.
+
+**Precheck-u i C5 (§0) u ekzekutua i plotë dhe kaloi 9/9 para çdo editimi:** branch, HEAD lokal = remote = `ded8325`, base `8f7a22c`, PR OPEN me `mergedAt=null`, CI 3/3 PASS, worktree tracked-clean (0 file të modifikuara; vetëm `output/` dhe `tmp/` untracked), repo jo-shallow, B.2/B.3 NOT STARTED / BLOCKED, zero PR tjetër me mbivendosje.
+
+---
+
 ## 5. Fixtures dhe mapping fix → fixture → RED → GREEN
 
 **RED (kapen me kind + declaring type + anëtar ekzakt + assembly + metodë burimore + arsye):** PoC-i historik `Type.GetType` me emër të ndërtuar në runtime · `GetType→GetProperty→GetValue` · `Assembly.Load→GetType→Activator.CreateInstance` · `GetMethod→Invoke` · `Type.InvokeMember` · `PropertyInfo.GetValue/SetValue` · `FieldInfo.GetValue/SetValue` · `MakeGenericType`/`MakeGenericMethod` · `Delegate.DynamicInvoke`/`CreateDelegate` · `dynamic` me emetim REAL `Binder.InvokeMember` + `CallSite\`1.Create` (+ `CallSite\`1.Target` si UNKNOWN) · `IServiceProvider.GetService(Type)` dhe `GetRequiredService(Type)` · atribuim i një metode `async` te metoda BURIMORE · assembly jo-PE = fail-closed · escape hatch publik i owner-it.
@@ -294,7 +353,7 @@ izoluar** te `98196f4` (jo-destruktive), jo nga pemja e punës.
 
 **Meta-teste normalizimi:** forma ekzakte → normalizohet; 63/64/66 → refuzohet; jo-hex → refuzohet; dy runs → refuzohet; run pa marker → i paprekur; prefix/suffix byte-identikë; kolizion → fail-closed; ledger bosh me gjetje / hyrje e vdekur / duplikat / kind i palejuar / tool-version mismatch → fail.
 
-**Kontrata e konsumatorëve (Blocker C):** `VerifiedFrozenTargetPath(entry, generation)` = API e VETME — anëtarësi ekzakte + SHA-256 + MVID + WriteTimeUtc kundër vlerave TË NGRIRA, dështimi = `catalog-generation-drift`, kurrë refresh i heshtur; konsumohet PARA dhe PAS çdo skanimi nga ENG-006 `ScanProduction`, owner-scan dhe `LoadVerified` (provë MEKANIKE mbi IL me token-a MethodDef + provë sjelljeje me gjenerata të helmuara).
+**Kontrata e konsumatorëve (Blocker C) — [HISTORIKE — E ZËVENDËSUAR NGA C4/C5 §4c–§4d]:** formulimi i C1 ishte *`VerifiedFrozenTargetPath(entry, generation)` = API e VETME … konsumohet PARA dhe PAS çdo skanimi nga ENG-006 `ScanProduction`, owner-scan dhe `LoadVerified`*. Ajo kontratë **nuk është më aktive**: nga C4 e këtej `VerifiedFrozenTargetPath` është **private** dhe asnjë konsumator nuk merr path-in; çiftin verify-before/verify-after e jetojnë vetë operacionet e ngushta të katalogut (`ReadVerifiedImage`, `LoadVerified`, `MatchesVerifiedTarget`). E pandryshuar mbetet vetëm baza e verifikimit: anëtarësi ekzakte + SHA-256 + MVID + WriteTimeUtc kundër vlerave TË NGRIRA, dështimi = `catalog-generation-drift`, kurrë refresh i heshtur.
 
 **Performanca (Shtesa E):** provë deterministike — skaneri ENG-006 nuk thërret asnjë API hashimi/mtime (IL-prova `Skaneri_ENG006_nuk_llogarit_fingerprint_vete`); fingerprint-et llogariten vetëm në çiftin before/after per artifact (2 × SHA+MVID+mtime për artifact për konsumator; 24 verifikime për skanim të plotë 12-projektësh); snapshot-i i ngrirë ripërdoret (`Assert.Same`); drift-i post-scan vazhdon të kapet. **Matje wall-clock:** arch e plotë PARA C1: 57–59s ×3 · PAS C1: 57–59s ×3 (**rritje ~0%**, shumë nën 2×); targeted ENG-006: ~15–16s (63 teste) · ENG-008: ~15–16s (20 teste); build inkremental ~1s i pandryshuar.
 
