@@ -1,11 +1,13 @@
 # Dynamic Reflection Boundary & Deterministic Harness — Implementation Record (ENG-006 + ENG-008, Pre-B2 Increment 2)
 
-**Statusi:** **IMPLEMENTED / PENDING_INDEPENDENT_REVIEW** — të dyja kufijtë ekzistojnë dhe imponohen në ArchitectureTests/CI në **PR #30** (branch `feat/f1-eng006-eng008-preb2-boundary`), **NOT MERGED**.
+**Statusi:** **COMPLETED / MERGED** — *PR #30 u MERGE-ua me merge commit `8d3aa85ddefde74f8999d801f03dd2fac974cfe4`, 02.09.2026, pas Fable delta-review → Codex review → Human Gate (correction passes C1–C7 të mbyllura brenda PR-së)*. Të dyja kufijtë ekzistojnë dhe imponohen në ArchitectureTests/CI në `main`.
 
-- **`ENG-006` = OPEN / IMPLEMENTATION IN THIS PR / PENDING_INDEPENDENT_REVIEW** — kufi **SIGURIE**.
-- **`ENG-008` = OPEN / IMPLEMENTATION IN THIS PR / PENDING_INDEPENDENT_REVIEW** — kufi **BESUESHMËRIE / evidence-harness**; **NUK është bypass production i provuar**.
+- **`ENG-006` = CLOSED / COMPLETED / MERGED** — kufi **SIGURIE**.
+- **`ENG-008` = CLOSED / COMPLETED / MERGED** — kufi **BESUESHMËRIE / evidence-harness**; **NUK është bypass production i provuar**.
 
-Mbyllja formale kërkon Fable delta-review → Codex review → Human Gate i Pronarit → merge.
+**Pointer post-merge (02.09.2026):** hapi aktual = **F1 Increment B.2a — Co-located OpenIddict Authority, Credentials and Local Token Validation** (Record i vet: `Identity_Authority_Credentials_Validation_B2a_Record.md`); rendi i delivery-t = PLANET-FIRST (ADR-030 PROPOSED); shared core product-neutral. **Dispozicioni i Pronarit (Human Gate i PR #30)** për devijimin procedural C4 §0.5 (§4d) dhe zgjerimin procedural 2→3 file të C6 (§4e): **`RECORDED / ZERO PRECEDENT / NOT A GENERAL WAIVER`** — nuk është precedent dhe nuk u ratifikua nga builder-i. **Kufiri CURRENT i threat model-it të harness-it = PM_REVIEW_PROTOCOL §8 (formulimi FINAL, owner-directed 02.09.2026)** — shih §4f: formulimi i C7 = HISTORICAL/SUPERSEDED.
+
+*(Historik: statusi i branch-it para merge-it ishte IMPLEMENTED / PENDING_INDEPENDENT_REVIEW — mbyllja kërkoi Fable delta-review → Codex review → Human Gate i Pronarit → merge.)*
 **Autoriteti:** `ENG-006` (Tracker, 29.07.2026) + `ENG-008` (Tracker, 02.08.2026) + ADR-028/ADR-029.
 **Data:** 03.08.2026 · **Baza:** `main` = `8f7a22c` (PR #29 MERGED; ENG-007 = CLOSED).
 
@@ -389,13 +391,15 @@ Scope i kufizuar: vetëm root cause-i i riprodhuar nga Codex mbi C6. Zero audit 
 
 Mbi `49cc110` PoC-ja dhe meta-testi do të dilnin RED (backing live). Prova removal e izoluar: getter-i i `Projects` u kthye përkohësisht te live backing → **të tre** testet C7 RED → rikthim vetëm me edit forward → SHA byte-identik (`3cc4546d…`). Zero RED i commit-uar. Dy defekte të **testit** u gjetën dhe u ndrequn para GREEN-it (runtime-i i `FrozenDictionary`/`FrozenSet` është nënklasë interne; sekuencat bosh janë singleton) — të deklaruara, jo të numëruara si prova.
 
-### Kufiri i threat model-it të harness-it
+### Kufiri i threat model-it të harness-it — formulimi FINAL (CURRENT, owner-directed 02.09.2026; autoriteti = PM_REVIEW_PROTOCOL §8)
 
-**Jashtë modelit:** sabotimi i qëllimshëm nga dikush me write access që fshin/dobëson testin; reflection mbi private fields/methods; patching runtime ose ndryshim arbitrar i binarit të testit.
+**BLOCKING:** (1) çdo rrugë e arritshme nga `src/`, output production i gjeneruar ose konsumator non-test, që anashkalon një kontroll, ndryshon autoritetin ose mint-on një capability të mbrojtur; (2) një rrugë brenda test harness-it VETËM kur provohet mbi dataflow-n aktual të commit-uar se, pa ndryshuar/fshirë testin, mund ta bëjë false-GREEN një guard të detyrueshëm të acceptance-it aktual, ta helmojë autoritetin e evidencës aktuale, ta anashkalojë middleware-in real, ose ta bëjë testin seam-only/jo-diskriminues. BCL/API-të (përfshirë `ImmutableCollectionsMarshal.AsArray`) klasifikohen sipas **efektit real** mbi runtime/evidence, jo vetëm sipas pranisë.
 
-**Brenda modelit dhe BLOCKING:** çdo API public/internal/non-private e harness-it; BCL API normale si `ImmutableCollectionsMarshal.AsArray`; mutation/capability që mund të ndodhë pa reflection/private access; keqpërdorim aksidental nga fixtures, helpers ose teste të ardhshme; çdo rrugë që ndryshon vendimet autoritative të guard-it.
+**FOLLOW-UP, jo blocking:** dobësi test-only që kërkon shtim/ndryshim të një testi/helper-i të ri; zero production reachability; zero rrugë në acceptance dataflow aktual; zero ndikim mbi evidencën aktuale.
 
-Pas C7, vetëm gjetjet që kërkojnë sabotim të qëllimshëm, reflection mbi private state ose fshirje/dobësim të testit kalojnë si follow-up jo-bllokues. Ky kufi **nuk** përdoret për të përjashtuar bypass-e përmes API-ve non-private.
+**JASHTË threat model-it:** fshirja/dobësimi i qëllimshëm i testeve; sabotim me write access mbi test assembly; reflection keqdashës mbi private fields/methods; runtime patching; ndryshim arbitrar i binarit të testit. **Një gjetje nuk bëhet blocking vetëm sepse një test keqdashës mund të shkruhet në të ardhmen.**
+
+**[HISTORICAL / SUPERSEDED nga formulimi FINAL më lart]** *Formulimi i C7 ishte: Jashtë modelit — sabotimi i qëllimshëm me write access; reflection mbi private fields/methods; patching runtime ose ndryshim arbitrar i binarit. Brenda modelit dhe BLOCKING — çdo API public/internal/non-private e harness-it; BCL API normale si `ImmutableCollectionsMarshal.AsArray`; mutation/capability që mund të ndodhë pa reflection/private access; keqpërdorim aksidental nga fixtures, helpers ose teste të ardhshme; çdo rrugë që ndryshon vendimet autoritative të guard-it. Pas C7, vetëm gjetjet që kërkojnë sabotim të qëllimshëm, reflection mbi private state ose fshirje/dobësim të testit kalojnë si follow-up jo-bllokues.* Ndryshimi thelbësor: klasifikimi i rrugëve test-side bëhet sipas **efektit të provuar mbi dataflow-n aktual** (false-GREEN / helmim autoriteti / bypass middleware / seam-only), jo sipas pranisë së një API-je non-private.
 
 **Counts (sipas §8, një run pas build-it të freskët):** targeted C7 **3/3** · ENG-006 **69/69** · ENG-008 **47/47** · ArchitectureTests **294/294, zero skip** (71 s).
 
@@ -468,12 +472,12 @@ Hiqen file-at e rinj të testeve (`CatalogGenerationStabilityTests.cs`, `Dynamic
 
 ## 9. Gates / risqe OPEN
 
-- **`ENG-006` = OPEN** (implementim në këtë PR, pending independent review + Human Gate).
-- **`ENG-008` = OPEN** (implementim në këtë PR) — kufi besueshmërie, **jo** bypass production i provuar.
+- **`ENG-006` = CLOSED / COMPLETED / MERGED** (PR #30 `8d3aa85`, 02.09.2026).
+- **`ENG-008` = CLOSED / COMPLETED / MERGED** (PR #30 `8d3aa85`) — kufi besueshmërie, **jo** bypass production i provuar.
 - **`ENG-007` = CLOSED / MERGED** (`8f7a22c`) — threat boundary-t e tij të pandryshuara.
 - **`ADR-026` = OPEN**; **DB-level isolation = NOT IMPLEMENTED**; policy/analyzer **≠** DB-level isolation.
 - `ADR-025`/`ADR-027` OPEN · `ENG-004` fallback AKTIV · `ENG-005` OPEN.
 - **Follow-up:** reflection i kodit të gjeneruar brenda assembly-ve (§4).
-- **B.2 / B.3 = NOT STARTED / BLOCKED**; Step B/C, SEF/ATK, PREFLIGHT, Tier 2 = NO-GO; **production Go = BLOCKED**.
+- **B.2 = ACTIVE / NOT COMPLETE (B.2a CURRENT); B.3 = NOT STARTED / BLOCKED**; Step B/C, SEF/ATK, PREFLIGHT, Tier 2 = NO-GO; **production Go = BLOCKED**.
 
-**Radha:** Fable delta-review → Codex PM/architecture/security review → Human Gate i Pronarit → merge vetëm me autorizim të ri → Notion + Slack pas merge-it → vetëm pastaj, me goal/prompt të ri, B.2.
+**Radha (e ekzekutuar):** Fable delta-review → Codex PM/architecture/security review → Human Gate i Pronarit → **merge `8d3aa85` (02.09.2026)** → hapi pasues me goal/prompt të ri = **B.2a** (PLANET-first rebaseline docs-first + OpenIddict authority co-located).

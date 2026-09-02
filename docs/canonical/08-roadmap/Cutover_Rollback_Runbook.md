@@ -1,6 +1,6 @@
 # iData+ — Cutover & Rollback Runbook
 
-**Status:** Draft PM/Architecture v0.3 për review · **Data:** 2026-07-07 · **Përditësuar:** 2026-07-10 (§3.1 legacy custody + ndarja custody↔ADR-023 në Go/No-Go/rollback/evidence)
+**Status:** Draft PM/Architecture v0.4 për review · **Data:** 2026-07-07 · **Përditësuar:** 2026-09-02 (§1.6 kufiri i pilotit PLANET-first sipas ADR-030 PROPOSED; klasifikimi i rollout-it te §6) · *(v0.3, 2026-07-10: §3.1 legacy custody + ndarja custody↔ADR-023 në Go/No-Go/rollback/evidence)*
 
 **Qëllimi:** të përcaktojë si kalohet nga PRO DATA / proceset ekzistuese në iData+ pa humbur kontroll financiar, fiskal, stok apo operativ.
 
@@ -8,12 +8,27 @@
 
 ## 1. Parimet e cutover-it
 
-1. **Cutover i pastër më 2027-01-01** është objektivi planifikues.
+1. **[HISTORICAL / SUPERSEDED nga ADR-030 — vetëm data]** *Cutover i pastër më 2027-01-01 është objektivi planifikues.* **CURRENT (PLANET-FIRST, ADR-030 PROPOSED / OWNER-DIRECTED / PENDING_INDEPENDENT_REVIEW, 02.09.2026):** PLANET operational-ready deri më **2026-12-31** → **JANUARY 2027 CONTROLLED PILOT** (parallel-run me sistemin ekzistues si source-of-record/fallback) → source-of-record cutover = **TBD — HUMAN GO/NO-GO AFTER JANUARY PILOT EVIDENCE**; KABI pas pranimit/stabilizimit të PLANET-it. Cutover-i mbetet **i pastër** (parimet 2–6 të pandryshuara).
 2. **Nuk migrohet historiku transaksional.** Migrohen master-data dhe saldo hapëse.
 3. **PRO DATA mbetet golden reference baseline** deri në go-live final dhe gjatë parallel run.
 4. **Nëse nuk rakordon, nuk kalon.** Nuk bëjmë “hajt se e rregullojmë pas live”.
 5. **Rollback është i planifikuar, jo panik.** Çdo fazë ka kriter kur kthehemi në fallback.
 6. **Asnjë sekret ose data private në docs publike.** Evidence me vlera reale rri private-local.
+
+### 1.6 Kufiri i pilotit të janarit 2027 (PLANET-first, ADR-030) — pesë gjendje TË NDARA
+
+| Gjendja | Kuptimi | Çfarë NUK do të thotë |
+|---|---|---|
+| **implementation complete** | increment-i/faza ka evidencë të ekzekutuar + review + Human Gate + merge | jo operational-ready; jo pilot |
+| **operational-ready** (`OPERATIONAL_READY_FOR_CONTROLLED_PILOT`, cak 2026-12-31) | shared foundation + PLANET MVP i autorizuar + readiness teknike/operative (hardware në vend, trajnim, DR drill, UAT critical PASS, rollback owner) | **jo** `PRODUCTION_READY`, **jo** `SOURCE_OF_RECORD`, **jo** GA, **jo** certifikim fiskal, **jo** autorizim automatik për data reale |
+| **controlled pilot** (janar 2027) | parallel-run me përdorues realë, workflows/punë reale, audit, reconciliation ditore, fallback/rollback aktiv; **sistemi ekzistues = source-of-record/fallback** | jo cutover; dokumentet ligjore/fiskale reale vijnë nga sistemi ekzistues, përveç kur gates + Pronari autorizojnë ndryshe |
+| **source-of-record cutover** (data = TBD, Human Go/No-Go pas evidencës së pilotit) | iData+ bëhet source-of-record për scope-in e aprovuar; saldo hapëse të nënshkruara; §6 Go PASS | jo GA për module jashtë scope-it |
+| **general availability** | operim i plotë sipas F10 + hypercare i mbyllur + handover | — |
+
+**Data reale ose dokumente fiskale reale në pilot lejohen VETËM kur** gates përkatëse janë **PASS** — privacy (`PRIV-001`), encryption/key custody (`ADR-025`), hosting/secrets (`ADR-026`), access (F1 Identity/RBAC), backup/restore (product DR `ADR-023` + legacy custody §3.1) dhe compliance (SEF/ATK për çdo dokument fiskal real) — **dhe Pronari i autorizon shprehimisht**. Klasifikimi i rollout-it të parë (Tracker/Roadmap §2): `PLANET_PILOT_BLOCKER` · `KABI_LIVE_BLOCKER` · `NON_BLOCKER_FIRST_ROLLOUT`.
+
+**Dështimi i një gate-i kritik gjatë pilotit:** mban sistemin ekzistues source-of-record · mban fallback-un aktiv · **shtyn cutover-in** · **nuk ndryshon automatikisht datën në një datë tjetër të sajuar** — data e re vendoset vetëm nga Pronari me Human Go/No-Go (`OVERDUE / DATE REBASELINE REQUIRED / OWNER`).
+
 
 ---
 
@@ -83,9 +98,9 @@ Burimi historik (backup-i PRO DATA) duhet të mbetet i rikthyeshëm deri në cut
 
 ---
 
-## 5. Parallel Run — Dhjetor
+## 5. Parallel Run — ~~Dhjetor~~ **CURRENT: janar 2027 (controlled pilot i PLANET-it, ADR-030); dhjetori = readiness/rehearsal**
 
-Parallel run nuk është demo; është prova financiare/operative.
+Parallel run nuk është demo; është prova financiare/operative. Gjatë tij **sistemi ekzistues mbetet source-of-record/fallback** (§1.6).
 
 ### Çdo ditë krahasohen
 
@@ -119,7 +134,7 @@ Parallel run nuk është demo; është prova financiare/operative.
 
 - SEF/certifikimi i kërkuar është i kryer për scope-in live.
 - **(A) Legacy PRO DATA custody PASS:** `.bak` autoritativ + kopje e dytë e enkriptuar + hash manifest + **isolated legacy restore drill** (evidence private e Pronarit).
-- **(B) iData+ product DR PASS (ADR-023):** PITR + backup + **restore drill i produktit të ri**.
+- **(B) iData+ product DR PASS (ADR-023):** PITR + backup + **restore drill i produktit të ri** — rollout i parë: **`PLANET_PILOT_BLOCKER`** (para pilotit me të dhëna reale).
 - *(A dhe B janë kontrolle TË NDARA — një PASS nuk e maskon tjetrin.)*
 - Opening balances janë nënshkruar.
 - Accounting books dhe VAT mapping janë validuar.
@@ -127,7 +142,7 @@ Parallel run nuk është demo; është prova financiare/operative.
 - User/role/2FA/RBAC janë gati.
 - UAT critical flows PASS.
 - Reliability scenarios kritike të testuara (matricat e moduleve live = PASS, sipas `Reliability_Gate.md` te `../06-architecture/`).
-- Parallel run minimalisht 1 muaj ose periudha e miratuar nuk ka bllokues.
+- Parallel run minimalisht 1 muaj ose periudha e miratuar nuk ka bllokues (CURRENT: piloti i kontrolluar i janarit 2027 — evidenca e tij + Human Go/No-Go i veçantë i Pronarit para çdo source-of-record cutover).
 - Rollback owner dhe procedura janë të qarta.
 
 ### No-Go nëse
@@ -145,9 +160,9 @@ Parallel run nuk është demo; është prova financiare/operative.
 
 ### Scenario A — Dështon para cutover
 
-- **Veprim:** shtyhet go-live. PRO DATA mbetet source-of-record.
+- **Veprim:** shtyhet go-live. PRO DATA/sistemi ekzistues mbetet source-of-record; fallback-u mbetet aktiv.
 - **Kriter:** UAT/SEF/opening balances dështojnë para T day, OSE dështon njëri nga dy kontrollet e ndara të backup-it — **(A) legacy custody** apo **(B) product DR (ADR-023)**.
-- **Evidence:** incident log + revised date + owner approval.
+- **Evidence:** incident log + `OVERDUE / DATE REBASELINE REQUIRED / OWNER` (data e re vetëm nga Pronari — asnjë datë e sajuar) + owner approval.
 
 ### Scenario B — Dështon në ditën e parë
 
