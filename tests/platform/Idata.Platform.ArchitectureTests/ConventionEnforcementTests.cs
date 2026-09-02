@@ -1074,7 +1074,6 @@ public sealed class ConventionEnforcementTests
         Assert.NotEmpty(catalog);
         Assert.Equal(2, catalog.Count(PlatformProjectCatalog.IsStoreOwner));
 
-        var generation = PlatformProjectCatalog.CurrentGeneration();
         var scanned = 0;
         foreach (var entry in catalog)
         {
@@ -1082,7 +1081,7 @@ public sealed class ConventionEnforcementTests
             // MSBuild, i marrë NGA KUFIRI i ngrirë (verifikim para+pas skanimit)
             // — zero ndërtim direkt path-i, zero lookup sipas basename-it.
             var findings = IdentityStoreIlScanner.Scan(
-                PlatformProjectCatalog.ReadVerifiedImage(entry, generation),
+                PlatformProjectCatalog.ReadVerifiedImage(entry),
                 PlatformProjectCatalog.IsStoreOwner(entry));
             Assert.True(findings.Count == 0,
                 $"{entry.CanonicalPath}: {string.Join(" · ", findings.Select(finding => $"{finding.Kind}:{finding.Detail}"))}");

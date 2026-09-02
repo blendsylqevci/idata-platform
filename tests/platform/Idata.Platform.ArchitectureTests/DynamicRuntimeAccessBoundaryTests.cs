@@ -40,32 +40,29 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     /// **[HISTORIK — I ZËVENDËSUAR NGA C4/C5]**.
     /// </summary>
     private static IReadOnlyList<DynamicRuntimeAccessScanner.Finding> ScanProduction(out int scanned)
-        => ScanProduction(PlatformProjectCatalog.CurrentGeneration(), out scanned);
-
-    private static IReadOnlyList<DynamicRuntimeAccessScanner.Finding> ScanProduction(
-        PlatformProjectCatalog.CatalogGeneration generation, out int scanned)
     {
+        // C6: gjenerata nuk vjen më si parametër — vetëm ajo AUTORITATIVE
+        // arrin te snapshot-i i verifikuar; asnjë gjeneratë e thirrësit.
         var findings = new List<DynamicRuntimeAccessScanner.Finding>();
         scanned = 0;
-        foreach (var entry in generation.Projects)
+        foreach (var entry in PlatformProjectCatalog.CurrentGeneration().Projects)
         {
-            // C4: snapshot deep-immutable i verifikuar — zero path.
             findings.AddRange(DynamicRuntimeAccessScanner.Scan(
-                PlatformProjectCatalog.ReadVerifiedImage(entry, generation)));
+                PlatformProjectCatalog.ReadVerifiedImage(entry)));
             scanned++;
         }
 
         return findings;
     }
 
-    private static IReadOnlyList<DynamicRuntimeAccessScanner.Finding> ScanOwnerSurfaces(
-        PlatformProjectCatalog.CatalogGeneration generation)
+    private static IReadOnlyList<DynamicRuntimeAccessScanner.Finding> ScanOwnerSurfaces()
     {
         var findings = new List<DynamicRuntimeAccessScanner.Finding>();
-        foreach (var entry in generation.Projects.Where(PlatformProjectCatalog.IsStoreOwner))
+        foreach (var entry in PlatformProjectCatalog.CurrentGeneration().Projects
+            .Where(PlatformProjectCatalog.IsStoreOwner))
         {
             findings.AddRange(DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(
-                PlatformProjectCatalog.ReadVerifiedImage(entry, generation)));
+                PlatformProjectCatalog.ReadVerifiedImage(entry)));
         }
 
         return findings;
@@ -156,7 +153,7 @@ public sealed class DynamicRuntimeAccessBoundaryTests
         var generation = PlatformProjectCatalog.CurrentGeneration();
         Assert.Equal(2, generation.Projects.Count(PlatformProjectCatalog.IsStoreOwner));
 
-        var findings = ScanOwnerSurfaces(generation);
+        var findings = ScanOwnerSurfaces();
         Assert.True(findings.Count == 0,
             string.Join(" · ", findings.Select(f => $"{f.Kind}:{f.DeclaringType}.{f.Member}({f.Detail})")));
     }
@@ -819,17 +816,20 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     }
 
     /// <summary>
-    /// `ScanProduction` dhe owner-scan konsumojnë REALISHT
-    /// `VerifiedFrozenTargetPath`: një gjeneratë me mtime të helmuar i bën të
-    /// dy të dështojnë me `catalog-generation-drift` — para se të skanohet gjë.
+    /// `ScanProduction` dhe owner-scan konsumojnë REALISHT fingerprint-in e
+    /// ngrirë. **C6:** një gjeneratë e helmuar NUK mund t'i jepet më skanimit
+    /// production (rruga e vetme është `ReadVerifiedImage(entry)` mbi
+    /// gjeneratën autoritative — seam-i B u mbyll). Prandaj drift-i provohet
+    /// mbi verifikuesin PURE `VerifyFrozenTarget`, ndërsa lidhja e skanimeve
+    /// me atë verifikim provohet mekanikisht nga teoria e konsumatorëve dhe nga
+    /// analiza dataflow e `VerifiedAssemblyImage.Read` (ENG-008).
     /// </summary>
     [Fact]
     public void Skanimet_ENG006_konsumojne_fingerprint_in_e_ngrire()
     {
         var generation = PlatformProjectCatalog.CurrentGeneration();
-        var victim = generation.Projects.Select(entry => entry.CanonicalPath)
-            .Order(StringComparer.Ordinal).First();
-        var ownerVictim = generation.Projects.First(PlatformProjectCatalog.IsStoreOwner).CanonicalPath;
+        var victim = generation.Projects.OrderBy(entry => entry.CanonicalPath, StringComparer.Ordinal).First();
+        var ownerVictim = generation.Projects.First(PlatformProjectCatalog.IsStoreOwner);
 
         PlatformProjectCatalog.CatalogGeneration Poison(string canonicalPath)
         {
@@ -842,12 +842,18 @@ public sealed class DynamicRuntimeAccessBoundaryTests
             };
         }
 
+        // Gjenerata autoritative: skanimet kalojnë.
+        Assert.NotNull(ScanProduction(out var scanned));
+        Assert.Equal(generation.Projects.Length, scanned);
+        Assert.NotNull(ScanOwnerSurfaces());
+
+        // Gjenerata e helmuar arrin VETËM verifikuesin pure — dhe ai dështon.
         var scanException = Assert.Throws<InvalidOperationException>(
-            () => ScanProduction(Poison(victim), out _));
+            () => PlatformProjectCatalog.VerifyFrozenTarget(victim, Poison(victim.CanonicalPath)));
         Assert.Contains("catalog-generation-drift", scanException.Message, StringComparison.Ordinal);
 
         var ownerException = Assert.Throws<InvalidOperationException>(
-            () => ScanOwnerSurfaces(Poison(ownerVictim)));
+            () => PlatformProjectCatalog.VerifyFrozenTarget(ownerVictim, Poison(ownerVictim.CanonicalPath)));
         Assert.Contains("catalog-generation-drift", ownerException.Message, StringComparison.Ordinal);
     }
 }

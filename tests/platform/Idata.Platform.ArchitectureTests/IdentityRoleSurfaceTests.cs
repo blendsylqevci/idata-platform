@@ -172,9 +172,10 @@ public sealed class IdentityRoleSurfaceTests
         Assert.NotEmpty(generation.Projects);
         foreach (var entry in generation.Projects)
         {
-            // C4: skanim mbi SNAPSHOT-in deep-immutable të verifikuar (zero path).
+            // C4/C6: skanim mbi SNAPSHOT-in deep-immutable të verifikuar (zero
+            // path); gjenerata është gjithmonë ajo autoritative — asnjë parametër.
             var findings = RoleMetadataScanner.Scan(
-                PlatformProjectCatalog.ReadVerifiedImage(entry, generation));
+                PlatformProjectCatalog.ReadVerifiedImage(entry));
             Assert.True(findings.Count == 0,
                 $"{entry.CanonicalPath}: {string.Join(" · ", findings.Select(f => $"{f.Table}[{f.Token}]:{f.Detail}"))}");
         }

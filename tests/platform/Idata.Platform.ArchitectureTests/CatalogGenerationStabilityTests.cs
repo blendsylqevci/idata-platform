@@ -337,18 +337,20 @@ public sealed class CatalogGenerationStabilityTests
         var generation = PlatformProjectCatalog.CurrentGeneration();
         var victim = generation.Projects.OrderBy(entry => entry.CanonicalPath, StringComparer.Ordinal).First();
 
-        // GREEN mbi gjeneratën reale — leximi kalon nga operacioni catalog-owned (C4).
-        Assert.True(PlatformProjectCatalog.ReadVerifiedImage(victim, generation).Length > 0);
+        // GREEN mbi gjeneratën AUTORITATIVE — leximi (C6: vetëm `entry`) kalon.
+        Assert.True(PlatformProjectCatalog.ReadVerifiedImage(victim).Length > 0);
 
+        // C6: gjenerata e helmuar arrin VETËM verifikuesin PURE (void) — asnjë
+        // kapacitet nuk prodhohet prej saj.
         var poisoned = PoisonComponent(generation, victim.CanonicalPath, component);
         var exception = Assert.Throws<InvalidOperationException>(
-            () => PlatformProjectCatalog.ReadVerifiedImage(victim, poisoned));
+            () => PlatformProjectCatalog.VerifyFrozenTarget(victim, poisoned));
         Assert.Contains("catalog-generation-drift", exception.Message, StringComparison.Ordinal);
 
         // Projektet e tjera të gjeneratës së helmuar mbeten GREEN (saktësi kirurgjikale).
         var other = generation.Projects.OrderBy(entry => entry.CanonicalPath, StringComparer.Ordinal).Last();
         Assert.NotEqual(victim.CanonicalPath, other.CanonicalPath);
-        Assert.True(PlatformProjectCatalog.ReadVerifiedImage(other, poisoned).Length > 0);
+        PlatformProjectCatalog.VerifyFrozenTarget(other, poisoned);
     }
 
     [Fact]
@@ -360,14 +362,16 @@ public sealed class CatalogGenerationStabilityTests
             CanonicalPath = "src/platform/Synthetic.Outside/Synthetic.Outside.csproj",
         };
         var exception = Assert.Throws<InvalidOperationException>(
-            () => PlatformProjectCatalog.ReadVerifiedImage(outsider, generation));
+            () => PlatformProjectCatalog.ReadVerifiedImage(outsider));
         Assert.Contains("jashtë gjeneratës autoritative", exception.Message, StringComparison.Ordinal);
 
         // Edhe identitet i manipuluar me path kanonik REAL refuzohet (anëtarësia
-        // është mbi HYRJEN e plotë, jo vetëm mbi çelësin).
+        // është mbi HYRJEN e plotë, jo vetëm mbi çelësin). C6 (§3.3): forged
+        // AssemblyName mbi target real = refuzim nga gjenerata autoritative.
         var tampered = generation.Projects[0] with { AssemblyName = "Tampered.Assembly" };
-        Assert.Throws<InvalidOperationException>(
-            () => PlatformProjectCatalog.ReadVerifiedImage(tampered, generation));
+        var tamperedException = Assert.Throws<InvalidOperationException>(
+            () => PlatformProjectCatalog.ReadVerifiedImage(tampered));
+        Assert.Contains("jashtë gjeneratës autoritative", tamperedException.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -400,8 +404,9 @@ public sealed class CatalogGenerationStabilityTests
     [Fact]
     public void Leximi_ka_rendin_ekzakt_verify_read_verify()
     {
+        // C6: trupi i leximit jeton te `VerifiedAssemblyImage.Read(ProjectEntry)`.
         var sequence = CalledSequenceOf(
-            "Idata.Platform.ArchitectureTests.PlatformProjectCatalog", "ReadVerifiedImage",
+            "Idata.Platform.ArchitectureTests.PlatformProjectCatalog+VerifiedAssemblyImage", "Read",
             name => name is "VerifiedFrozenTargetPath" or "ReadAllBytes")
             .ToArray();
 
@@ -547,9 +552,12 @@ public sealed class CatalogGenerationStabilityTests
     }
 
     /// <summary>
-    /// C4 (§4C) — INTEGRITETI i leximit të verifikuar mbi një artefakt SINTETIK
-    /// (zero prekje e output-eve reale): mutacion pas freeze-it, varianti ABA
+    /// C4 (§4C) — INTEGRITETI i verifikimit mbi një artefakt SINTETIK (zero
+    /// prekje e output-eve reale): mutacion pas freeze-it, varianti ABA
     /// (identitet i jashtëm A, përmbajtje B) dhe gjeneratë e helmuar.
+    /// **C6 (§3.4):** gjenerata sintetike arrin VETËM verifikuesit PURE
+    /// (`VerifyFrozenTarget`, `VerifyImageBytes`) — asnjë snapshot i verifikuar
+    /// nuk prodhohet prej saj; kjo provohet edhe këtu, mbi të njëjtin entry.
     /// </summary>
     [Fact]
     public void Leximi_i_verifikuar_kap_mutacionin_ABA_dhe_bllokon_para_tij()
@@ -565,26 +573,26 @@ public sealed class CatalogGenerationStabilityTests
                 "Synthetic.Probe", "SynMalformed", canonical);
             var generation = PlatformProjectCatalog.SyntheticGenerationFor(entry);
 
-            // GREEN: leximi i pandryshuar kthen snapshot me identitetin e ngrirë.
-            var image = PlatformProjectCatalog.ReadVerifiedImage(entry, generation);
-            Assert.True(image.Length > 0);
-            Assert.Equal(generation.Sha256ByCanonicalPath[entry.CanonicalPath], image.Sha256);
-            Assert.Equal(generation.MvidByCanonicalPath[entry.CanonicalPath], image.Mvid);
-            Assert.Equal(entry.AssemblyName, image.AssemblyName);
+            // GREEN: verifikimi PURE i pandryshuar kalon (anëtarësi + 3 dimensione + bajte).
+            PlatformProjectCatalog.VerifyFrozenTarget(entry, generation);
+            PlatformProjectCatalog.VerifyImageBytes(entry, generation, File.ReadAllBytes(syntheticPath));
+
+            // C6: e njëjta gjeneratë sintetike NUK jep asnjë kapacitet — entry-ja
+            // nuk është anëtare e gjeneratës AUTORITATIVE.
+            var noCapability = Assert.Throws<InvalidOperationException>(
+                () => PlatformProjectCatalog.ReadVerifiedImage(entry));
+            Assert.Contains("jashtë gjeneratës autoritative", noCapability.Message, StringComparison.Ordinal);
 
             // (a) ABA i VËRTETË (TOCTOU): verifikimet mbi file-in shohin identitetin
-            // A, ndërsa reader-i kthen bajte B. Ushtrohet drejtpërdrejt mbi seam-in
-            // e verifikimit të bajteve — dega është MBAJTËSE, jo defence-in-depth
-            // i pa-provuar. (Të dy artefaktet janë ende TË NDRYSHËM këtu.)
-            PlatformProjectCatalog.VerifyImageBytes(entry, generation, File.ReadAllBytes(syntheticPath));
+            // A, ndërsa reader-i kthen bajte B. (Të dy artefaktet janë ende TË NDRYSHËM.)
             var toctou = Assert.Throws<InvalidOperationException>(
                 () => PlatformProjectCatalog.VerifyImageBytes(entry, generation, File.ReadAllBytes(otherPath)));
             Assert.Contains("SHA/MVID", toctou.Message, StringComparison.Ordinal);
 
-            // (b) MUTACION i artefaktit pas freeze-it → leximi refuzohet.
+            // (b) MUTACION i artefaktit pas freeze-it → verifikimi refuzon.
             File.SetLastWriteTimeUtc(syntheticPath, DateTime.UtcNow.AddMinutes(5));
             var mutated = Assert.Throws<InvalidOperationException>(
-                () => PlatformProjectCatalog.ReadVerifiedImage(entry, generation));
+                () => PlatformProjectCatalog.VerifyFrozenTarget(entry, generation));
             Assert.Contains("catalog-generation-drift", mutated.Message, StringComparison.Ordinal);
 
             // (c) Përmbajtja zëvendësohet me B dhe mtime-i kthehet te vlera A →
@@ -593,14 +601,14 @@ public sealed class CatalogGenerationStabilityTests
             File.WriteAllBytes(syntheticPath, File.ReadAllBytes(otherPath));
             File.SetLastWriteTimeUtc(syntheticPath, frozenWrite);
             var aba = Assert.Throws<InvalidOperationException>(
-                () => PlatformProjectCatalog.ReadVerifiedImage(entry, generation));
+                () => PlatformProjectCatalog.VerifyFrozenTarget(entry, generation));
             Assert.Contains("catalog-generation-drift", aba.Message, StringComparison.Ordinal);
 
-            // (d) gjeneratë e helmuar → pre-check ndal PARA çdo leximi bajtesh.
+            // (d) gjeneratë e helmuar → verifikimi ndal PARA çdo leximi bajtesh.
             var freshGeneration = PlatformProjectCatalog.SyntheticGenerationFor(entry);
             var poisoned = PoisonComponent(freshGeneration, entry.CanonicalPath, "mtime");
             Assert.Throws<InvalidOperationException>(
-                () => PlatformProjectCatalog.ReadVerifiedImage(entry, poisoned));
+                () => PlatformProjectCatalog.VerifyFrozenTarget(entry, poisoned));
         }
         finally
         {
@@ -696,51 +704,54 @@ public sealed class CatalogGenerationStabilityTests
     }
 
     /// <summary>
-    /// C4 (§4E) — PARITET i skanerëve: për TË NJËJTIN binar, rruga
-    /// snapshot-based (production) jep rezultat SET-EQUAL me rrugën
-    /// fixture-path. Provohet mbi assembly-në e testeve, ku të dyja rrugët janë
-    /// legjitime dhe krahasimi është i mundur pa publikuar asnjë path production.
+    /// C4 (§4E) → **C6 (§3):** paritet-i i mëparshëm mbështillte vetë
+    /// assembly-në e testeve si `VerifiedAssemblyImage` përmes një gjenerate
+    /// sintetike dhe e dërgonte te overload-et production — pikërisht seam-i B.
+    /// Ai test **[HISTORIK — I ZËVENDËSUAR NGA C6]**. Tani: skanerët production
+    /// japin rezultat IDENTIK mbi një entry REAL të gjeneratës autoritative (dy
+    /// snapshot-e të pavarur), dhe skanerët fixture japin rezultat identik mbi
+    /// self-assembly (dy kapacitete fixture të pavarura). Asnjë artefakt nuk e
+    /// kalon kufirin e tipit të vet.
     /// </summary>
     [Fact]
-    public void Skaneret_japin_rezultat_identik_mbi_snapshot_dhe_mbi_file()
+    public void Skaneret_jane_deterministe_mbi_entry_real_dhe_mbi_fixture()
     {
-        // C5: imazhi i verifikuar NUK ndërtohet më nga testi (konstruktori është
-        // privat dhe i pafalsifikueshëm). Të dyja rrugët ndërtohen realisht:
-        // snapshot-i përmes `ReadVerifiedImage` mbi një gjeneratë SINTETIKE të
-        // vetë binarit të testeve, dhe fixture-ja përmes fabrikës catalog-owned.
-        var selfPath = Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll");
-        var canonicalTarget = Path.GetRelativePath(PlatformProjectCatalog.RepoRoot(), selfPath)
-            .Replace(Path.DirectorySeparatorChar, '/');
-        var selfEntry = new PlatformProjectCatalog.ProjectEntry(
-            "tests/platform/Idata.Platform.ArchitectureTests/Idata.Platform.ArchitectureTests.csproj",
-            "Idata.Platform.ArchitectureTests", "Idata.Platform.ArchitectureTests", canonicalTarget);
-        var image = PlatformProjectCatalog.ReadVerifiedImage(
-            selfEntry, PlatformProjectCatalog.SyntheticGenerationFor(selfEntry));
-        var fixtureImage = PlatformProjectCatalog.OpenFixtureImage(selfPath);
+        var entry = PlatformProjectCatalog.DiscoverProduction()
+            .Single(candidate => candidate.AssemblyName == "Idata.Platform.Persistence");
+        var first = PlatformProjectCatalog.ReadVerifiedImage(entry);
+        var second = PlatformProjectCatalog.ReadVerifiedImage(entry);
+        Assert.NotSame(first, second);
+
+        static IEnumerable<string> Keys<T>(IEnumerable<T> findings, Func<T, string> key)
+            => findings.Select(key).Order(StringComparer.Ordinal);
 
         Assert.Equal(
-            DynamicRuntimeAccessScanner.ScanFixture(fixtureImage).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal),
-            DynamicRuntimeAccessScanner.Scan(image).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal));
-
+            Keys(DynamicRuntimeAccessScanner.Scan(first), f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}"),
+            Keys(DynamicRuntimeAccessScanner.Scan(second), f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}"));
         Assert.Equal(
-            DynamicRuntimeAccessScanner.ScanOwnerPublicSurfaceFixture(fixtureImage).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal),
-            DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(image).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal));
-
+            Keys(DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(first), f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}"),
+            Keys(DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(second), f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}"));
         Assert.Equal(
-            UntypedDataAccessScanner.ScanFixture(fixtureImage).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal),
-            UntypedDataAccessScanner.Scan(image).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal));
-
+            Keys(UntypedDataAccessScanner.Scan(first), f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}"),
+            Keys(UntypedDataAccessScanner.Scan(second), f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}"));
         Assert.Equal(
-            UntypedDataAccessScanner.ScanOwnerPublicSurfaceFixture(fixtureImage).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal),
-            UntypedDataAccessScanner.ScanOwnerPublicSurface(image).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal));
-
+            Keys(UntypedDataAccessScanner.ScanOwnerPublicSurface(first), f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}"),
+            Keys(UntypedDataAccessScanner.ScanOwnerPublicSurface(second), f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}"));
         Assert.Equal(
-            IdentityStoreIlScanner.ScanFixture(PlatformProjectCatalog.OpenFixtureImage(selfPath), isStoreOwner: false).Select(f => $"{f.Kind}|{f.Detail}").Order(StringComparer.Ordinal),
-            IdentityStoreIlScanner.Scan(image, isStoreOwner: false).Select(f => $"{f.Kind}|{f.Detail}").Order(StringComparer.Ordinal));
-
+            Keys(IdentityStoreIlScanner.Scan(first, isStoreOwner: true), f => $"{f.Kind}|{f.Detail}"),
+            Keys(IdentityStoreIlScanner.Scan(second, isStoreOwner: true), f => $"{f.Kind}|{f.Detail}"));
         Assert.Equal(
-            RoleMetadataScanner.ScanFixture(fixtureImage).Select(f => $"{f.Table}|{f.Token}|{f.Detail}").Order(StringComparer.Ordinal),
-            RoleMetadataScanner.Scan(image).Select(f => $"{f.Table}|{f.Token}|{f.Detail}").Order(StringComparer.Ordinal));
+            Keys(RoleMetadataScanner.Scan(first), f => $"{f.Table}|{f.Token}|{f.Detail}"),
+            Keys(RoleMetadataScanner.Scan(second), f => $"{f.Table}|{f.Token}|{f.Detail}"));
+
+        var selfPath = SelfAssemblyPath();
+        var fixtureA = PlatformProjectCatalog.OpenFixtureImage(selfPath);
+        var fixtureB = PlatformProjectCatalog.OpenFixtureImage(selfPath);
+        Assert.NotSame(fixtureA, fixtureB);
+        Assert.Equal(
+            Keys(DynamicRuntimeAccessScanner.ScanFixture(fixtureA), f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}"),
+            Keys(DynamicRuntimeAccessScanner.ScanFixture(fixtureB), f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}"));
+        Assert.NotEmpty(DynamicRuntimeAccessScanner.ScanFixture(fixtureA));
     }
 
     /// <summary>
@@ -1239,18 +1250,21 @@ public sealed class CatalogGenerationStabilityTests
     [Fact]
     public void Fabrika_e_snapshot_it_ka_call_site_parity_ekzakte()
     {
+        // C6: fabrikat `CreateVerified(byte[])`/`CreateFixture(byte[])` u HOQËN.
+        // Konstruktorët privatë thirren VETËM nga `Read(ProjectEntry)` /
+        // `Open(string)` të vetë tipit, dhe ato VETËM nga forward-et e katalogut.
         Assert.Equal(
-            ["Idata.Platform.ArchitectureTests.PlatformProjectCatalog+VerifiedAssemblyImage.CreateVerified"],
+            ["Idata.Platform.ArchitectureTests.PlatformProjectCatalog+VerifiedAssemblyImage.Read"],
             CallersOfMember("VerifiedAssemblyImage", ".ctor").Order(StringComparer.Ordinal));
         Assert.Equal(
             ["Idata.Platform.ArchitectureTests.PlatformProjectCatalog.ReadVerifiedImage"],
-            CallersOfMember("VerifiedAssemblyImage", "CreateVerified").Order(StringComparer.Ordinal));
+            CallersOfMember("VerifiedAssemblyImage", "Read").Order(StringComparer.Ordinal));
         Assert.Equal(
-            ["Idata.Platform.ArchitectureTests.PlatformProjectCatalog+FixtureAssemblyImage.CreateFixture"],
+            ["Idata.Platform.ArchitectureTests.PlatformProjectCatalog+FixtureAssemblyImage.Open"],
             CallersOfMember("FixtureAssemblyImage", ".ctor").Order(StringComparer.Ordinal));
         Assert.Equal(
             ["Idata.Platform.ArchitectureTests.PlatformProjectCatalog.OpenFixtureImage"],
-            CallersOfMember("FixtureAssemblyImage", "CreateFixture").Order(StringComparer.Ordinal));
+            CallersOfMember("FixtureAssemblyImage", "Open").Order(StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -1350,106 +1364,214 @@ public sealed class CatalogGenerationStabilityTests
     }
 
     /// <summary>
-    /// C5 (§3.7/§3.8) — një artefakt PRODUCTION refuzohet FAIL-CLOSED në rrugën
-    /// fixture, pavarësisht si arrihet.
+    /// C5 (§3.7/§3.8) → **C6 (§2):** një artefakt PRODUCTION refuzohet FAIL-CLOSED
+    /// në rrugën fixture, me autoritet të derivuar VETËM nga katalogu.
     ///
-    /// **Root cause i C4 (i provuar):** `ScanFixtureFile(Path.Combine(
-    /// AppContext.BaseDirectory, "Idata.Platform.Persistence.dll"))` skanonte
-    /// një artefakt production — build-i e vendos një kopje BYTE-IDENTIKE pranë
-    /// testeve — dhe të gjithë guard-et mbeteshin GREEN.
+    /// **Root cause i C5 (i provuar):** `OpenFixtureImage(string,
+    /// ProductionArtifactAuthority)` besonte autoritetin e thirrësit — me tri
+    /// sete bosh, target-i REAL production pranohej. Overload-i u hoq; tani
+    /// dimensionet izolohen me klasifikuesin PURE, që kthen vetëm arsyen.
+    /// Tre vektorë përfaqësues + GREEN-et provojnë të njëjtin invariant.
     /// </summary>
     [Fact]
     public void Artefaktet_production_refuzohen_ne_rrugen_fixture()
     {
         var authority = PlatformProjectCatalog.ProductionArtifacts();
 
-        // (1) path-i i target-it production, drejtpërdrejt nga autoriteti i derivuar.
+        // (1) target-i real production; (2) kopja në AppContext.BaseDirectory
+        // (rruga e saktë e bypass-it të C4); (3) kopje e riemërtuar në temp.
         var target = authority.TargetFullPaths.Order(StringComparer.Ordinal).First();
-        Reject(target, "path i target-it production");
-
-        // (2) kopja në AppContext.BaseDirectory (rruga e saktë e bypass-it të C4).
         var adjacent = Path.Combine(AppContext.BaseDirectory, "Idata.Platform.Persistence.dll");
         Assert.True(File.Exists(adjacent), "premisa: kopja production ndodhet pranë testeve");
-        Reject(adjacent, "kopje pranë testeve");
-
-        // (3) helper me një nivel dhe (4) me disa nivele indirection.
-        Reject(OneLevel(adjacent), "helper një nivel");
-        Reject(ManyLevels(adjacent), "helper disa nivele");
-
-        // (5) kopje e RIEMËRTUAR dhe (6) bajte production nën direktori fixture.
         var renamed = Path.Combine(Path.GetTempPath(), $"fixture-{Guid.NewGuid():N}.dll");
-        var nested = Path.Combine(AppContext.BaseDirectory, $"Synthetic.Fixture.{Guid.NewGuid():N}.dll");
         try
         {
             File.Copy(adjacent, renamed);
-            File.Copy(adjacent, nested);
-            Reject(renamed, "kopje e riemërtuar në temp");
-            Reject(nested, "bajte production nën direktori fixture");
+            Reject(target);
+            Reject(adjacent);
+            Reject(renamed);
         }
         finally
         {
             File.Delete(renamed);
-            File.Delete(nested);
         }
 
-        // (7) fixture SINTETIKE e autorizuar mbetet GREEN.
+        // Fixture SINTETIKE e autorizuar dhe vetë-assembly-ja mbeten GREEN.
         var synthetic = SyntheticMetadataPe.Write(malformed: false, AppContext.BaseDirectory);
         try
         {
             var image = PlatformProjectCatalog.OpenFixtureImage(synthetic);
             Assert.Equal(Path.GetFileNameWithoutExtension(synthetic), image.AssemblyName);
-            Assert.NotNull(DynamicRuntimeAccessScanner.ScanFixture(image));
         }
         finally
         {
             File.Delete(synthetic);
         }
 
-        // Vetë-assembly-ja e testeve nuk është artefakt production → e lejuar.
         Assert.NotNull(PlatformProjectCatalog.OpenFixtureImage(SelfAssemblyPath()));
 
-        // (8) SECILI dimension i autoritetit është I DOMOSDOSHËM. Ndaj gjeneratës
-        // reale të tria janë reciprokisht të tepërta — bajtet identike nënkuptojnë
-        // MVID identik — prandaj izolohen me nën-autoritete të derivuara nga E
-        // NJËJTA gjeneratë. Heqja e cilitdo degë e bën këtë bllok RED.
-        var pathOnly = authority with
-        {
-            Sha256Digests = FrozenSet<string>.Empty,
-            Mvids = FrozenSet<Guid>.Empty,
-        };
-        var shaOnly = authority with
-        {
-            TargetFullPaths = FrozenSet<string>.Empty,
-            Mvids = FrozenSet<Guid>.Empty,
-        };
-        var mvidOnly = authority with
-        {
-            TargetFullPaths = FrozenSet<string>.Empty,
-            Sha256Digests = FrozenSet<string>.Empty,
-        };
+        // SECILI dimension është I DOMOSDOSHËM — izoluar me klasifikuesin PURE
+        // mbi nën-autoritete të derivuara nga e njëjta gjeneratë. Asnjë nga
+        // këto thirrje nuk mund të prodhojë kapacitet; heqja e cilësdo degë e
+        // bën këtë bllok RED.
+        var bytes = File.ReadAllBytes(adjacent);
+        var sha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+        var mvid = PlatformProjectCatalog.ReadMvidFromImage(bytes);
+        var pathOnly = authority with { Sha256Digests = FrozenSet<string>.Empty, Mvids = FrozenSet<Guid>.Empty };
+        var shaOnly = authority with { TargetFullPaths = FrozenSet<string>.Empty, Mvids = FrozenSet<Guid>.Empty };
+        var mvidOnly = authority with { TargetFullPaths = FrozenSet<string>.Empty, Sha256Digests = FrozenSet<string>.Empty };
 
-        Assert.Contains("path i target-it", RejectionReason(target, pathOnly), StringComparison.Ordinal);
-        Assert.Contains("SHA-256", RejectionReason(adjacent, shaOnly), StringComparison.Ordinal);
-        Assert.Contains("MVID", RejectionReason(adjacent, mvidOnly), StringComparison.Ordinal);
+        Assert.Contains("path i target-it",
+            PlatformProjectCatalog.ProductionArtifactRejection(target, "0", null, pathOnly), StringComparison.Ordinal);
+        Assert.Contains("SHA-256",
+            PlatformProjectCatalog.ProductionArtifactRejection(renamed, sha, null, shaOnly), StringComparison.Ordinal);
+        Assert.Contains("MVID",
+            PlatformProjectCatalog.ProductionArtifactRejection(renamed, "0", mvid, mvidOnly), StringComparison.Ordinal);
+        Assert.Null(PlatformProjectCatalog.ProductionArtifactRejection(renamed, "0", null, authority));
 
-        static string RejectionReason(
-            string path, PlatformProjectCatalog.ProductionArtifactAuthority authority)
-            => Assert.Throws<InvalidOperationException>(
-                () => PlatformProjectCatalog.OpenFixtureImage(path, authority)).Message;
-
-        static string OneLevel(string path) => Path.Combine(
-            Path.GetDirectoryName(path)!, Path.GetFileName(path));
-
-        static string ManyLevels(string path) => Path.GetFullPath(Path.Join(
-            Path.GetDirectoryName(path)!, "..", Path.GetFileName(Path.GetDirectoryName(path)!),
-            Path.GetFileName(path)));
-
-        static void Reject(string path, string vector)
+        static void Reject(string path)
         {
             var failure = Assert.Throws<InvalidOperationException>(
                 () => PlatformProjectCatalog.OpenFixtureImage(path));
             Assert.Contains("fixture-production-artifact", failure.Message, StringComparison.Ordinal);
         }
+    }
+
+    // ═══════════════════ CORRECTION C6 — §2 / §3 API-SHAPE ═══════════════════
+
+    /// <summary>
+    /// C6 (§2.2/§3.2) — META-TEST API-SHAPE mbi TË GJITHË assembly-n e testeve:
+    /// asnjë metodë non-privat, jo e gjeneruar nga kompajleri, që kthen një
+    /// KAPACITET (`FixtureAssemblyImage`, `VerifiedAssemblyImage`) nuk pranon
+    /// autoritet, gjeneratë, set path/SHA/MVID, bajte ose delegate. Seti i
+    /// plotë i metodave që mint-ojnë kapacitet është EKZAKT: dy forward-e në
+    /// katalog dhe dy fabrika të ngulitura — secila me një parametër të vetëm
+    /// (`string` përkatësisht `ProjectEntry`). Konstruktorët janë të gjithë privatë.
+    /// Mbi C5 ky test do të dilte RED (dy overload-e me autoritet/gjeneratë).
+    /// </summary>
+    [Fact]
+    public void Asnje_API_nuk_mint_kapacitet_nga_autoritet_apo_gjenerate_e_thirresit()
+    {
+        const BindingFlags All = BindingFlags.Public | BindingFlags.NonPublic
+            | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+        var fixtureType = typeof(PlatformProjectCatalog.FixtureAssemblyImage);
+        var verifiedType = typeof(PlatformProjectCatalog.VerifiedAssemblyImage);
+        Type[] forbiddenInputs =
+        [
+            typeof(PlatformProjectCatalog.ProductionArtifactAuthority),
+            typeof(PlatformProjectCatalog.CatalogGeneration),
+            typeof(byte[]),
+            typeof(IEnumerable<string>),
+            typeof(IEnumerable<Guid>),
+            typeof(Delegate),
+        ];
+
+        var minting = new List<string>();
+        foreach (var type in typeof(PlatformProjectCatalog).Assembly.GetTypes())
+        {
+            if (type.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute), inherit: false)
+                || type.Name.Contains('<', StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            foreach (var method in type.GetMethods(All).Where(candidate => !candidate.IsPrivate))
+            {
+                if (method.IsDefined(typeof(System.Runtime.CompilerServices.CompilerGeneratedAttribute), inherit: false))
+                {
+                    continue;
+                }
+
+                var returnsCapability = method.ReturnType == fixtureType || method.ReturnType == verifiedType;
+                var parameters = method.GetParameters().Select(parameter => parameter.ParameterType).ToArray();
+
+                // Çdo metodë që pranon autoritet/gjeneratë duhet të mbetet PURE:
+                // kurrë kapacitet, stream, assembly, FileSystemInfo apo delegate.
+                if (parameters.Any(parameter =>
+                    parameter == typeof(PlatformProjectCatalog.ProductionArtifactAuthority)
+                    || parameter == typeof(PlatformProjectCatalog.CatalogGeneration)))
+                {
+                    Assert.False(returnsCapability, $"{type.FullName}.{method.Name}");
+                    Assert.False(typeof(Stream).IsAssignableFrom(method.ReturnType), $"{type.FullName}.{method.Name}");
+                    Assert.False(typeof(Assembly).IsAssignableFrom(method.ReturnType), $"{type.FullName}.{method.Name}");
+                    Assert.False(typeof(FileSystemInfo).IsAssignableFrom(method.ReturnType), $"{type.FullName}.{method.Name}");
+                    Assert.False(typeof(Delegate).IsAssignableFrom(method.ReturnType), $"{type.FullName}.{method.Name}");
+                }
+
+                if (!returnsCapability)
+                {
+                    continue;
+                }
+
+                minting.Add($"{type.FullName}.{method.Name}({string.Join(",", parameters.Select(p => p.Name))})");
+                Assert.DoesNotContain(parameters, parameter =>
+                    forbiddenInputs.Any(forbidden => forbidden.IsAssignableFrom(parameter)));
+                Assert.Single(parameters);
+                Assert.Equal(
+                    method.ReturnType == fixtureType ? typeof(string) : typeof(PlatformProjectCatalog.ProjectEntry),
+                    parameters[0]);
+            }
+
+            if (type == fixtureType || type == verifiedType)
+            {
+                Assert.DoesNotContain(type.GetConstructors(All), constructor => !constructor.IsPrivate);
+            }
+        }
+
+        const string Catalog = "Idata.Platform.ArchitectureTests.PlatformProjectCatalog";
+        Assert.Equal(
+            [
+                $"{Catalog}+FixtureAssemblyImage.Open(String)",
+                $"{Catalog}+VerifiedAssemblyImage.Read(ProjectEntry)",
+                $"{Catalog}.OpenFixtureImage(String)",
+                $"{Catalog}.ReadVerifiedImage(ProjectEntry)",
+            ],
+            minting.Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// C6 (§3) — GJENERATA SINTETIKE NUK MINT-ON SNAPSHOT TË VERIFIKUAR.
+    ///
+    /// **Root cause i C5 (i provuar):** `SyntheticGenerationFor(entry)` +
+    /// `ReadVerifiedImage(entry, generation)` e bënin vetë assembly-në e
+    /// testeve `VerifiedAssemblyImage` dhe e dërgonin te overload-et production.
+    /// Tani: verifikimi PURE ndaj gjeneratës sintetike kalon (ajo mbetet e
+    /// vlefshme për testim fingerprint-i), por i njëjti entry NUK bëhet dot
+    /// snapshot i verifikuar — vetëm anëtarësia në gjeneratën AUTORITATIVE
+    /// prodhon kapacitet. Rruga fixture mbetet e hapur për të, si tip i veçantë.
+    /// </summary>
+    [Fact]
+    public void Gjenerata_sintetike_nuk_minton_snapshot_te_verifikuar()
+    {
+        var selfPath = SelfAssemblyPath();
+        var canonicalTarget = Path.GetRelativePath(PlatformProjectCatalog.RepoRoot(), selfPath)
+            .Replace(Path.DirectorySeparatorChar, '/');
+        var selfEntry = new PlatformProjectCatalog.ProjectEntry(
+            "tests/platform/Idata.Platform.ArchitectureTests/Idata.Platform.ArchitectureTests.csproj",
+            "Idata.Platform.ArchitectureTests", "Idata.Platform.ArchitectureTests", canonicalTarget);
+
+        // Verifikimi PURE ndaj gjeneratës sintetike kalon — kjo është gjithçka
+        // që një gjeneratë sintetike mund të bëjë.
+        var synthetic = PlatformProjectCatalog.SyntheticGenerationFor(selfEntry);
+        PlatformProjectCatalog.VerifyFrozenTarget(selfEntry, synthetic);
+        PlatformProjectCatalog.VerifyImageBytes(selfEntry, synthetic, File.ReadAllBytes(selfPath));
+
+        // Asnjë snapshot i verifikuar: entry-ja nuk është anëtare e gjeneratës autoritative.
+        var refused = Assert.Throws<InvalidOperationException>(
+            () => PlatformProjectCatalog.ReadVerifiedImage(selfEntry));
+        Assert.Contains("jashtë gjeneratës autoritative", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(PlatformProjectCatalog.CurrentGeneration().Projects, entry => entry == selfEntry);
+
+        // Rruga fixture mbetet e hapur për të — si tip NOMINALISHT i veçantë.
+        var fixture = PlatformProjectCatalog.OpenFixtureImage(selfPath);
+        Assert.IsType<PlatformProjectCatalog.FixtureAssemblyImage>(fixture);
+        Assert.Throws<InvalidCastException>(
+            () => (PlatformProjectCatalog.VerifiedAssemblyImage)(object)fixture);
+
+        // Një entry REAL nga gjenerata autoritative vazhdon GREEN.
+        var real = PlatformProjectCatalog.CurrentGeneration().Projects
+            .Single(entry => entry.AssemblyName == "Idata.Platform.Persistence");
+        Assert.True(PlatformProjectCatalog.ReadVerifiedImage(real).Length > 0);
     }
 
     // ═══════════════════════ CORRECTION C5 — §4 / C ═══════════════════════
@@ -1481,6 +1603,7 @@ public sealed class CatalogGenerationStabilityTests
         Assert.True(flow.VerifyIndex < flow.PostVerifyIndex, "mungon post-verify pas verifikimit të bajteve");
         Assert.True(flow.PostVerifyIndex < flow.FactoryIndex,
             "snapshot-i ndërtohet para post-verifikimit");
+        Assert.True(flow.FactoryIndex >= 0, "konstruktori privat (newobj) nuk u gjet në dataflow");
         Assert.True(flow.FactoryIndex < flow.ReturnIndex, "kthimi nuk vjen pas ndërtimit të snapshot-it");
     }
 
@@ -1507,10 +1630,11 @@ public sealed class CatalogGenerationStabilityTests
         foreach (var handle in reader.MethodDefinitions)
         {
             var candidate = reader.GetMethodDefinition(handle);
+            // C6: leximi real jeton te `VerifiedAssemblyImage.Read(ProjectEntry)`.
             if (candidate.RelativeVirtualAddress == 0
-                || reader.GetString(candidate.Name) != "ReadVerifiedImage"
+                || reader.GetString(candidate.Name) != "Read"
                 || UntypedDataAccessScanner.FullNameOfTypeDefinition(reader, candidate.GetDeclaringType())
-                    != "Idata.Platform.ArchitectureTests.PlatformProjectCatalog")
+                    != "Idata.Platform.ArchitectureTests.PlatformProjectCatalog+VerifiedAssemblyImage")
             {
                 continue;
             }
@@ -1597,6 +1721,8 @@ public sealed class CatalogGenerationStabilityTests
                 case 0x26: // pop
                     Pop();
                     continue;
+                case >= 0x46 and <= 0x50: // ldind.* — deref i `ref readonly` (indexer-i i FrozenDictionary)
+                case 0x71: // ldobj — deref i struct-it (Guid) nga `ref readonly`
                 case 0x74: // castclass
                 case 0x75: // isinst
                 case 0x79: // unbox
@@ -1663,7 +1789,7 @@ public sealed class CatalogGenerationStabilityTests
                     verifyIndex = index;
                     verifyTakesRead = carriesRead;
                     break;
-                case "CreateVerified":
+                case ".ctor" when opcode == 0x73: // C6: fabrika = konstruktori privat (newobj)
                     factoryIndex = index;
                     factoryTakesRead = carriesRead;
                     break;
