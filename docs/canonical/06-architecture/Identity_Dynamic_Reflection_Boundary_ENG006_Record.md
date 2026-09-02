@@ -365,8 +365,9 @@ Statusi: **PENDING_OWNER_DISPOSITION** · **ZERO PRECEDENT** · **PROJECT_RULES 
 
 - `dotnet build src/platform/Idata.Platform.slnx` → **0 warnings, 0 errors**;
 - baseline mekanik para editimit: **178/178**;
-- pas increment-it: **237/237** ×3; C1 **262/262**; C2 **270/270**; C3 **277/277**; pas **correction C4: 282/282, zero skip**, **tri ekzekutime radhazi** (+5 teste C4), plus **dy cold-run** 282/282;
-- targeted (të rimatura pas C4): ENG-008 **35/35**, ENG-006 **69/69** (pas C3: 30/69; pas C2: 27/65; para C1: 12/47);
+- pas increment-it: **237/237** ×3; C1 **262/262**; C2 **270/270**; C3 **277/277**; C4 **282/282**; pas **correction C5: 289/289, zero skip**, **tri ekzekutime radhazi** (+7 teste C5), plus **dy cold-run** 289/289;
+- targeted (të rimatura pas C5): ENG-008 **42/42** ×3, ENG-006 **69/69** ×3 (pas C4: 35/69; pas C3: 30/69; pas C2: 27/65; para C1: 12/47);
+- **performanca ndaj baseline-it të matur në worktree të izoluar te `ded8325`, me komanda IDENTIKE** (mediana e 3 ekzekutimeve): ArchitectureTests **63s → 61s**, ENG-006 **19s → 18s**, ENG-008 **18s → 18s**, cold-process **64.5s → 63.5s** — zero regresion, jo më pak edhe pse suita u rrit me 7 teste;
 - permutime me **seed-e fikse 1337 / 20260803 / 42** → rezultate identike, e njëjta gjeneratë;
 - disk: min **6.69 GiB**, max **6.78 GiB** (kurrë nën 2.0 GiB; zero ENOSPC).
 
