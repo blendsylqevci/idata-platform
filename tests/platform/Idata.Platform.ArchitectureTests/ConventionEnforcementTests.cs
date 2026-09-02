@@ -1081,8 +1081,9 @@ public sealed class ConventionEnforcementTests
             // §2-R4 + C2: skanohet EKZAKTËSISHT TargetPath-i i vlerësuar nga
             // MSBuild, i marrë NGA KUFIRI i ngrirë (verifikim para+pas skanimit)
             // — zero ndërtim direkt path-i, zero lookup sipas basename-it.
-            var findings = PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, generation,
-                assemblyPath => IdentityStoreIlScanner.Scan(assemblyPath, PlatformProjectCatalog.IsStoreOwner(entry)));
+            var findings = IdentityStoreIlScanner.Scan(
+                PlatformProjectCatalog.ReadVerifiedImage(entry, generation),
+                PlatformProjectCatalog.IsStoreOwner(entry));
             Assert.True(findings.Count == 0,
                 $"{entry.CanonicalPath}: {string.Join(" · ", findings.Select(finding => $"{finding.Kind}:{finding.Detail}"))}");
             scanned++;
@@ -1105,7 +1106,7 @@ public sealed class ConventionEnforcementTests
     [Fact]
     public void Skaneri_IL_kap_bypass_et_e_mbuluara_dhe_lejon_perdorimin_e_sakte()
     {
-        var findings = IdentityStoreIlScanner.Scan(
+        var findings = IdentityStoreIlScanner.ScanFixtureFile(
             Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"),
             isStoreOwner: false);
 
@@ -1149,7 +1150,7 @@ public sealed class ConventionEnforcementTests
         // Inverse e OWNER-it: për owner-in tipet e store-it janë të lejuara —
         // i njëjti binar i skanuar si owner s'prodhon gjetje kufiri tipesh
         // (rregulli claim-id mbetet i zbatuar mbi të gjithë — provohet veçmas).
-        var ownerFindings = IdentityStoreIlScanner.Scan(
+        var ownerFindings = IdentityStoreIlScanner.ScanFixtureFile(
             Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"),
             isStoreOwner: true);
         Assert.DoesNotContain(ownerFindings, finding => finding.Kind == "record-type-ref");
@@ -1238,7 +1239,7 @@ public sealed class ConventionEnforcementTests
 
         // ÇDO accessor i derivuar prodhon gjetje reale te jo-owner (fixtures
         // getter + setter në IdentityBoundaryFixtures).
-        var findings = IdentityStoreIlScanner.Scan(
+        var findings = IdentityStoreIlScanner.ScanFixtureFile(
             Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"),
             isStoreOwner: false);
         Assert.All(derived, accessor => Assert.Contains(findings, finding =>

@@ -39,9 +39,9 @@ public sealed class DynamicRuntimeAccessBoundaryTests
         scanned = 0;
         foreach (var entry in generation.Projects)
         {
-            // C2: kufiri I VETËM — verifikim para+pas, e njëjta gjeneratë.
-            findings.AddRange(PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
-                entry, generation, path => DynamicRuntimeAccessScanner.Scan(path)));
+            // C4: snapshot deep-immutable i verifikuar — zero path.
+            findings.AddRange(DynamicRuntimeAccessScanner.Scan(
+                PlatformProjectCatalog.ReadVerifiedImage(entry, generation)));
             scanned++;
         }
 
@@ -54,8 +54,8 @@ public sealed class DynamicRuntimeAccessBoundaryTests
         var findings = new List<DynamicRuntimeAccessScanner.Finding>();
         foreach (var entry in generation.Projects.Where(PlatformProjectCatalog.IsStoreOwner))
         {
-            findings.AddRange(PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
-                entry, generation, path => DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(path)));
+            findings.AddRange(DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(
+                PlatformProjectCatalog.ReadVerifiedImage(entry, generation)));
         }
 
         return findings;
@@ -180,7 +180,7 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     [InlineData("AsyncReflectionFixture", "dynamic-dangerous", "System.Reflection.PropertyInfo.GetValue")]
     public void Fixtures_RED_kapen_me_locator_te_plote(string member, string kind, string detail)
     {
-        var findings = DynamicRuntimeAccessScanner.Scan(SelfAssemblyPath());
+        var findings = DynamicRuntimeAccessScanner.ScanFixtureFile(SelfAssemblyPath());
         var finding = Assert.Single(findings, candidate =>
             candidate.DeclaringType == Fixtures
             && candidate.Member == member
@@ -199,7 +199,7 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     [Fact]
     public void Atribuimi_async_shkon_te_metoda_burimore()
     {
-        var findings = DynamicRuntimeAccessScanner.Scan(SelfAssemblyPath());
+        var findings = DynamicRuntimeAccessScanner.ScanFixtureFile(SelfAssemblyPath());
         Assert.Contains(findings, finding =>
             finding.DeclaringType == Fixtures && finding.Member == "AsyncReflectionFixture");
         Assert.DoesNotContain(findings, finding =>
@@ -214,12 +214,12 @@ public sealed class DynamicRuntimeAccessBoundaryTests
         File.WriteAllText(path, "jo PE");
         try
         {
-            var single = Assert.Single(DynamicRuntimeAccessScanner.Scan(path));
+            var single = Assert.Single(DynamicRuntimeAccessScanner.ScanFixtureFile(path));
             Assert.Equal("unreadable-assembly", single.Kind);
             Assert.True(DynamicRuntimeAccessScanner.IsNeverAllowable(single));
 
             Assert.Equal("unreadable-assembly",
-                Assert.Single(DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(path)).Kind);
+                Assert.Single(DynamicRuntimeAccessScanner.ScanOwnerPublicSurfaceFixtureFile(path)).Kind);
         }
         finally
         {
@@ -231,7 +231,7 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     [Fact]
     public void Escape_hatch_publik_i_owner_it_kapet()
     {
-        var findings = DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(SelfAssemblyPath());
+        var findings = DynamicRuntimeAccessScanner.ScanOwnerPublicSurfaceFixtureFile(SelfAssemblyPath());
         var hatch = typeof(OwnerReflectionEscapeHatchFixtures).FullName;
 
         foreach (var (member, detail) in ((string Member, string Detail)[])
@@ -259,7 +259,7 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     [InlineData("TypedMediatedApiFixture")]
     public void Fixtures_GREEN_nuk_prodhojne_gjetje(string member)
     {
-        var findings = DynamicRuntimeAccessScanner.Scan(SelfAssemblyPath());
+        var findings = DynamicRuntimeAccessScanner.ScanFixtureFile(SelfAssemblyPath());
         Assert.DoesNotContain(findings, finding =>
             finding.DeclaringType == Fixtures && finding.Member == member);
     }
@@ -277,7 +277,7 @@ public sealed class DynamicRuntimeAccessBoundaryTests
             Assert.False(DynamicRuntimeAccessTaxonomy.IsMonitoredType(name));
         }
 
-        var findings = DynamicRuntimeAccessScanner.Scan(SelfAssemblyPath());
+        var findings = DynamicRuntimeAccessScanner.ScanFixtureFile(SelfAssemblyPath());
         Assert.DoesNotContain(findings, finding =>
             finding.DeclaringType.StartsWith(
                 "Idata.Platform.ArchitectureTests.SyntheticReflection", StringComparison.Ordinal));
@@ -309,7 +309,7 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     public void Heqja_e_familjes_se_monitoruar_e_zhduk_zbulimin(string monitoredType, string member, string detail)
     {
         bool Detected(DynamicRuntimeAccessScanner.AccessTaxonomy? taxonomy)
-            => DynamicRuntimeAccessScanner.Scan(SelfAssemblyPath(), taxonomy)
+            => DynamicRuntimeAccessScanner.ScanFixtureFile(SelfAssemblyPath(), taxonomy)
                 .Any(finding => finding.Member == member && finding.Detail == detail);
 
         Assert.True(Detected(null), $"pritej zbulim: {member}/{detail}");
@@ -334,12 +334,12 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     public void Rregullat_unknown_dhe_safe_jane_mbajtese()
     {
         Assert.DoesNotContain("Target", DynamicRuntimeAccessTaxonomy.DangerousMemberNames);
-        var findings = DynamicRuntimeAccessScanner.Scan(SelfAssemblyPath());
+        var findings = DynamicRuntimeAccessScanner.ScanFixtureFile(SelfAssemblyPath());
         Assert.Contains(findings, finding =>
             finding.Kind == "dynamic-unknown-member"
             && finding.Detail == "System.Runtime.CompilerServices.CallSite`1.Target");
 
-        var withoutSafe = DynamicRuntimeAccessScanner.Scan(
+        var withoutSafe = DynamicRuntimeAccessScanner.ScanFixtureFile(
             SelfAssemblyPath(),
             new DynamicRuntimeAccessScanner.AccessTaxonomy(
                 DynamicRuntimeAccessTaxonomy.MonitoredTypeFullNames,
@@ -395,12 +395,12 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     public void PoC_i_reflektimit_dinamik_tani_kapet_nga_ENG006()
     {
         // Skaneri statik i tipeve nuk sheh asnjë referencë tipi te PoC-i.
-        var identityFindings = IdentityStoreIlScanner.Scan(SelfAssemblyPath(), isStoreOwner: false);
+        var identityFindings = IdentityStoreIlScanner.ScanFixtureFile(SelfAssemblyPath(), isStoreOwner: false);
         Assert.DoesNotContain(identityFindings, finding =>
             finding.Detail.Contains("RuntimeBuiltTypeName", StringComparison.Ordinal));
 
         // ENG-006 e kap te CALL-SITE-i, pavarësisht se emri ndërtohet në runtime.
-        var findings = DynamicRuntimeAccessScanner.Scan(SelfAssemblyPath());
+        var findings = DynamicRuntimeAccessScanner.ScanFixtureFile(SelfAssemblyPath());
         Assert.Contains(findings, finding =>
             finding.DeclaringType == Fixtures
             && finding.Member == "RuntimeBuiltTypeNameFixture"
@@ -417,7 +417,7 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     [Fact]
     public void Format_e_kompajlerit_ne_kodin_tone_mbeten_blocking()
     {
-        var findings = DynamicRuntimeAccessScanner.Scan(SelfAssemblyPath());
+        var findings = DynamicRuntimeAccessScanner.ScanFixtureFile(SelfAssemblyPath());
         var lambdaFindings = findings.Where(finding =>
             finding.Detail == "dynamic-dangerous:System.Type.GetType"
             && finding.DeclaringType.StartsWith(Fixtures, StringComparison.Ordinal)).ToArray();
@@ -463,7 +463,7 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     [Fact]
     public void Klasat_manuale_me_atribute_nuk_veteperjashtohen()
     {
-        var findings = DynamicRuntimeAccessScanner.Scan(SelfAssemblyPath());
+        var findings = DynamicRuntimeAccessScanner.ScanFixtureFile(SelfAssemblyPath());
 
         // 5. [CompilerGenerated] i vetëm → kind i thjeshtë, JO generated.
         var compilerGenerated = Assert.Single(findings, finding =>
@@ -701,7 +701,7 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     [InlineData("LeakedFields", "System.Reflection.FieldInfo")]
     public void Fushat_publike_qe_dorezojne_reflection_kapen(string member, string detail)
     {
-        var findings = DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(SelfAssemblyPath());
+        var findings = DynamicRuntimeAccessScanner.ScanOwnerPublicSurfaceFixtureFile(SelfAssemblyPath());
         Assert.Contains(findings, finding =>
             finding.Kind == "owner-public-reflection-surface"
             && finding.DeclaringType == typeof(OwnerReflectionFieldEscapeFixtures).FullName
@@ -713,7 +713,7 @@ public sealed class DynamicRuntimeAccessBoundaryTests
     [Fact]
     public void Fushat_e_sigurta_nuk_raportohen()
     {
-        var findings = DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(SelfAssemblyPath());
+        var findings = DynamicRuntimeAccessScanner.ScanOwnerPublicSurfaceFixtureFile(SelfAssemblyPath());
         foreach (var safeMember in (string[])["SafeCount", "SafeLabel", "SafeId"])
         {
             Assert.DoesNotContain(findings, finding =>
@@ -742,7 +742,7 @@ public sealed class DynamicRuntimeAccessBoundaryTests
         var expectedAssembly = Path.GetFileNameWithoutExtension(malformedPath);
         try
         {
-            var scanFindings = DynamicRuntimeAccessScanner.Scan(malformedPath);
+            var scanFindings = DynamicRuntimeAccessScanner.ScanFixtureFile(malformedPath);
             var attribute = Assert.Single(scanFindings, finding =>
                 finding.Kind == "unreadable-generated-code-attribute");
             // Fushat me kontratë STABILE asertohen plotësisht; `Detail` mbart emrin
@@ -755,7 +755,7 @@ public sealed class DynamicRuntimeAccessBoundaryTests
             Assert.Contains("[GeneratedCode]", attribute.Reason, StringComparison.Ordinal);
             Assert.True(DynamicRuntimeAccessScanner.IsNeverAllowable(attribute));
 
-            var surfaceFindings = DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(malformedPath);
+            var surfaceFindings = DynamicRuntimeAccessScanner.ScanOwnerPublicSurfaceFixtureFile(malformedPath);
             var field = Assert.Single(surfaceFindings, finding =>
                 finding.Kind == "unreadable-field-signature");
             Assert.Equal(SyntheticMetadataPe.HostTypeFullName, field.DeclaringType);
@@ -770,6 +770,11 @@ public sealed class DynamicRuntimeAccessBoundaryTests
             Assert.Equal(SyntheticMetadataPe.HostTypeFullName, method.DeclaringType);
             Assert.Equal("ProbeMethod", method.Member);
             Assert.Equal(expectedAssembly, method.Assembly);
+            // C4 (§4H): `Reason` ka semantikë STABILE (kontratë e jona); `Detail`
+            // mbart emrin e tipit të përjashtimit të BCL-së — kontratë e
+            // brendshme, prandaj asertohet vetëm si jo-bosh, kurrë me emër ekzakt.
+            Assert.Contains("Sinjaturë", method.Reason, StringComparison.Ordinal);
+            Assert.Contains("fail-closed", method.Reason, StringComparison.Ordinal);
             Assert.False(string.IsNullOrWhiteSpace(method.Detail));
             Assert.True(DynamicRuntimeAccessScanner.IsNeverAllowable(method));
         }
@@ -786,11 +791,11 @@ public sealed class DynamicRuntimeAccessBoundaryTests
         var validPath = SyntheticMetadataPe.Write(malformed: false);
         try
         {
-            var scanFindings = DynamicRuntimeAccessScanner.Scan(validPath);
+            var scanFindings = DynamicRuntimeAccessScanner.ScanFixtureFile(validPath);
             Assert.DoesNotContain(scanFindings, finding =>
                 finding.Kind.StartsWith("unreadable-", StringComparison.Ordinal));
 
-            var surfaceFindings = DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(validPath);
+            var surfaceFindings = DynamicRuntimeAccessScanner.ScanOwnerPublicSurfaceFixtureFile(validPath);
             Assert.DoesNotContain(surfaceFindings, finding =>
                 finding.Kind.StartsWith("unreadable-", StringComparison.Ordinal));
 

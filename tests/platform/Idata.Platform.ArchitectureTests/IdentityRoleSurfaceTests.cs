@@ -172,9 +172,9 @@ public sealed class IdentityRoleSurfaceTests
         Assert.NotEmpty(generation.Projects);
         foreach (var entry in generation.Projects)
         {
-            // C2: path-i merret NGA KUFIRI i ngrirë (verifikim para+pas skanimit).
-            var findings = PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
-                entry, generation, RoleMetadataScanner.Scan);
+            // C4: skanim mbi SNAPSHOT-in deep-immutable të verifikuar (zero path).
+            var findings = RoleMetadataScanner.Scan(
+                PlatformProjectCatalog.ReadVerifiedImage(entry, generation));
             Assert.True(findings.Count == 0,
                 $"{entry.CanonicalPath}: {string.Join(" · ", findings.Select(f => $"{f.Table}[{f.Token}]:{f.Detail}"))}");
         }
@@ -194,7 +194,7 @@ public sealed class IdentityRoleSurfaceTests
     [InlineData("CustomAttribute", "IdentityRole`1")]
     public void Metadata_skan_kap_referencat_body_only_sipas_tabeles(string table, string detailFragment)
     {
-        var findings = RoleMetadataScanner.Scan(
+        var findings = RoleMetadataScanner.ScanFixtureFile(
             Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"));
         Assert.Contains(findings, finding =>
             finding.Table == table
@@ -210,7 +210,7 @@ public sealed class IdentityRoleSurfaceTests
         try
         {
             File.WriteAllText(temporary, "kjo nuk eshte assembly");
-            var findings = RoleMetadataScanner.Scan(temporary);
+            var findings = RoleMetadataScanner.ScanFixtureFile(temporary);
             Assert.Contains(findings, finding => finding.Table == "unreadable-assembly");
         }
         finally
@@ -795,14 +795,21 @@ internal static class RoleMetadataScanner
         return false;
     }
 
-    internal static IReadOnlyList<MetadataFinding> Scan(string assemblyPath)
+    /// <summary>C4 — production: skanim mbi snapshot-in e verifikuar, zero path.</summary>
+    internal static IReadOnlyList<MetadataFinding> Scan(PlatformProjectCatalog.VerifiedAssemblyImage image)
+        => ScanCore(image.AssemblyName, () => new MemoryStream(image.Bytes.ToArray(), writable: false));
+
+    /// <summary>C4 — VETËM fixtures sintetike/self-assembly.</summary>
+    internal static IReadOnlyList<MetadataFinding> ScanFixtureFile(string fixturePath)
+        => ScanCore(Path.GetFileNameWithoutExtension(fixturePath), () => File.OpenRead(fixturePath));
+
+    private static IReadOnlyList<MetadataFinding> ScanCore(string assemblyName, Func<Stream> openImage)
     {
-        var assemblyName = Path.GetFileNameWithoutExtension(assemblyPath);
         var findings = new List<MetadataFinding>();
 
         try
         {
-            using var stream = File.OpenRead(assemblyPath);
+            using var stream = openImage();
             using var portableExecutable = new PEReader(stream);
             var reader = portableExecutable.GetMetadataReader();
             var collector = new CollectingTypeProvider(reader);

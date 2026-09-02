@@ -265,87 +265,94 @@ internal static class PlatformProjectCatalog
     }
 
     /// <summary>
-    /// Correction C2 (Blocker A) — KUFIRI I VETËM i konsumimit të një production
-    /// target-i. Semantika e detyruar:
-    ///  (1) kap NJË `CatalogGeneration` të pandryshueshme;
-    ///  (2) verifikon entry/path/SHA/MVID/mtime PARA konsumimit;
-    ///  (3) ekzekuton konsumatorin mbi path-in e verifikuar;
-    ///  (4) riverifikon TË NJËJTIN entry kundër SË NJËJTËS gjeneratë PAS
-    ///      konsumimit — ndryshimi GJATË konsumimit nuk kalon pa u kapur;
-    ///  (5) rezultati kthehet VETËM pas post-check-ut;
-    ///  (6) gabimet e konsumatorit NUK fshihen dhe NUK zëvendësohen.
-    /// Çdo konsumator i production target-eve në këtë suitë (LoadVerified,
-    /// skanerët ENG-006/ENG-007/role/IL, autoritetet e output-eve) DETYROHET
-    /// të kalojë këtej — e imponuar nga completeness guard i derivuar nga IL.
+    /// Correction C4 — **snapshot DEEP-IMMUTABLE i imazhit të verifikuar**.
+    /// Zëvendëson çdo API që i dorëzonte kodit arbitrar raw verified path:
+    /// këtu **nuk ka path fare**, as `FileSystemInfo`, as `Stream`, as delegate,
+    /// as `byte[]` i mutueshëm — vetëm identitet immutable dhe bajtet e lexuara
+    /// nën verifikim, si `ImmutableArray&lt;byte&gt;`.
     /// </summary>
-    internal static T ConsumeVerifiedFrozenTarget<T>(ProjectEntry entry, Func<string, T> consumer)
-        => ConsumeVerifiedFrozenTarget(entry, CurrentGeneration(), consumer);
+    internal sealed record VerifiedAssemblyImage(
+        string AssemblyName,
+        ImmutableArray<byte> Bytes,
+        string Sha256,
+        Guid Mvid);
 
-    internal static T ConsumeVerifiedFrozenTarget<T>(
-        ProjectEntry entry, CatalogGeneration generation, Func<string, T> consumer)
+    /// <summary>
+    /// Correction C4 — OPERACIONI I VETËM me të cilin lexohet një artefakt
+    /// production. Kontrata e detyruar:
+    ///  (1) kap NJË `CatalogGeneration` të pandryshueshme;
+    ///  (2) **verify-before**: anëtarësi + SHA-256 + MVID + mtime ndaj gjeneratës;
+    ///  (3) lexon bajtet NJË herë;
+    ///  (4) llogarit SHA-256 **dhe MVID nga PIKËRISHT ATO bajte**;
+    ///  (5) i krahason të dyja me vlerat e NGRIRA — kjo kap edhe variantin
+    ///      **ABA** (pre/post shohin A, ndërsa reader-i mori bajte B);
+    ///  (6) **verify-after**: i njëjti verifikim ndaj së njëjtës gjeneratë;
+    ///  (7) vetëm pastaj kthen snapshot-in immutable.
+    /// Zero temp-copy, zero path jashtë.
+    /// </summary>
+    internal static VerifiedAssemblyImage ReadVerifiedImage(ProjectEntry entry)
+        => ReadVerifiedImage(entry, CurrentGeneration());
+
+    internal static VerifiedAssemblyImage ReadVerifiedImage(ProjectEntry entry, CatalogGeneration generation)
     {
-        ArgumentNullException.ThrowIfNull(consumer);
-
-        // Correction C3 (§1): path-i i verifikuar është KAPACITET, jo vlerë —
-        // nuk lejohet të DALË nga kufiri për konsum të mëvonshëm (përndryshe
-        // post-check-u do të ishte kozmetik). Ndalohen (a) tipet që janë vetë
-        // kapacitet i hapur (`FileSystemInfo`, `Stream`, delegate) dhe (b) çdo
-        // VLERË e kthyer që PËRMBAN path-in e verifikuar. Vlerat e derivuara
-        // (rezultate skanimi, bool, klasifikim) mbeten të lejuara.
-        if (EscapesVerifiedCapabilityType(typeof(T)))
-        {
-            throw new InvalidOperationException(
-                "verified-capability-escape: kufiri i konsumit nuk mund të kthejë "
-                + $"`{typeof(T).Name}` — konsumimi duhet të ndodhë brenda callback-ut.");
-        }
-
         var verifiedPath = VerifiedFrozenTargetPath(entry, generation);
-        var result = consumer(verifiedPath);
+        var bytes = File.ReadAllBytes(verifiedPath);
 
-        if (LeaksVerifiedPath(result, verifiedPath))
-        {
-            throw new InvalidOperationException(
-                "verified-capability-escape: kufiri i konsumit nuk mund ta kthejë path-in e "
-                + "verifikuar — konsumimi duhet të ndodhë brenda callback-ut.");
-        }
-
+        VerifyImageBytes(entry, generation, bytes);
         _ = VerifiedFrozenTargetPath(entry, generation);
-        return result;
-    }
-
-    /// <summary>Tipe kthimi që janë VETË kapacitet i hapur mbi artefaktin.</summary>
-    internal static bool EscapesVerifiedCapabilityType(Type returnType)
-        => typeof(FileSystemInfo).IsAssignableFrom(returnType)
-           || typeof(Stream).IsAssignableFrom(returnType)
-           || typeof(Delegate).IsAssignableFrom(returnType);
-
-    /// <summary>A e nxjerr rezultati path-in e verifikuar jashtë kufirit?</summary>
-    internal static bool LeaksVerifiedPath(object? result, string verifiedPath)
-    {
-        var full = Path.GetFullPath(verifiedPath);
-        return result switch
-        {
-            string text => Matches(text),
-            System.Collections.IEnumerable sequence and not string =>
-                sequence.Cast<object?>().Any(item => item is string candidate && Matches(candidate)),
-            _ => false,
-        };
-
-        bool Matches(string candidate)
-            => string.Equals(candidate, verifiedPath, StringComparison.Ordinal)
-               || string.Equals(candidate, full, StringComparison.Ordinal);
+        return new VerifiedAssemblyImage(
+            entry.AssemblyName,
+            [.. bytes],
+            generation.Sha256ByCanonicalPath[entry.CanonicalPath],
+            generation.MvidByCanonicalPath[entry.CanonicalPath]);
     }
 
     /// <summary>
-    /// Correction C3 (§1/§2B) — krahasim identiteti PA publikuar path: a është
+    /// C4 — verifikim i BAJTEVE TË LEXUARA kundër gjeneratës së ngrirë (SHA-256
+    /// dhe MVID i llogaritur PIKËRISHT nga ato bajte). Ky është kontrolli që kap
+    /// variantin **ABA**: një lexim që kthen bajte B ndërsa verifikimet mbi
+    /// file-in shohin identitetin A. Seam i veçantë që testet ta ushtrojnë
+    /// drejtpërdrejt — përndryshe nuk do të ishte diskriminues.
+    /// </summary>
+    internal static void VerifyImageBytes(
+        ProjectEntry entry, CatalogGeneration generation, ReadOnlySpan<byte> bytes)
+    {
+        var frozenSha = generation.Sha256ByCanonicalPath[entry.CanonicalPath];
+        var frozenMvid = generation.MvidByCanonicalPath[entry.CanonicalPath];
+        var readSha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+        var readMvid = ReadMvidFromImage(bytes);
+        if (!string.Equals(readSha, frozenSha, StringComparison.Ordinal) || readMvid != frozenMvid)
+        {
+            throw new InvalidOperationException(
+                "catalog-generation-drift: bajtet e lexuara nuk përputhen me fingerprint-in e ngrirë "
+                + $"(SHA/MVID) — {entry.CanonicalPath}.");
+        }
+    }
+
+    /// <summary>MVID i lexuar nga BAJTET e imazhit (jo nga file-i) — pjesë e kontrollit ABA.</summary>
+    internal static Guid ReadMvidFromImage(ReadOnlySpan<byte> image)
+    {
+        using var stream = new MemoryStream(image.ToArray(), writable: false);
+        using var portableExecutable = new System.Reflection.PortableExecutable.PEReader(stream);
+        var reader = System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(portableExecutable);
+        return reader.GetGuid(reader.GetModuleDefinition().Mvid);
+    }
+
+    /// <summary>
+    /// Correction C3/C4 — krahasim identiteti PA publikuar path: a është
     /// `candidateFullPath` EKZAKTËSISHT output-i autoritativ i këtij projekti?
-    /// Kryen verify-before → krahasim → verify-after, njësoj si kufiri.
+    /// Operacion i NGUSHTË catalog-owned: verify-before → krahasim → verify-after;
+    /// hyn një path kandidat, del vetëm `bool`.
     /// </summary>
     internal static bool MatchesVerifiedTarget(
         ProjectEntry entry, CatalogGeneration generation, string candidateFullPath)
-        => ConsumeVerifiedFrozenTarget(entry, generation, verifiedPath =>
-            string.Equals(
-                Path.GetFullPath(candidateFullPath), Path.GetFullPath(verifiedPath), StringComparison.Ordinal));
+    {
+        var verifiedPath = VerifiedFrozenTargetPath(entry, generation);
+        var matches = string.Equals(
+            Path.GetFullPath(candidateFullPath), Path.GetFullPath(verifiedPath), StringComparison.Ordinal);
+        _ = VerifiedFrozenTargetPath(entry, generation);
+        return matches;
+    }
 
     /// <summary>
     /// Correction C3 (§2B) — numri i `CanonicalTargetPath`-eve DISTINKTE, i
@@ -504,22 +511,20 @@ internal static class PlatformProjectCatalog
         var repoRoot = RepoRoot();
         VerifyTargetAssembly(repoRoot, entry, approvedOutputRootRelative: "src/platform");
 
-        // Correction C2 (Blocker A): ngarkimi kalon NGA KUFIRI I VETËM —
-        // verifikim i të njëjtës gjeneratë PARA ngarkimit DHE PAS tij: një
-        // drift post-read e bën të pamundur kthimin e assembly-t (fail-closed
-        // brenda kufirit, jo vetëm para tij).
+        // Correction C4: operacion i NGUSHTË catalog-owned — verify-before →
+        // ngarkim → verify-after, pa i dhënë asnjë callback-u raw path.
         var generation = CurrentGeneration();
-        return ConsumeVerifiedFrozenTarget(entry, generation, _ =>
-        {
-            var loaded = Assembly.Load(new AssemblyName(entry.AssemblyName));
-            if (loaded.ManifestModule.ModuleVersionId != generation.MvidByCanonicalPath[entry.CanonicalPath])
-            {
-                throw new InvalidOperationException(
-                    $"Assembly i ngarkuar ≠ TargetPath (MVID mismatch — kopje stale/decoy?): {entry.AssemblyName}");
-            }
+        _ = VerifiedFrozenTargetPath(entry, generation);
 
-            return loaded;
-        });
+        var loaded = Assembly.Load(new AssemblyName(entry.AssemblyName));
+        if (loaded.ManifestModule.ModuleVersionId != generation.MvidByCanonicalPath[entry.CanonicalPath])
+        {
+            throw new InvalidOperationException(
+                $"Assembly i ngarkuar ≠ TargetPath (MVID mismatch — kopje stale/decoy?): {entry.AssemblyName}");
+        }
+
+        _ = VerifiedFrozenTargetPath(entry, generation);
+        return loaded;
     }
 
     private static ProjectEntry Evaluate(string canonicalRepoRoot, string projectPath)

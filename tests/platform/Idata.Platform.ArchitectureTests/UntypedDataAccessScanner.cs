@@ -88,18 +88,35 @@ internal static class UntypedDataAccessScanner
 
     // ───────────────────────── Skanimi kryesor ─────────────────────────
 
-    internal static IReadOnlyList<Finding> Scan(string assemblyPath, SinkTaxonomy? taxonomy = null)
+    /// <summary>
+    /// C4 — RRUGA E VETME për artefaktet PRODUCTION: skanim mbi snapshot-in
+    /// deep-immutable të bajteve të verifikuara. Zero path.
+    /// </summary>
+    internal static IReadOnlyList<Finding> Scan(
+        PlatformProjectCatalog.VerifiedAssemblyImage image, SinkTaxonomy? taxonomy = null)
+        => ScanCore(image.AssemblyName, () => new MemoryStream(image.Bytes.ToArray(), writable: false), taxonomy);
+
+    /// <summary>
+    /// C4 — VETËM për fixtures sintetike/self-assembly (file jashtë katalogut).
+    /// NUK lejohet për artefakte production; meta-testi i plotësisë e imponon.
+    /// </summary>
+    internal static IReadOnlyList<Finding> ScanFixtureFile(
+        string fixturePath, SinkTaxonomy? taxonomy = null)
+        => ScanCore(
+            Path.GetFileNameWithoutExtension(fixturePath), () => File.OpenRead(fixturePath), taxonomy);
+
+    private static IReadOnlyList<Finding> ScanCore(
+        string assemblyName, Func<Stream> openImage, SinkTaxonomy? taxonomy)
     {
         taxonomy ??= SinkTaxonomy.Default;
-        var assemblyName = Path.GetFileNameWithoutExtension(assemblyPath);
         var findings = new List<Finding>();
 
-        FileStream stream;
+        Stream stream;
         PEReader portableExecutable;
         MetadataReader reader;
         try
         {
-            stream = File.OpenRead(assemblyPath);
+            stream = openImage();
             portableExecutable = new PEReader(stream);
             reader = portableExecutable.GetMetadataReader();
         }
@@ -535,17 +552,26 @@ internal static class UntypedDataAccessScanner
     /// NUK trajtohet si kapacitet raw — dalja raw prej tij (`GetDbConnection`)
     /// është vetë sink i skanuar dhe i manifestuar.
     /// </summary>
-    internal static IReadOnlyList<Finding> ScanOwnerPublicSurface(string assemblyPath)
+    /// <summary>C4 — owner surface mbi snapshot-in e verifikuar (production).</summary>
+    internal static IReadOnlyList<Finding> ScanOwnerPublicSurface(PlatformProjectCatalog.VerifiedAssemblyImage image)
+        => ScanOwnerPublicSurfaceCore(
+            image.AssemblyName, () => new MemoryStream(image.Bytes.ToArray(), writable: false));
+
+    /// <summary>C4 — VETËM fixtures sintetike.</summary>
+    internal static IReadOnlyList<Finding> ScanOwnerPublicSurfaceFixtureFile(string fixturePath)
+        => ScanOwnerPublicSurfaceCore(
+            Path.GetFileNameWithoutExtension(fixturePath), () => File.OpenRead(fixturePath));
+
+    private static IReadOnlyList<Finding> ScanOwnerPublicSurfaceCore(string assemblyName, Func<Stream> openImage)
     {
-        var assemblyName = Path.GetFileNameWithoutExtension(assemblyPath);
         var findings = new List<Finding>();
 
-        FileStream stream;
+        Stream stream;
         PEReader portableExecutable;
         MetadataReader reader;
         try
         {
-            stream = File.OpenRead(assemblyPath);
+            stream = openImage();
             portableExecutable = new PEReader(stream);
             reader = portableExecutable.GetMetadataReader();
         }

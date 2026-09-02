@@ -334,19 +334,18 @@ public sealed class CatalogGenerationStabilityTests
         var generation = PlatformProjectCatalog.CurrentGeneration();
         var victim = generation.Projects.OrderBy(entry => entry.CanonicalPath, StringComparer.Ordinal).First();
 
-        // GREEN mbi gjeneratën reale — konsumimi ndodh BRENDA kufirit (C3).
-        Assert.True(PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
-            victim, generation, File.Exists));
+        // GREEN mbi gjeneratën reale — leximi kalon nga operacioni catalog-owned (C4).
+        Assert.NotEmpty(PlatformProjectCatalog.ReadVerifiedImage(victim, generation).Bytes);
 
         var poisoned = PoisonComponent(generation, victim.CanonicalPath, component);
         var exception = Assert.Throws<InvalidOperationException>(
-            () => PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(victim, poisoned, File.Exists));
+            () => PlatformProjectCatalog.ReadVerifiedImage(victim, poisoned));
         Assert.Contains("catalog-generation-drift", exception.Message, StringComparison.Ordinal);
 
         // Projektet e tjera të gjeneratës së helmuar mbeten GREEN (saktësi kirurgjikale).
         var other = generation.Projects.OrderBy(entry => entry.CanonicalPath, StringComparer.Ordinal).Last();
         Assert.NotEqual(victim.CanonicalPath, other.CanonicalPath);
-        Assert.True(PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(other, poisoned, File.Exists));
+        Assert.NotEmpty(PlatformProjectCatalog.ReadVerifiedImage(other, poisoned).Bytes);
     }
 
     [Fact]
@@ -358,21 +357,22 @@ public sealed class CatalogGenerationStabilityTests
             CanonicalPath = "src/platform/Synthetic.Outside/Synthetic.Outside.csproj",
         };
         var exception = Assert.Throws<InvalidOperationException>(
-            () => PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(outsider, generation, File.Exists));
+            () => PlatformProjectCatalog.ReadVerifiedImage(outsider, generation));
         Assert.Contains("jashtë gjeneratës autoritative", exception.Message, StringComparison.Ordinal);
 
         // Edhe identitet i manipuluar me path kanonik REAL refuzohet (anëtarësia
         // është mbi HYRJEN e plotë, jo vetëm mbi çelësin).
         var tampered = generation.Projects[0] with { AssemblyName = "Tampered.Assembly" };
         Assert.Throws<InvalidOperationException>(
-            () => PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(tampered, generation, File.Exists));
+            () => PlatformProjectCatalog.ReadVerifiedImage(tampered, generation));
     }
 
     /// <summary>
-    /// C2 (Blocker A): ÇDO konsumator i production target-eve thërret KUFIRIN E
-    /// VETËM `ConsumeVerifiedFrozenTarget` — provë MEKANIKE mbi IL (token-a
-    /// MethodDef të të njëjtit assembly). Vetë kufiri provohet veçmas se ka
-    /// rendin verify-before → consumer → verify-after.
+    /// C4 (§4F): ÇDO konsumator i artefakteve production thërret VETËM një nga
+    /// OPERACIONET E NGUSHTA catalog-owned (`ReadVerifiedImage`, `LoadVerified`,
+    /// `MatchesVerifiedTarget`) — provë MEKANIKE mbi IL (token-a MethodDef të të
+    /// njëjtit assembly). Vetë operacioni i leximit provohet veçmas se ka rendin
+    /// verify-before → read → verify-after.
     /// </summary>
     [Theory]
     [InlineData("Idata.Platform.ArchitectureTests.PlatformProjectCatalog", "LoadVerified")]
@@ -384,23 +384,37 @@ public sealed class CatalogGenerationStabilityTests
     public void Konsumatoret_e_production_target_it_thirrin_kontraten_e_ngrire(string typeName, string methodName)
         => Assert.Contains(
             CalledMethodDefinitionNames(typeName, methodName),
-            called => called is "ConsumeVerifiedFrozenTarget" or "MatchesVerifiedTarget");
+            // Konsumatorët e jashtëm thërrasin një nga operacionet e ngushta;
+            // operacionet e vetë katalogut thërrasin verifikuesin primitiv.
+            called => called is "ReadVerifiedImage" or "LoadVerified"
+                or "MatchesVerifiedTarget" or "VerifiedFrozenTargetPath");
 
     /// <summary>
-    /// C2 — RENDI EKZAKT i kufirit, i provuar mbi IL-in e vetë
-    /// `ConsumeVerifiedFrozenTarget&lt;T&gt;`: dy thirrje REALE të verifikuesit
-    /// primitiv dhe SAKTËSISHT një `Invoke` i konsumatorit MES tyre —
+    /// C4 — RENDI EKZAKT i leximit, i provuar mbi IL-in e vetë
+    /// `ReadVerifiedImage`: verify-before → `ReadAllBytes` → verify-after,
     /// jo thjesht prani emrash në një set.
     /// </summary>
     [Fact]
-    public void Kufiri_ka_rendin_ekzakt_verify_consumer_verify()
+    public void Leximi_ka_rendin_ekzakt_verify_read_verify()
     {
         var sequence = CalledSequenceOf(
-            "Idata.Platform.ArchitectureTests.PlatformProjectCatalog", "ConsumeVerifiedFrozenTarget",
-            name => name is "VerifiedFrozenTargetPath" or "Invoke")
+            "Idata.Platform.ArchitectureTests.PlatformProjectCatalog", "ReadVerifiedImage",
+            name => name is "VerifiedFrozenTargetPath" or "ReadAllBytes")
             .ToArray();
 
-        Assert.Equal(["VerifiedFrozenTargetPath", "Invoke", "VerifiedFrozenTargetPath"], sequence);
+        Assert.Equal(["VerifiedFrozenTargetPath", "ReadAllBytes", "VerifiedFrozenTargetPath"], sequence);
+    }
+
+    /// <summary>C4 — `LoadVerified` ka po ashtu verify-before → load → verify-after.</summary>
+    [Fact]
+    public void LoadVerified_ka_rendin_ekzakt_verify_load_verify()
+    {
+        var sequence = CalledSequenceOf(
+            "Idata.Platform.ArchitectureTests.PlatformProjectCatalog", "LoadVerified",
+            name => name is "VerifiedFrozenTargetPath" or "Load")
+            .ToArray();
+
+        Assert.Equal(["VerifiedFrozenTargetPath", "Load", "VerifiedFrozenTargetPath"], sequence);
     }
 
     /// <summary>
@@ -494,7 +508,7 @@ public sealed class CatalogGenerationStabilityTests
                 if (handle.Kind == HandleKind.MethodSpecification)
                 {
                     // Thirrjet ndaj metodave GJENERIKE (p.sh. kufiri
-                    // `ConsumeVerifiedFrozenTarget<T>`) enkodohen si MethodSpec.
+                    // p.sh. helper-at gjenerikë) enkodohen si MethodSpec.
                     handle = reader.GetMethodSpecification((MethodSpecificationHandle)handle).Method;
                 }
 
@@ -530,16 +544,15 @@ public sealed class CatalogGenerationStabilityTests
     }
 
     /// <summary>
-    /// C2 — prova BEHAVIORALE e post-check-ut mbi një artefakt SINTETIK nën
-    /// rrënjën e repo-s (bin e testeve; zero prekje e output-eve reale):
-    /// (a) konsumator që e NDRYSHON artefaktin gjatë konsumimit → kufiri hedh
-    /// `catalog-generation-drift` PAS konsumimit dhe rezultati nuk kthehet;
-    /// (b) gjeneratë e helmuar → konsumatori NUK thirret fare (pre-check).
+    /// C4 (§4C) — INTEGRITETI i leximit të verifikuar mbi një artefakt SINTETIK
+    /// (zero prekje e output-eve reale): mutacion pas freeze-it, varianti ABA
+    /// (identitet i jashtëm A, përmbajtje B) dhe gjeneratë e helmuar.
     /// </summary>
     [Fact]
-    public void Kufiri_kap_ndryshimin_gjate_konsumimit_dhe_bllokon_para_tij()
+    public void Leximi_i_verifikuar_kap_mutacionin_ABA_dhe_bllokon_para_tij()
     {
         var syntheticPath = SyntheticMetadataPe.Write(malformed: false, AppContext.BaseDirectory);
+        var otherPath = SyntheticMetadataPe.Write(malformed: false, AppContext.BaseDirectory);
         try
         {
             var canonical = Path.GetRelativePath(PlatformProjectCatalog.RepoRoot(), syntheticPath)
@@ -549,81 +562,289 @@ public sealed class CatalogGenerationStabilityTests
                 "Synthetic.Probe", "SynMalformed", canonical);
             var generation = PlatformProjectCatalog.SyntheticGenerationFor(entry);
 
-            // GREEN: konsumim i pandryshuar kthen rezultatin pas post-check-ut.
-            Assert.Equal(42, PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, generation, _ => 42));
+            // GREEN: leximi i pandryshuar kthen snapshot me identitetin e ngrirë.
+            var image = PlatformProjectCatalog.ReadVerifiedImage(entry, generation);
+            Assert.NotEmpty(image.Bytes);
+            Assert.Equal(generation.Sha256ByCanonicalPath[entry.CanonicalPath], image.Sha256);
+            Assert.Equal(generation.MvidByCanonicalPath[entry.CanonicalPath], image.Mvid);
+            Assert.Equal(entry.AssemblyName, image.AssemblyName);
 
-            // (a) mutacion GJATË konsumimit → drift PAS konsumimit, zero kthim.
-            var consumerRan = false;
-            var exception = Assert.Throws<InvalidOperationException>(() =>
-                PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, generation, path =>
-                {
-                    consumerRan = true;
-                    File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(5));
-                    return 0;
-                }));
-            Assert.True(consumerRan);
-            Assert.Contains("catalog-generation-drift", exception.Message, StringComparison.Ordinal);
+            // (a) ABA i VËRTETË (TOCTOU): verifikimet mbi file-in shohin identitetin
+            // A, ndërsa reader-i kthen bajte B. Ushtrohet drejtpërdrejt mbi seam-in
+            // e verifikimit të bajteve — dega është MBAJTËSE, jo defence-in-depth
+            // i pa-provuar. (Të dy artefaktet janë ende TË NDRYSHËM këtu.)
+            PlatformProjectCatalog.VerifyImageBytes(entry, generation, File.ReadAllBytes(syntheticPath));
+            var toctou = Assert.Throws<InvalidOperationException>(
+                () => PlatformProjectCatalog.VerifyImageBytes(entry, generation, File.ReadAllBytes(otherPath)));
+            Assert.Contains("SHA/MVID", toctou.Message, StringComparison.Ordinal);
 
-            // (b) gjeneratë e helmuar → pre-check ndal PARA konsumatorit.
+            // (b) MUTACION i artefaktit pas freeze-it → leximi refuzohet.
+            File.SetLastWriteTimeUtc(syntheticPath, DateTime.UtcNow.AddMinutes(5));
+            var mutated = Assert.Throws<InvalidOperationException>(
+                () => PlatformProjectCatalog.ReadVerifiedImage(entry, generation));
+            Assert.Contains("catalog-generation-drift", mutated.Message, StringComparison.Ordinal);
+
+            // (c) Përmbajtja zëvendësohet me B dhe mtime-i kthehet te vlera A →
+            // verifikimi ndaj gjeneratës mbetet fail-closed.
+            var frozenWrite = generation.WriteTimeUtcByCanonicalPath[entry.CanonicalPath];
+            File.WriteAllBytes(syntheticPath, File.ReadAllBytes(otherPath));
+            File.SetLastWriteTimeUtc(syntheticPath, frozenWrite);
+            var aba = Assert.Throws<InvalidOperationException>(
+                () => PlatformProjectCatalog.ReadVerifiedImage(entry, generation));
+            Assert.Contains("catalog-generation-drift", aba.Message, StringComparison.Ordinal);
+
+            // (d) gjeneratë e helmuar → pre-check ndal PARA çdo leximi bajtesh.
             var freshGeneration = PlatformProjectCatalog.SyntheticGenerationFor(entry);
             var poisoned = PoisonComponent(freshGeneration, entry.CanonicalPath, "mtime");
-            var invoked = false;
-            Assert.Throws<InvalidOperationException>(() =>
-                PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, poisoned, _ =>
-                {
-                    invoked = true;
-                    return 0;
-                }));
-            Assert.False(invoked);
+            Assert.Throws<InvalidOperationException>(
+                () => PlatformProjectCatalog.ReadVerifiedImage(entry, poisoned));
         }
         finally
         {
             File.Delete(syntheticPath);
+            File.Delete(otherPath);
         }
     }
 
     /// <summary>
-    /// C3 (§1) — path-i i verifikuar NUK del dot nga kufiri: kthimi i tij si
-    /// `string` (drejtpërdrejt ose brenda një koleksioni), ose i një kapaciteti
-    /// të hapur (`FileInfo`/`Stream`/delegate), refuzohet — konsumimi REAL duhet
-    /// të ndodhë brenda callback-ut. Vlerat e DERIVUARA mbeten të lejuara.
+    /// C4 (§4A) — API-SHAPE: surface-i i katalogut nuk publikon më raw verified
+    /// path, as kapacitet të hapur, as callback me path. Mbi C3 ky test do të
+    /// kishte dalë RED, sepse ekzistonte
+    /// `ConsumeVerifiedFrozenTarget&lt;T&gt;(…, Func&lt;string,T&gt;)`.
     /// </summary>
     [Fact]
-    public void Path_i_verifikuar_nuk_del_dot_nga_kufiri()
+    public void API_shape_i_katalogut_nuk_publikon_verified_path()
     {
-        var entry = PlatformProjectCatalog.DiscoverProduction()[0];
+        var catalog = typeof(PlatformProjectCatalog);
+        const BindingFlags All = BindingFlags.Public | BindingFlags.NonPublic
+            | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly;
 
-        // (a) kthim i drejtpërdrejtë i path-it → RED.
-        var direct = Assert.Throws<InvalidOperationException>(
-            () => PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, verifiedPath => verifiedPath));
-        Assert.Contains("verified-capability-escape", direct.Message, StringComparison.Ordinal);
+        // (1) API-ja e vjetër me callback nuk ekziston më në asnjë formë.
+        Assert.DoesNotContain(catalog.GetMethods(All), method =>
+            method.Name.Contains("ConsumeVerifiedFrozenTarget", StringComparison.Ordinal));
 
-        // (b) i fshehur brenda një koleksioni → po ashtu RED.
-        var wrapped = Assert.Throws<InvalidOperationException>(
-            () => PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
-                entry, verifiedPath => new[] { "benign", verifiedPath }));
-        Assert.Contains("verified-capability-escape", wrapped.Message, StringComparison.Ordinal);
+        // (2) Verifikuesi primitiv i path-it mbetet PRIVATE.
+        var primitive = catalog.GetMethod(
+            "VerifiedFrozenTargetPath", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(primitive);
+        Assert.True(primitive!.IsPrivate);
+        Assert.DoesNotContain(catalog.GetMethods(All), method =>
+            method.Name == "VerifiedFrozenTargetPath" && !method.IsPrivate);
 
-        // (c) kapacitete të hapura → refuzohen nga TIPI, para se konsumatori të thirret.
-        var consumerRan = false;
-        Assert.Throws<InvalidOperationException>(() =>
-            PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, verifiedPath =>
+        var nonPrivate = catalog.GetMethods(All).Where(method => !method.IsPrivate).ToArray();
+
+        // (3) Asnjë anëtar non-private nuk pranon delegate që merr verified path.
+        Assert.DoesNotContain(nonPrivate, method => method.GetParameters().Any(parameter =>
+            typeof(Delegate).IsAssignableFrom(parameter.ParameterType)
+            && parameter.ParameterType.GetGenericArguments().Contains(typeof(string))));
+
+        // (4) Asnjë anëtar non-private nuk kthen kapacitet të hapur mbi artefaktin.
+        Assert.DoesNotContain(nonPrivate, method =>
+            typeof(FileSystemInfo).IsAssignableFrom(method.ReturnType)
+            || typeof(Stream).IsAssignableFrom(method.ReturnType)
+            || typeof(Delegate).IsAssignableFrom(method.ReturnType));
+
+        // (5) Snapshot-i është deep-immutable, pa byte[]/Stream/FileInfo/delegate.
+        var imageType = typeof(PlatformProjectCatalog.VerifiedAssemblyImage);
+        Assert.Equal(
+            typeof(ImmutableArray<byte>),
+            imageType.GetProperty(nameof(PlatformProjectCatalog.VerifiedAssemblyImage.Bytes))!.PropertyType);
+        Assert.DoesNotContain(imageType.GetProperties(), property =>
+            property.PropertyType == typeof(byte[])
+            || typeof(FileSystemInfo).IsAssignableFrom(property.PropertyType)
+            || typeof(Stream).IsAssignableFrom(property.PropertyType)
+            || typeof(Delegate).IsAssignableFrom(property.PropertyType));
+
+        // (6) Asnjë veti e snapshot-it nuk mbart path filesystem-i të artefaktit.
+        var real = PlatformProjectCatalog.ReadVerifiedImage(PlatformProjectCatalog.DiscoverProduction()[0]);
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        Assert.DoesNotContain(
+            imageType.GetProperties().Where(property => property.PropertyType == typeof(string)),
+            property => ((string?)property.GetValue(real))?.Contains(repoRoot, StringComparison.Ordinal) == true);
+    }
+
+    /// <summary>
+    /// C4 (§4B) — bypass-et e C3 regjistrohen si ROOT CAUSE, jo si blacklist:
+    /// `T=object` + `FileInfo`, wrapper/koleksion nested, dhe capture në closure
+    /// me side-effect. Të tria i shpëtonin çdo kontrolli runtime mbi `T`/rezultat,
+    /// sepse path-i i ishte dhënë tashmë kodit arbitrar PARA post-check-ut. Prova
+    /// e mbylljes nuk është kapja e tyre, por MUNGESA e API-së që ua jepte
+    /// path-in — dhe heqja e kontrolleve runtime si kod i vdekur.
+    /// </summary>
+    [Fact]
+    public void Bypass_et_e_C3_nuk_kane_me_surface_per_te_ekzistuar()
+    {
+        var catalog = typeof(PlatformProjectCatalog);
+        const BindingFlags All = BindingFlags.Public | BindingFlags.NonPublic
+            | BindingFlags.Static | BindingFlags.Instance | BindingFlags.DeclaredOnly;
+
+        Assert.DoesNotContain(catalog.GetMethods(All).Where(method => !method.IsPrivate),
+            method => method.GetParameters().Any(parameter =>
+                parameter.ParameterType.IsGenericType
+                && typeof(Delegate).IsAssignableFrom(parameter.ParameterType)
+                && parameter.ParameterType.GetGenericArguments().FirstOrDefault() == typeof(string)));
+
+        foreach (var removed in (string[])["EscapesVerifiedCapabilityType", "LeaksVerifiedPath"])
+        {
+            Assert.Null(catalog.GetMethod(removed, All));
+        }
+    }
+
+    /// <summary>
+    /// C4 (§4E) — PARITET i skanerëve: për TË NJËJTIN binar, rruga
+    /// snapshot-based (production) jep rezultat SET-EQUAL me rrugën
+    /// fixture-path. Provohet mbi assembly-në e testeve, ku të dyja rrugët janë
+    /// legjitime dhe krahasimi është i mundur pa publikuar asnjë path production.
+    /// </summary>
+    [Fact]
+    public void Skaneret_japin_rezultat_identik_mbi_snapshot_dhe_mbi_file()
+    {
+        var selfPath = Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll");
+        var bytes = File.ReadAllBytes(selfPath);
+        var image = new PlatformProjectCatalog.VerifiedAssemblyImage(
+            Path.GetFileNameWithoutExtension(selfPath),
+            [.. bytes],
+            Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)),
+            PlatformProjectCatalog.ReadMvidFromImage(bytes));
+
+        Assert.Equal(
+            DynamicRuntimeAccessScanner.ScanFixtureFile(selfPath).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal),
+            DynamicRuntimeAccessScanner.Scan(image).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal));
+
+        Assert.Equal(
+            DynamicRuntimeAccessScanner.ScanOwnerPublicSurfaceFixtureFile(selfPath).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal),
+            DynamicRuntimeAccessScanner.ScanOwnerPublicSurface(image).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal));
+
+        Assert.Equal(
+            UntypedDataAccessScanner.ScanFixtureFile(selfPath).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal),
+            UntypedDataAccessScanner.Scan(image).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal));
+
+        Assert.Equal(
+            UntypedDataAccessScanner.ScanOwnerPublicSurfaceFixtureFile(selfPath).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal),
+            UntypedDataAccessScanner.ScanOwnerPublicSurface(image).Select(f => $"{f.Kind}|{f.DeclaringType}|{f.Member}|{f.Detail}").Order(StringComparer.Ordinal));
+
+        Assert.Equal(
+            IdentityStoreIlScanner.ScanFixtureFile(selfPath, isStoreOwner: false).Select(f => $"{f.Kind}|{f.Detail}").Order(StringComparer.Ordinal),
+            IdentityStoreIlScanner.Scan(image, isStoreOwner: false).Select(f => $"{f.Kind}|{f.Detail}").Order(StringComparer.Ordinal));
+
+        Assert.Equal(
+            RoleMetadataScanner.ScanFixtureFile(selfPath).Select(f => $"{f.Table}|{f.Token}|{f.Detail}").Order(StringComparer.Ordinal),
+            RoleMetadataScanner.Scan(image).Select(f => $"{f.Table}|{f.Token}|{f.Detail}").Order(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// C4 (§4F) — një artefakt PRODUCTION nuk mund të skanohet dot përmes
+    /// overload-it fixture-path. Zinxhiri strukturor i provuar mekanikisht:
+    ///  (1) katalogu nuk publikon asnjë path të verifikuar (API-shape test);
+    ///  (2) `get_CanonicalTargetPath` lexohet VETËM brenda katalogut (guard i
+    ///      primitiveve);
+    ///  (3) prandaj **asnjë call-site i një overload-i fixture nuk ndodhet në një
+    ///      metodë që lexon `CanonicalTargetPath`** — pra stringu që i kalohet
+    ///      s'mund të jetë kurrë path-i i një artefakti production.
+    /// Ky test imponon pikën (3); (1) dhe (2) imponohen nga testet e tyre.
+    /// </summary>
+    [Fact]
+    public void Asnje_skanim_production_nuk_perdor_overload_in_fixture_path()
+    {
+        string[] fixtureOverloads = ["ScanFixtureFile", "ScanOwnerPublicSurfaceFixtureFile"];
+
+        var violations = new List<string>();
+        var path = Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll");
+        using var stream = File.OpenRead(path);
+        using var portableExecutable = new PEReader(stream);
+        var reader = portableExecutable.GetMetadataReader();
+        var sawFixtureCall = false;
+
+        foreach (var methodHandle in reader.MethodDefinitions)
+        {
+            var method = reader.GetMethodDefinition(methodHandle);
+            if (method.RelativeVirtualAddress == 0)
             {
-                consumerRan = true;
-                return new FileInfo(verifiedPath);
-            }));
-        Assert.False(consumerRan);
-        Assert.Throws<InvalidOperationException>(() =>
-            PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
-                entry, _ => (Func<string>)(() => "leak")));
+                continue;
+            }
 
-        // (d) GREEN: konsumim REAL brenda kufirit + vlera të derivuara.
-        Assert.True(PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, File.Exists));
-        Assert.NotEmpty(PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
-            entry, path => DynamicRuntimeAccessScanner.Scan(path)));
-        Assert.NotEqual(
-            string.Empty,
-            PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(entry, path => Path.GetFileName(path)));
+            var called = CalledNames(reader, portableExecutable, method);
+            if (!called.Overlaps(fixtureOverloads))
+            {
+                continue;
+            }
+
+            sawFixtureCall = true;
+            if (called.Contains("get_CanonicalTargetPath"))
+            {
+                violations.Add(
+                    $"{UntypedDataAccessScanner.FullNameOfTypeDefinition(reader, method.GetDeclaringType())}."
+                    + reader.GetString(method.Name));
+            }
+        }
+
+        Assert.True(sawFixtureCall, "asnjë call-site fixture nuk u gjet — guard-i do të ishte bosh");
+        Assert.True(violations.Count == 0, string.Join(" · ", violations.Order(StringComparer.Ordinal)));
+    }
+
+    /// <summary>Emrat e thirrur nga një metodë (MethodDef/MemberRef/MethodSpec).</summary>
+    private static HashSet<string> CalledNames(
+        MetadataReader reader, PEReader portableExecutable, MethodDefinition method)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var il = portableExecutable.GetMethodBody(method.RelativeVirtualAddress).GetILBytes()!;
+        foreach (var instruction in IlOperandTable.Walk(il, out _))
+        {
+            if (instruction.MetadataToken == 0)
+            {
+                continue;
+            }
+
+            var handle = System.Reflection.Metadata.Ecma335.MetadataTokens.EntityHandle(instruction.MetadataToken);
+            if (handle.Kind == HandleKind.MethodSpecification)
+            {
+                handle = reader.GetMethodSpecification((MethodSpecificationHandle)handle).Method;
+            }
+
+            switch (handle.Kind)
+            {
+                case HandleKind.MethodDefinition:
+                    names.Add(reader.GetString(reader.GetMethodDefinition((MethodDefinitionHandle)handle).Name));
+                    break;
+                case HandleKind.MemberReference:
+                    names.Add(reader.GetString(reader.GetMemberReference((MemberReferenceHandle)handle).Name));
+                    break;
+            }
+        }
+
+        return names;
+    }
+
+    /// <summary>
+    /// C4 (§4D) — snapshot-i është deep-immutable dhe determinist nën
+    /// konkurrencë: 32 konsumatorë paralelë marrin të njëjtin identitet, të
+    /// njëjtat bajte dhe të njëjtin rezultat skanimi.
+    /// </summary>
+    [Fact]
+    public void Snapshot_i_verifikuar_eshte_immutable_dhe_determinist_nen_konkurrence()
+    {
+        var entry = PlatformProjectCatalog.DiscoverProduction()
+            .Single(candidate => candidate.AssemblyName == "Idata.Platform.Persistence");
+        var reference = PlatformProjectCatalog.ReadVerifiedImage(entry);
+
+        // Tipi i bajteve është ImmutableArray<byte> — asnjë `byte[]` i publikuar.
+        Assert.IsType<ImmutableArray<byte>>(reference.Bytes);
+        Assert.Throws<NotSupportedException>(() => ((IList<byte>)reference.Bytes)[0] = 0xFF);
+
+        var identities = new string[32];
+        var scans = new int[32];
+        Parallel.For(0, identities.Length, index =>
+        {
+            var image = PlatformProjectCatalog.ReadVerifiedImage(entry);
+            identities[index] = $"{image.AssemblyName}|{image.Sha256}|{image.Mvid}|{image.Bytes.Length}";
+            scans[index] = DynamicRuntimeAccessScanner.Scan(image).Count;
+        });
+
+        Assert.All(identities, identity => Assert.Equal(identities[0], identity));
+        Assert.All(scans, count => Assert.Equal(scans[0], count));
+        Assert.Equal(
+            $"{reference.AssemblyName}|{reference.Sha256}|{reference.Mvid}|{reference.Bytes.Length}",
+            identities[0]);
     }
 
     /// <summary>

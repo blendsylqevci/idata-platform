@@ -975,18 +975,16 @@ public sealed class DependencyDirectionTests
                 null, null, null, decoy),
             repoRoot, authority));
 
-        // INVERSE GREEN: i njëjti metadata + output REAL. C3: path-i real merret
-        // BRENDA kufirit dhe konsumohet aty (klasifikimi kthen vetëm stringun e
-        // klasifikimit, jo path).
-        var classification = PlatformProjectCatalog.ConsumeVerifiedFrozenTarget(
-            entry, generation, realOutput => ClassifyResolvedReference(
-                new PlatformProjectCatalog.ResolvedReference(
-                    realOutput, entry.AssemblyName, $"{entry.AssemblyName}, Version=1.0.0.0",
-                    "ProjectReference", null,
-                    Path.Combine(repoRoot, persistencePath.Replace('/', Path.DirectorySeparatorChar)),
-                    null, null, null, realOutput),
-                repoRoot, authority));
-        Assert.Equal("platform", classification);
+        // INVERSE GREEN (C4, §3.4): asnjë path nuk nxirret më nga katalogu.
+        // Merret ResolvedReference-i REAL i vlerësuar nga MSBuild për projektin
+        // që e referon Persistence-in dhe klasifikohet ai — pra vetë të dhënat
+        // reale të build-it, jo një path i publikuar nga autoriteti.
+        const string apiPath = "src/platform/Idata.Platform.Api/Idata.Platform.Api.csproj";
+        var realProjectReference = PlatformProjectCatalog
+            .EvaluateResolvedReferences(repoRoot, apiPath)
+            .Single(reference => reference.ReferenceSourceTarget == "ProjectReference"
+                && reference.AssemblySimpleName == entry.AssemblyName);
+        Assert.Equal("platform", ClassifyResolvedReference(realProjectReference, repoRoot, authority));
     }
 
     /// <summary>
