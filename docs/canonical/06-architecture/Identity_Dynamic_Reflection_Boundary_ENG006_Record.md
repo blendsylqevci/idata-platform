@@ -278,7 +278,7 @@ izoluar** te `98196f4` (jo-destruktive), jo nga pemja e punës.
 
 **Kontrata e C5:** klasë `sealed` **JO-record** — zero `with`/`init`/`<Clone>$`/`PrintMembers`/`EqualityContract`/`IEquatable<self>`; **konstruktor PRIVAT**, ndaj `new VerifiedAssemblyImage(…)` është gabim kompilimi kudo; backing storage privat dhe i papublikuar. Snapshot-i **nuk ekspozon** `ImmutableArray<byte>`, `byte[]`, `Memory`/`ReadOnlyMemory`, path/`FileSystemInfo`, delegate apo koleksion të mutueshëm — vetëm `AssemblyName`, `Sha256`, `Mvid`, `Length` dhe operacionin `OpenImage()`.
 
-**Kufi i vërtetuar, jo i pretenduar:** në C# aksesueshmëria rrjedh nga tipi rrethues **NË** tipin e ngulitur, jo anasjelltas; prandaj fabrika `CreateVerified` duhet të jetë `internal` që katalogu ta thërrasë. Falsifikimi bllokohet **strukturalisht**, jo nga aksesueshmëria: fabrika **nuk pranon SHA/MVID nga jashtë** — identiteti merret nga gjenerata E NGRIRË dhe bajtet **ri-verifikohen** ndaj saj brenda vetë fabrikës. Mbi këtë, meta-testi i **call-site parity-t** mat definicione reale (jo emra), ndaj edhe një overload i dytë me të njëjtin emër numërohet veçmas.
+**Kufi i vërtetuar, jo i pretenduar — [HISTORIK — I ZËVENDËSUAR NGA C6 §4e]:** C5 e mbante fabrikën `CreateVerified(entry, generation, byte[])` si `internal` (aksesueshmëria në C# rrjedh nga tipi rrethues **NË** tipin e ngulitur, jo anasjelltas) dhe e mbronte me ri-verifikim + call-site parity. Ajo fabrikë pranonte `CatalogGeneration` të thirrësit — pikërisht seam-i B. Nga C6 fabrika **nuk ekziston**: trupi i leximit jeton te `VerifiedAssemblyImage.Read(ProjectEntry)` brenda vetë tipit, thirrësi i vetëm i konstruktorit privat, dhe gjenerata është gjithmonë `CurrentGeneration()`. Parity-a mbi definicione reale mbetet aktive.
 
 **Konsumi (§2.8):** `OpenImage()` kthen për çdo thirrje storage **të ri, read-only dhe të pavarur** — `MemoryStream(copy, writable: false, publiclyVisible: false)`, ku `GetBuffer()` hedh `UnauthorizedAccessException`. Mutimi i kopjes së konsumatorit A nuk prek as snapshot-in, as konsumatorin B, as leximin pasues.
 
@@ -290,7 +290,7 @@ izoluar** te `98196f4` (jo-destruktive), jo nga pemja e punës.
 
 **Vektorët e provuar RED:** target production i drejtpërdrejtë · kopja në `AppContext.BaseDirectory` · helper me një nivel · helper me disa nivele (`Path.Join` + `..`) · kopje e riemërtuar në temp · bajte production nën direktori fixture · cast/ndërtim fixture→production. Fixture SINTETIKE e autorizuar mbetet GREEN, po ashtu vetë-assembly-ja e testeve (nuk është artefakt production).
 
-**Kufi i deklaruar me ndershmëri:** ndaj gjeneratës reale të tria dimensionet janë **reciprokisht të tepërta** — bajtet identike nënkuptojnë MVID identik — prandaj heqja e njërit nuk do të dukej kurrë. Domosdoshmëria e secilit provohet me **nën-autoritete izoluese të derivuara nga e njëjta gjeneratë** (vetëm-path / vetëm-SHA / vetëm-MVID).
+**Kufi i deklaruar me ndershmëri:** ndaj gjeneratës reale të tria dimensionet janë **reciprokisht të tepërta** — bajtet identike nënkuptojnë MVID identik — prandaj heqja e njërit nuk do të dukej kurrë. Domosdoshmëria e secilit provohet me **nën-autoritete izoluese të derivuara nga e njëjta gjeneratë** (vetëm-path / vetëm-SHA / vetëm-MVID). **[C6 §4e]:** C5 i kalonte këto nën-autoritete te `OpenFixtureImage(string, ProductionArtifactAuthority)` — një overload që **mint-onte kapacitet nga autoritet i thirrësit** (seam-i A) dhe që u hoq; izolimi bëhet tani me klasifikuesin **PURE** `ProductionArtifactRejection`, që kthen vetëm arsyen.
 
 ### §4 (C) — dataflow REAL, jo seam
 
@@ -306,7 +306,7 @@ izoluar** te `98196f4` (jo-destruktive), jo nga pemja e punës.
 |---|---|---|
 | 1 | konstruktori i snapshot-it bëhet `internal` | `Snapshot_i_verifikuar_eshte_opak_dhe_i_pafalsifikueshem` |
 | 2 | `OpenImage` kthen storage të përbashkët / publicly-visible | `Konsumi_i_snapshot_it_merr_storage_te_ri_dhe_te_pavarur` |
-| 3 | thirrës i dytë i fabrikës `CreateVerified` | `Fabrika_e_snapshot_it_ka_call_site_parity_ekzakte` |
+| 3 | thirrës i dytë i fabrikës `CreateVerified` *(fabrika u hoq në C6; parity-a mat tani `.ctor`→`Read`→`ReadVerifiedImage`)* | `Fabrika_e_snapshot_it_ka_call_site_parity_ekzakte` |
 | 4 | dimensioni **path** i autoritetit | `Artefaktet_production_refuzohen_ne_rrugen_fixture` |
 | 5 | dimensioni **SHA-256** i autoritetit | `Artefaktet_production_refuzohen_ne_rrugen_fixture` |
 | 6 | dimensioni **MVID** i autoritetit | `Artefaktet_production_refuzohen_ne_rrugen_fixture` |
@@ -321,6 +321,42 @@ izoluar** te `98196f4` (jo-destruktive), jo nga pemja e punës.
 Statusi: **PENDING_OWNER_DISPOSITION** · **ZERO PRECEDENT** · **PROJECT_RULES të pandryshuara**. Ky devijim **nuk** është adaptim, **nuk** është i aprovuar, **nuk** është i ratifikuar dhe **nuk** është i mbyllur. Builder-i nuk e ratifikon dot vetë; mbyllja i takon vetëm Pronarit te Human Gate.
 
 **Precheck-u i C5 (§0) u ekzekutua i plotë dhe kaloi 9/9 para çdo editimi:** branch, HEAD lokal = remote = `ded8325`, base `8f7a22c`, PR OPEN me `mergedAt=null`, CI 3/3 PASS, worktree tracked-clean (0 file të modifikuara; vetëm `output/` dhe `tmp/` untracked), repo jo-shallow, B.2/B.3 NOT STARTED / BLOCKED, zero PR tjetër me mbivendosje.
+
+---
+
+## 4e. Correction C6 — mbyllja e dy seam-eve capability-minting të C5
+
+Scope i kufizuar: **vetëm** bllokuesit A/B të delta-review-t të C5. Zero audit tjetër, zero hardening shtesë, zero B.2/B.3.
+
+### §2 (A) — autoriteti fixture nuk kontrollohet nga thirrësi
+
+**Root cause i C5, i provuar mbi `747be41`:** `ProductionArtifactAuthority` është record i konstruktueshëm/klonueshëm nga thirrësi, dhe `OpenFixtureImage(string, ProductionArtifactAuthority)` kthente `FixtureAssemblyImage` duke **besuar** setet e dhëna — me tri `FrozenSet` bosh, një target REAL production pranohej si fixture (PoC 1/1 GREEN).
+
+**Fix:** overload-i **u hoq**. E vetmja hyrje që prodhon kapacitet fixture është `FixtureAssemblyImage.Open(string)` (forward nga `PlatformProjectCatalog.OpenFixtureImage(string)`), e cila **derivon vetë** autoritetin nga `CurrentGeneration()`; `CreateFixture(byte[])` u hoq — konstruktori privat thirret vetëm nga `Open`. Izolimi i dimensioneve në teste bëhet me funksionin **PURE** `ProductionArtifactRejection(fullPath, sha256, mvid, authority) → string?`, që kthen **vetëm arsyen** — kurrë kapacitet, stream apo bajte.
+
+**Fixture → RED → GREEN:** target real production, kopja në `AppContext.BaseDirectory`, kopje e riemërtuar në temp → të tria refuzohen; fixture sintetike dhe self-assembly → GREEN. Prova RED e vetme: rikthimi i përkohshëm i overload-it me autoritet → meta-testi API-shape **RED** → rikthim edit-forward, SHA byte-identik (`6dc6867a…`).
+
+### §3 (B) — snapshot i verifikuar vetëm nga gjenerata autoritative
+
+**Root cause i C5, i provuar:** `CatalogGeneration` është record i konstruktueshëm; `SyntheticGenerationFor(entry)` prodhonte autoritet për entry arbitrar; `ReadVerifiedImage(entry, generation)` prodhonte `VerifiedAssemblyImage`; testi i parity-t mbështillte `Idata.Platform.ArchitectureTests.dll` si kapacitet production dhe e dërgonte te overload-et production të skanerëve.
+
+**Fix:** overload-i me gjeneratë dhe fabrika `CreateVerified` **u hoqën**. Leximi jeton te `VerifiedAssemblyImage.Read(ProjectEntry)` (forward nga `ReadVerifiedImage(ProjectEntry)`), që merr **vetëm** `CurrentGeneration()` dhe kërkon anëtarësi EKZAKTE të `entry`-t (forged `AssemblyName` mbi target real = refuzim). `SyntheticGenerationFor` mbetet vetëm për verifikim PURE përmes `VerifyFrozenTarget(entry, generation)` (void) dhe `VerifyImageBytes` — asnjëri nuk prodhon kapacitet. `ScanProduction`/`ScanOwnerSurfaces` të ENG-006 nuk pranojnë më gjeneratë; testi i helmimit u riorientua te verifikuesi PURE.
+
+**Fixture → RED → GREEN:** `ArchitectureTests.dll` nuk bëhet dot `VerifiedAssemblyImage` (refuzim anëtarësie) edhe pse verifikimi PURE ndaj gjeneratës sintetike kalon; forged `AssemblyName` mbi target real → refuzim; entry real → GREEN; të gjashtë skanerët production japin rezultat identik mbi dy snapshot-e të pavarur të së njëjtës entry reale. Prova RED e vetme: rikthimi i përkohshëm i overload-it me gjeneratë → meta-testi API-shape **RED** → rikthim edit-forward, SHA byte-identik.
+
+### Meta-testi API-shape (A+B)
+
+`Asnje_API_nuk_mint_kapacitet_nga_autoritet_apo_gjenerate_e_thirresit` skanon **të gjithë** assembly-n e testeve (pa tipet/metodat e gjeneruara nga kompajleri): çdo metodë non-privat që pranon `ProductionArtifactAuthority` ose `CatalogGeneration` duhet të mbetet PURE (kurrë kapacitet/`Stream`/`Assembly`/`FileSystemInfo`/delegate); seti i plotë i metodave që mint-ojnë kapacitet është **EKZAKT** — `OpenFixtureImage(String)`, `FixtureAssemblyImage.Open(String)`, `ReadVerifiedImage(ProjectEntry)`, `VerifiedAssemblyImage.Read(ProjectEntry)` — dhe konstruktorët e të dy tipeve janë privatë.
+
+### §4 (C) — regresion i konfirmuar, jo workstream
+
+Dataflow-i mbetet i pandryshuar në thelb: `CurrentGeneration → verify-before → ReadAllBytes → VerifyImageBytes mbi po atë buffer → post-verify → newobj (konstruktori privat) → ret`. Testi u **ritargetua** mekanikisht te `VerifiedAssemblyImage.Read` (fabrika = `newobj`); interpretuesi fitoi `ldind.*`/`ldobj` si pop→push, sepse `FrozenDictionary` indexer-i kthen `ref readonly` dhe lookup-et janë tani inline. Testet C mbeten GREEN.
+
+### Devijim i deklaruar nga kufiri i scope-it (§1)
+
+Prompti lejonte **maksimumi dy** file të tjera nën ArchitectureTests "vetëm nëse kompajleri provon se janë call-site mekanikë të domosdoshëm". Kompajleri provoi **tre**: `ConventionEnforcementTests.cs` (1 call-site), `IdentityRoleSurfaceTests.cs` (1), `DynamicRuntimeAccessBoundaryTests.cs` (2 call-site + testi i helmimit që dërgonte gjeneratë të thirrësit në skanimin production — vetë forma e seam-it B). Të gjitha janë `ReadVerifiedImage(entry, generation)` → `ReadVerifiedImage(entry)`, të pashmangshme nga kontrata §3.2. Builder-i vazhdoi dhe e raporton **shprehimisht**; dispozicioni i takon Pronarit te Human Gate.
+
+**Counts (një run i vetëm, sipas §5):** ENG-006 **69/69** · ENG-008 **44/44** · ArchitectureTests **291/291, zero skip** (70 s; +15% ndaj 61 s të C5 në run të vetëm, nën pragun 20%, me dy teste të reja që lexojnë katalogun — pa benchmark të veçantë).
 
 ---
 
@@ -365,8 +401,8 @@ Statusi: **PENDING_OWNER_DISPOSITION** · **ZERO PRECEDENT** · **PROJECT_RULES 
 
 - `dotnet build src/platform/Idata.Platform.slnx` → **0 warnings, 0 errors**;
 - baseline mekanik para editimit: **178/178**;
-- pas increment-it: **237/237** ×3; C1 **262/262**; C2 **270/270**; C3 **277/277**; C4 **282/282**; pas **correction C5: 289/289, zero skip**, **tri ekzekutime radhazi** (+7 teste C5), plus **dy cold-run** 289/289;
-- targeted (të rimatura pas C5): ENG-008 **42/42** ×3, ENG-006 **69/69** ×3 (pas C4: 35/69; pas C3: 30/69; pas C2: 27/65; para C1: 12/47);
+- pas increment-it: **237/237** ×3; C1 **262/262**; C2 **270/270**; C3 **277/277**; C4 **282/282**; C5 **289/289** ×3 + dy cold-run; pas **correction C6: 291/291, zero skip** (një run, sipas §5 të C6);
+- targeted (të rimatura pas C6, një run): ENG-008 **44/44**, ENG-006 **69/69** (pas C5: 42/69; pas C4: 35/69; pas C3: 30/69; pas C2: 27/65; para C1: 12/47);
 - **performanca ndaj baseline-it të matur në worktree të izoluar te `ded8325`, me komanda IDENTIKE** (mediana e 3 ekzekutimeve): ArchitectureTests **63s → 61s**, ENG-006 **19s → 18s**, ENG-008 **18s → 18s**, cold-process **64.5s → 63.5s** — zero regresion, jo më pak edhe pse suita u rrit me 7 teste;
 - permutime me **seed-e fikse 1337 / 20260803 / 42** → rezultate identike, e njëjta gjeneratë;
 - disk: min **6.69 GiB**, max **6.78 GiB** (kurrë nën 2.0 GiB; zero ENOSPC).
