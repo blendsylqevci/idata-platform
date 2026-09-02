@@ -1051,7 +1051,8 @@ public sealed class ConventionEnforcementTests
         Assert.Equal(2, catalog.Count(PlatformProjectCatalog.IsStoreOwner));
         // Unikësia e AssemblyName/path/TargetPath garantohet nga Discover (hedh në duplikat).
         Assert.Equal(catalog.Length, catalog.Select(entry => entry.CanonicalPath).Distinct(StringComparer.Ordinal).Count());
-        Assert.Equal(catalog.Length, catalog.Select(entry => entry.CanonicalTargetPath).Distinct(StringComparer.Ordinal).Count());
+        // C3 (§2B): numërimi bëhet BRENDA katalogut — testi nuk e lexon vetë vetinë.
+        Assert.Equal(catalog.Length, PlatformProjectCatalog.DistinctCanonicalTargetPathCount());
     }
 
     /// <summary>
@@ -1073,17 +1074,15 @@ public sealed class ConventionEnforcementTests
         Assert.NotEmpty(catalog);
         Assert.Equal(2, catalog.Count(PlatformProjectCatalog.IsStoreOwner));
 
-        var repoRoot = PlatformProjectCatalog.RepoRoot();
         var scanned = 0;
         foreach (var entry in catalog)
         {
-            // §2-R4: skanohet EKZAKTËSISHT TargetPath-i i vlerësuar nga MSBuild
-            // (identiteti i binarit i verifikuar në DiscoverProduction) — zero
-            // lookup sipas basename-it në bin të testeve.
-            var assemblyPath = Path.Combine(
-                repoRoot, entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar));
-
-            var findings = IdentityStoreIlScanner.Scan(assemblyPath, PlatformProjectCatalog.IsStoreOwner(entry));
+            // §2-R4 + C2: skanohet EKZAKTËSISHT TargetPath-i i vlerësuar nga
+            // MSBuild, i marrë NGA KUFIRI i ngrirë (verifikim para+pas skanimit)
+            // — zero ndërtim direkt path-i, zero lookup sipas basename-it.
+            var findings = IdentityStoreIlScanner.Scan(
+                PlatformProjectCatalog.ReadVerifiedImage(entry),
+                PlatformProjectCatalog.IsStoreOwner(entry));
             Assert.True(findings.Count == 0,
                 $"{entry.CanonicalPath}: {string.Join(" · ", findings.Select(finding => $"{finding.Kind}:{finding.Detail}"))}");
             scanned++;
@@ -1106,8 +1105,8 @@ public sealed class ConventionEnforcementTests
     [Fact]
     public void Skaneri_IL_kap_bypass_et_e_mbuluara_dhe_lejon_perdorimin_e_sakte()
     {
-        var findings = IdentityStoreIlScanner.Scan(
-            Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"),
+        var findings = IdentityStoreIlScanner.ScanFixture(
+            PlatformProjectCatalog.OpenFixtureImage(Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll")),
             isStoreOwner: false);
 
         foreach (var accessor in (string[])["get_Users", "get_UserClaims", "get_UserLogins", "get_UserTokens"])
@@ -1150,8 +1149,8 @@ public sealed class ConventionEnforcementTests
         // Inverse e OWNER-it: për owner-in tipet e store-it janë të lejuara —
         // i njëjti binar i skanuar si owner s'prodhon gjetje kufiri tipesh
         // (rregulli claim-id mbetet i zbatuar mbi të gjithë — provohet veçmas).
-        var ownerFindings = IdentityStoreIlScanner.Scan(
-            Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"),
+        var ownerFindings = IdentityStoreIlScanner.ScanFixture(
+            PlatformProjectCatalog.OpenFixtureImage(Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll")),
             isStoreOwner: true);
         Assert.DoesNotContain(ownerFindings, finding => finding.Kind == "record-type-ref");
         Assert.DoesNotContain(ownerFindings, finding => finding.Kind == "record-attribute-string");
@@ -1239,8 +1238,8 @@ public sealed class ConventionEnforcementTests
 
         // ÇDO accessor i derivuar prodhon gjetje reale te jo-owner (fixtures
         // getter + setter në IdentityBoundaryFixtures).
-        var findings = IdentityStoreIlScanner.Scan(
-            Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"),
+        var findings = IdentityStoreIlScanner.ScanFixture(
+            PlatformProjectCatalog.OpenFixtureImage(Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll")),
             isStoreOwner: false);
         Assert.All(derived, accessor => Assert.Contains(findings, finding =>
             finding.Kind == "identity-dbset-access"
@@ -1491,7 +1490,7 @@ public sealed class ConventionEnforcementTests
     [Fact]
     public void Controller_i_hollte_merr_vetem_IMediator_dhe_trashegon_bazen_module_local()
     {
-        var presentation = Assembly.Load("Idata.Platform.Modules.PlatformStatus.Presentation");
+        var presentation = LoadVerifiedByName("Idata.Platform.Modules.PlatformStatus.Presentation");
         var controller = presentation.GetType(
             "Idata.Platform.Modules.PlatformStatus.Presentation.Controllers.PlatformStatusController");
         Assert.NotNull(controller);
@@ -1532,7 +1531,7 @@ public sealed class ConventionEnforcementTests
     [Fact]
     public void Minimal_API_i_vjeter_i_statusit_nuk_ekziston_me()
     {
-        var presentation = Assembly.Load("Idata.Platform.Modules.PlatformStatus.Presentation");
+        var presentation = LoadVerifiedByName("Idata.Platform.Modules.PlatformStatus.Presentation");
         Assert.Null(presentation.GetType(
             "Idata.Platform.Modules.PlatformStatus.Presentation.PlatformStatusEndpoints"));
         Assert.DoesNotContain(PlatformAssemblies().SelectMany(a => a.GetTypes()),
@@ -1558,4 +1557,9 @@ public sealed class ConventionEnforcementTests
     /// </summary>
     private static Assembly[] PlatformAssemblies() =>
         [.. PlatformProjectCatalog.DiscoverProduction().Select(PlatformProjectCatalog.LoadVerified)];
+
+    /// <summary>C2: ngarkim production VETËM përmes kufirit të ngrirë të katalogut.</summary>
+    private static Assembly LoadVerifiedByName(string assemblyName)
+        => PlatformProjectCatalog.LoadVerified(PlatformProjectCatalog.DiscoverProduction()
+            .Single(entry => entry.AssemblyName == assemblyName));
 }

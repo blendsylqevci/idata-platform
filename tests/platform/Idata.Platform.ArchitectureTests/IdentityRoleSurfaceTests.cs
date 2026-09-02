@@ -168,13 +168,14 @@ public sealed class IdentityRoleSurfaceTests
     [Fact]
     public void Zero_role_referenca_ne_metadata_te_asnje_assembly_production()
     {
-        var repoRoot = PlatformProjectCatalog.RepoRoot();
-        var catalog = PlatformProjectCatalog.DiscoverProduction();
-        Assert.NotEmpty(catalog);
-        foreach (var entry in catalog)
+        var generation = PlatformProjectCatalog.CurrentGeneration();
+        Assert.NotEmpty(generation.Projects);
+        foreach (var entry in generation.Projects)
         {
-            var findings = RoleMetadataScanner.Scan(Path.Combine(
-                repoRoot, entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar)));
+            // C4/C6: skanim mbi SNAPSHOT-in deep-immutable të verifikuar (zero
+            // path); gjenerata është gjithmonë ajo autoritative — asnjë parametër.
+            var findings = RoleMetadataScanner.Scan(
+                PlatformProjectCatalog.ReadVerifiedImage(entry));
             Assert.True(findings.Count == 0,
                 $"{entry.CanonicalPath}: {string.Join(" · ", findings.Select(f => $"{f.Table}[{f.Token}]:{f.Detail}"))}");
         }
@@ -194,8 +195,8 @@ public sealed class IdentityRoleSurfaceTests
     [InlineData("CustomAttribute", "IdentityRole`1")]
     public void Metadata_skan_kap_referencat_body_only_sipas_tabeles(string table, string detailFragment)
     {
-        var findings = RoleMetadataScanner.Scan(
-            Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"));
+        var findings = RoleMetadataScanner.ScanFixture(
+            PlatformProjectCatalog.OpenFixtureImage(Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll")));
         Assert.Contains(findings, finding =>
             finding.Table == table
             && finding.Detail.Contains(detailFragment, StringComparison.Ordinal));
@@ -210,7 +211,7 @@ public sealed class IdentityRoleSurfaceTests
         try
         {
             File.WriteAllText(temporary, "kjo nuk eshte assembly");
-            var findings = RoleMetadataScanner.Scan(temporary);
+            var findings = RoleMetadataScanner.ScanFixture(PlatformProjectCatalog.OpenFixtureImage(temporary));
             Assert.Contains(findings, finding => finding.Table == "unreadable-assembly");
         }
         finally
@@ -795,14 +796,26 @@ internal static class RoleMetadataScanner
         return false;
     }
 
-    internal static IReadOnlyList<MetadataFinding> Scan(string assemblyPath)
+    /// <summary>C4 — production: skanim mbi snapshot-in e verifikuar, zero path.</summary>
+    internal static IReadOnlyList<MetadataFinding> Scan(PlatformProjectCatalog.VerifiedAssemblyImage image)
+        => ScanCore(image.AssemblyName, image.OpenImage);
+
+    /// <summary>
+    /// C5 (§3) — VETËM fixtures sintetike: kapacitet OPAQUE i tipizuar, i
+    /// prodhuar nga `PlatformProjectCatalog.OpenFixtureImage`, e cila refuzon
+    /// fail-closed çdo artefakt production. Zero path i papërpunuar.
+    /// </summary>
+    internal static IReadOnlyList<MetadataFinding> ScanFixture(
+        PlatformProjectCatalog.FixtureAssemblyImage fixture)
+        => ScanCore(fixture.AssemblyName, fixture.OpenImage);
+
+    private static IReadOnlyList<MetadataFinding> ScanCore(string assemblyName, Func<Stream> openImage)
     {
-        var assemblyName = Path.GetFileNameWithoutExtension(assemblyPath);
         var findings = new List<MetadataFinding>();
 
         try
         {
-            using var stream = File.OpenRead(assemblyPath);
+            using var stream = openImage();
             using var portableExecutable = new PEReader(stream);
             var reader = portableExecutable.GetMetadataReader();
             var collector = new CollectingTypeProvider(reader);

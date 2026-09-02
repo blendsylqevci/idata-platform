@@ -28,6 +28,111 @@ internal static class IlOperandTable
     /// <summary>Opcode-t dy-bajtëshe (0xFE xx) që bartin token metadata.</summary>
     private static readonly bool[] TwoByteCarriesToken = BuildTwoByteTokenFlags();
 
+    /// <summary>
+    /// Correction C5 (§4) — instruksion i PLOTË, me opcode dhe operandin e
+    /// dekoduar. Nevojitet nga analiza dataflow-aware e `ReadVerifiedImage`:
+    /// aty duhen edhe `ldloc`/`stloc`, jo vetëm instruksionet me token.
+    /// `Opcode` = bajti i vetëm, ose `0xFE00 | second` për format dy-bajtëshe.
+    /// </summary>
+    internal readonly record struct FullInstruction(int Offset, int Opcode, int Operand);
+
+    /// <summary>
+    /// Dekodim i PLOTË i një trupi IL me të njëjtat tabela ECMA-335 si
+    /// <see cref="Walk"/> — pra pa asnjë tabelë të dytë që mund të divergjojë.
+    /// Çdo opcode i pavlefshëm ose operand i cunguar NDALON dekodimin dhe
+    /// raportohet me <c>decodeError</c>; kurrë "vazhdo në heshtje".
+    /// </summary>
+    internal static IReadOnlyList<FullInstruction> WalkAll(byte[] il, out string? decodeError)
+    {
+        var instructions = new List<FullInstruction>();
+        decodeError = null;
+        var offset = 0;
+
+        while (offset < il.Length)
+        {
+            var start = offset;
+            var opcode = il[offset++];
+
+            if (opcode == 0xFE)
+            {
+                if (offset >= il.Length)
+                {
+                    decodeError = $"prefiks 0xFE i cunguar @IL_{start:X4}";
+                    return instructions;
+                }
+
+                var second = il[offset++];
+                if (second >= TwoByte.Length || TwoByte[second] == Invalid)
+                {
+                    decodeError = $"opcode i pavlefshëm 0xFE{second:X2} @IL_{start:X4}";
+                    return instructions;
+                }
+
+                var twoByteSize = TwoByte[second];
+                if (offset + twoByteSize > il.Length)
+                {
+                    decodeError = $"operand i cunguar për 0xFE{second:X2} @IL_{start:X4}";
+                    return instructions;
+                }
+
+                instructions.Add(new FullInstruction(
+                    start, 0xFE00 | second, ReadOperand(il, offset, twoByteSize)));
+                offset += twoByteSize;
+                continue;
+            }
+
+            var size = OneByte[opcode];
+            if (size is Invalid or Prefix)
+            {
+                decodeError = $"opcode i papranueshëm 0x{opcode:X2} @IL_{start:X4}";
+                return instructions;
+            }
+
+            if (size == Switch)
+            {
+                if (offset + 4 > il.Length)
+                {
+                    decodeError = $"switch i cunguar @IL_{start:X4}";
+                    return instructions;
+                }
+
+                var count = BitConverter.ToUInt32(il, offset);
+                offset += 4;
+                var payload = (long)count * 4;
+                if (offset + payload > il.Length)
+                {
+                    decodeError = $"switch me {count} degë jashtë kufijve @IL_{start:X4}";
+                    return instructions;
+                }
+
+                instructions.Add(new FullInstruction(start, opcode, (int)count));
+                offset += (int)payload;
+                continue;
+            }
+
+            if (offset + size > il.Length)
+            {
+                decodeError = $"operand i cunguar për 0x{opcode:X2} @IL_{start:X4}";
+                return instructions;
+            }
+
+            instructions.Add(new FullInstruction(start, opcode, ReadOperand(il, offset, size)));
+            offset += size;
+        }
+
+        return instructions;
+    }
+
+    private static int ReadOperand(byte[] il, int offset, int size) => size switch
+    {
+        0 => 0,
+        1 => il[offset],
+        4 => BitConverter.ToInt32(il, offset),
+        8 => 0,
+        2 => BitConverter.ToUInt16(il, offset),
+        _ => 0,
+    };
+
     internal static IReadOnlyList<Instruction> Walk(byte[] il, out string? decodeError)
     {
         var instructions = new List<Instruction>();

@@ -88,18 +88,35 @@ internal static class UntypedDataAccessScanner
 
     // ───────────────────────── Skanimi kryesor ─────────────────────────
 
-    internal static IReadOnlyList<Finding> Scan(string assemblyPath, SinkTaxonomy? taxonomy = null)
+    /// <summary>
+    /// C4 — RRUGA E VETME për artefaktet PRODUCTION: skanim mbi snapshot-in
+    /// deep-immutable të bajteve të verifikuara. Zero path.
+    /// </summary>
+    internal static IReadOnlyList<Finding> Scan(
+        PlatformProjectCatalog.VerifiedAssemblyImage image, SinkTaxonomy? taxonomy = null)
+        => ScanCore(image.AssemblyName, image.OpenImage, taxonomy);
+
+    /// <summary>
+    /// C5 (§3) — VETËM fixtures sintetike: kapacitet OPAQUE i tipizuar, i
+    /// prodhuar nga `PlatformProjectCatalog.OpenFixtureImage`, e cila refuzon
+    /// fail-closed çdo artefakt production. Zero path i papërpunuar.
+    /// </summary>
+    internal static IReadOnlyList<Finding> ScanFixture(
+        PlatformProjectCatalog.FixtureAssemblyImage fixture, SinkTaxonomy? taxonomy = null)
+        => ScanCore(fixture.AssemblyName, fixture.OpenImage, taxonomy);
+
+    private static IReadOnlyList<Finding> ScanCore(
+        string assemblyName, Func<Stream> openImage, SinkTaxonomy? taxonomy)
     {
         taxonomy ??= SinkTaxonomy.Default;
-        var assemblyName = Path.GetFileNameWithoutExtension(assemblyPath);
         var findings = new List<Finding>();
 
-        FileStream stream;
+        Stream stream;
         PEReader portableExecutable;
         MetadataReader reader;
         try
         {
-            stream = File.OpenRead(assemblyPath);
+            stream = openImage();
             portableExecutable = new PEReader(stream);
             reader = portableExecutable.GetMetadataReader();
         }
@@ -535,17 +552,29 @@ internal static class UntypedDataAccessScanner
     /// NUK trajtohet si kapacitet raw — dalja raw prej tij (`GetDbConnection`)
     /// është vetë sink i skanuar dhe i manifestuar.
     /// </summary>
-    internal static IReadOnlyList<Finding> ScanOwnerPublicSurface(string assemblyPath)
+    /// <summary>C4 — owner surface mbi snapshot-in e verifikuar (production).</summary>
+    internal static IReadOnlyList<Finding> ScanOwnerPublicSurface(PlatformProjectCatalog.VerifiedAssemblyImage image)
+        => ScanOwnerPublicSurfaceCore(image.AssemblyName, image.OpenImage);
+
+    /// <summary>
+    /// C5 (§3) — VETËM fixtures sintetike: kapacitet OPAQUE i tipizuar, i
+    /// prodhuar nga `PlatformProjectCatalog.OpenFixtureImage`, e cila refuzon
+    /// fail-closed çdo artefakt production. Zero path i papërpunuar.
+    /// </summary>
+    internal static IReadOnlyList<Finding> ScanOwnerPublicSurfaceFixture(
+        PlatformProjectCatalog.FixtureAssemblyImage fixture)
+        => ScanOwnerPublicSurfaceCore(fixture.AssemblyName, fixture.OpenImage);
+
+    private static IReadOnlyList<Finding> ScanOwnerPublicSurfaceCore(string assemblyName, Func<Stream> openImage)
     {
-        var assemblyName = Path.GetFileNameWithoutExtension(assemblyPath);
         var findings = new List<Finding>();
 
-        FileStream stream;
+        Stream stream;
         PEReader portableExecutable;
         MetadataReader reader;
         try
         {
-            stream = File.OpenRead(assemblyPath);
+            stream = openImage();
             portableExecutable = new PEReader(stream);
             reader = portableExecutable.GetMetadataReader();
         }

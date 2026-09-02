@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
@@ -48,27 +50,646 @@ internal static class PlatformProjectCatalog
     }
 
     /// <summary>
-    /// Katalogu production real (i vlerësuar NJËHERË për proces — vlerësim i
-    /// freskët MSBuild në çdo run testesh; zero cache në disk): zbulim nën
-    /// src/platform + verifikim i plotë i TargetPath/identitetit të assembly.
+    /// §4-ENG-008 — argumenti që e bën ÇDO vlerësim MSBuild READ-ONLY ndaj
+    /// output-eve production. Është një konstante e vetme, e konsumuar nga TË
+    /// GJITHA rrugët e thirrjes, që asnjë call-site i ri të mos e harrojë.
     /// </summary>
-    private static readonly Lazy<ProjectEntry[]> ProductionCatalog = new(() =>
+    internal const string ReadOnlyEvaluationArgument = "-p:BuildProjectReferences=false";
+
+    /// <summary>
+    /// §4-ENG-008 — GJENERATA AUTORITATIVE dhe e PANDRYSHUESHME e katalogut.
+    ///
+    /// Root cause që mbyll: `ProductionCatalog` ngrinte VETËM path-et, ndërsa
+    /// MVID-i lexohej nga disku në çast të mëvonshëm. Një `-t:ResolveReferences`
+    /// i ndërmjetëm rindërtonte output-in production (i provuar: mtime ndryshon
+    /// vetëm pa <see cref="ReadOnlyEvaluationArgument"/>), prandaj gjenerata A e
+    /// katalogut përzihej me gjeneratën B të file-it → dështim i varur nga rendi.
+    ///
+    /// Modeli i ri: identiteti, MVID-i, fingerprint-i SHA-256, adjacency-a e
+    /// ProjectReference-ve, referencat e zgjidhura dhe autoritetet
+    /// package/framework ngrihen TË GJITHA në një gjeneratë të vetme, dhe
+    /// fingerprint-et verifikohen PARA dhe PAS gjithë vlerësimit. Çdo devijim =
+    /// fail-closed i kontrolluar, kurrë refresh i heshtur.
+    /// </summary>
+    /// <remarks>
+    /// Correction C1 (Hardening D): DEEP-IMMUTABLE me tipe KONKRETE BCL —
+    /// `ImmutableArray` për sekuencat (edhe vlerat nested), `FrozenDictionary`/
+    /// `FrozenSet` për hartat/setet. Asnjë backing array/Dictionary/HashSet i
+    /// mutueshëm nuk publikohet; mutimi përmes interface-ve hedh
+    /// `NotSupportedException` dhe s'mund të helmojë `CurrentGeneration`.
+    /// </remarks>
+    internal sealed record CatalogGeneration(
+        Guid GenerationId,
+        ImmutableArray<ProjectEntry> Projects,
+        FrozenDictionary<string, Guid> MvidByCanonicalPath,
+        FrozenDictionary<string, string> Sha256ByCanonicalPath,
+        FrozenDictionary<string, DateTime> WriteTimeUtcByCanonicalPath,
+        FrozenDictionary<string, ImmutableArray<string>> ProjectReferencesByCanonicalPath,
+        FrozenDictionary<string, ImmutableArray<ResolvedReference>> ResolvedReferencesByCanonicalPath,
+        FrozenDictionary<string, PackageAssetAuthority> PackageAssetsByCanonicalPath,
+        FrozenDictionary<string, FrozenSet<string>> FrameworkAssetsByCanonicalPath)
+    {
+        // ═══════════════ Correction C7 — STATE AUTORITATIV PRIVAT ═══════════════
+        //
+        // Root cause i riprodhuar (Codex, mbi C6): `Projects` ishte veti
+        // pozicionale që kthente VETË `ImmutableArray`-n e ruajtur, ndaj
+        // `ImmutableCollectionsMarshal.AsArray(generation.Projects)` jepte
+        // backing-un REAL `ProjectEntry[]` dhe një thirrës mund të zëvendësonte
+        // një entry real me `entry with { AssemblyName = "Tampered.Assembly" }`
+        // (path-e reale) → `ReadVerifiedImage(forged)` mint-onte snapshot me
+        // SHA/MVID reale. E njëjta rrugë ekzistonte për vlerat `ImmutableArray`
+        // të adjacency-t dhe të referencave të zgjidhura.
+        //
+        // Modeli i ri: autoriteti jeton në fusha PRIVATE, të kopjuara NJË herë
+        // nga argumentet e konstruktorit (as ndërtuesi nuk e mban dot backing-un).
+        // Vendimet autoritative (anëtarësia në `VerifiedFrozenTargetPath`)
+        // lexojnë VETËM këtë state. Vetitë me të njëjtin emër/signature mbeten
+        // për enumerim si PROJEKSIONE DEFENSIVE: çdo getter kthen storage TË RI,
+        // ndaj AsArray mbi rezultatin nuk prek as leximin e dytë, as autoritetin.
+        private readonly ImmutableArray<ProjectEntry> projectsAuthority =
+            ImmutableArray.Create(Projects.AsSpan());
+
+        private readonly FrozenDictionary<string, ImmutableArray<string>> projectReferencesAuthority =
+            CopySequences(ProjectReferencesByCanonicalPath);
+
+        private readonly FrozenDictionary<string, ImmutableArray<ResolvedReference>> resolvedReferencesAuthority =
+            CopySequences(ResolvedReferencesByCanonicalPath);
+
+        /// <summary>Projeksion DEFENSIV i anëtarësisë — storage i ri në çdo lexim.</summary>
+        public ImmutableArray<ProjectEntry> Projects
+        {
+            get => ImmutableArray.Create(projectsAuthority.AsSpan());
+            init => projectsAuthority = ImmutableArray.Create(value.AsSpan());
+        }
+
+        /// <summary>Projeksion DEFENSIV i adjacency-t — çdo sekuencë e kopjuar në çdo lexim.</summary>
+        public FrozenDictionary<string, ImmutableArray<string>> ProjectReferencesByCanonicalPath
+        {
+            get => CopySequences(projectReferencesAuthority);
+            init => projectReferencesAuthority = CopySequences(value);
+        }
+
+        /// <summary>Projeksion DEFENSIV i referencave të zgjidhura — çdo sekuencë e kopjuar në çdo lexim.</summary>
+        public FrozenDictionary<string, ImmutableArray<ResolvedReference>> ResolvedReferencesByCanonicalPath
+        {
+            get => CopySequences(resolvedReferencesAuthority);
+            init => resolvedReferencesAuthority = CopySequences(value);
+        }
+
+        /// <summary>
+        /// C7 — VENDIMI autoritativ i anëtarësisë, mbi state-in PRIVAT: asnjë
+        /// projeksion i ekspozuar nuk merr pjesë. Anëtarësia është mbi HYRJEN e
+        /// plotë (record equality), jo vetëm mbi çelësin.
+        /// </summary>
+        internal bool IsAuthoritativeMember(ProjectEntry entry) => projectsAuthority.Contains(entry);
+
+        private static FrozenDictionary<string, ImmutableArray<T>> CopySequences<T>(
+            FrozenDictionary<string, ImmutableArray<T>> source)
+            => source.ToFrozenDictionary(
+                pair => pair.Key,
+                pair => ImmutableArray.Create(pair.Value.AsSpan()),
+                StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Një gjeneratë e VETME për proces, e ndërtuar nën `Lazy` me
+    /// `ExecutionAndPublication`: thirrësit paralelë marrin TË NJËJTIN objekt
+    /// dhe asnjë vlerësim i dytë nuk nis paralelisht.
+    /// </summary>
+    private static readonly Lazy<CatalogGeneration> Generation =
+        new(BuildGeneration, LazyThreadSafetyMode.ExecutionAndPublication);
+
+    internal static CatalogGeneration CurrentGeneration() => Generation.Value;
+
+    private static CatalogGeneration BuildGeneration()
     {
         var repoRoot = RepoRoot();
+
+        // (1) Zbulim + vlerësim identiteti PARA çdo freeze-i.
         var entries = Discover(repoRoot, Path.Combine(repoRoot, "src", "platform"));
         foreach (var entry in entries)
         {
             VerifyTargetAssembly(repoRoot, entry, approvedOutputRootRelative: "src/platform");
         }
 
-        return entries;
-    });
+        // (2) Fingerprint-i PARA vlerësimit të referencave.
+        var before = FingerprintTargets(repoRoot, entries);
+
+        // (3) Vlerësimi i plotë — i gjithë READ-ONLY, brenda së njëjtës gjeneratë.
+        // Vlerat NESTED ngrihen që në burim (Hardening D): ImmutableArray për
+        // sekuencat, PackageAssetAuthority me harta/sete të ngrira, FrozenSet
+        // për asetet framework.
+        var projectReferences = new Dictionary<string, ImmutableArray<string>>(StringComparer.Ordinal);
+        var resolvedReferences = new Dictionary<string, ImmutableArray<ResolvedReference>>(StringComparer.Ordinal);
+        var packageAssets = new Dictionary<string, PackageAssetAuthority>(StringComparer.Ordinal);
+        var frameworkAssets = new Dictionary<string, FrozenSet<string>>(StringComparer.Ordinal);
+        foreach (var entry in entries)
+        {
+            projectReferences[entry.CanonicalPath] = [.. EvaluateProjectReferencesCore(repoRoot, entry.CanonicalPath)];
+            resolvedReferences[entry.CanonicalPath] = [.. EvaluateResolvedReferencesCore(repoRoot, entry.CanonicalPath)];
+            packageAssets[entry.CanonicalPath] =
+                EvaluatePackageAssetAuthorityCore(repoRoot, entry.CanonicalPath).ToFrozen();
+            frameworkAssets[entry.CanonicalPath] =
+                EvaluateFrameworkAssetAuthorityCore(repoRoot, entry.CanonicalPath).ToFrozenSet(StringComparer.Ordinal);
+        }
+
+        // (4) Fingerprint-i PAS vlerësimit — devijimi = fail-closed i kontrolluar.
+        var after = FingerprintTargets(repoRoot, entries);
+        var drift = before
+            .Where(pair => !after.TryGetValue(pair.Key, out var value)
+                || value.Sha256 != pair.Value.Sha256 || value.Mvid != pair.Value.Mvid
+                || value.WriteTimeUtc != pair.Value.WriteTimeUtc)
+            .Select(pair => pair.Key)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (drift.Length > 0)
+        {
+            throw new InvalidOperationException(
+                "catalog-generation-drift: output-i production ndryshoi GJATË vlerësimit "
+                + $"(vlerësimi duhet të jetë read-only): {string.Join(", ", drift)}");
+        }
+
+        return new CatalogGeneration(
+            Guid.NewGuid(),
+            [.. entries],
+            before.ToFrozenDictionary(pair => pair.Key, pair => pair.Value.Mvid, StringComparer.Ordinal),
+            before.ToFrozenDictionary(pair => pair.Key, pair => pair.Value.Sha256, StringComparer.Ordinal),
+            before.ToFrozenDictionary(pair => pair.Key, pair => pair.Value.WriteTimeUtc, StringComparer.Ordinal),
+            projectReferences.ToFrozenDictionary(StringComparer.Ordinal),
+            resolvedReferences.ToFrozenDictionary(StringComparer.Ordinal),
+            packageAssets.ToFrozenDictionary(StringComparer.Ordinal),
+            frameworkAssets.ToFrozenDictionary(StringComparer.Ordinal));
+    }
+
+    /// <summary>
+    /// Fingerprint TRE-DIMENSIONAL i një output-i: përmbajtja (SHA-256), identiteti
+    /// (MVID) DHE koha e shkrimit. Koha është e domosdoshme sepse build-et janë
+    /// DETERMINISTË — një rindërtim i burimeve të pandryshuara prodhon bajte
+    /// IDENTIKE, prandaj vetëm përmbajtja nuk e dëshmon dot ngjarjen e rindërtimit
+    /// që §4-ENG-008 e ndalon.
+    /// </summary>
+    private static Dictionary<string, (string Sha256, Guid Mvid, DateTime WriteTimeUtc)> FingerprintTargets(
+        string repoRoot, ProjectEntry[] entries)
+    {
+        var fingerprints = new Dictionary<string, (string, Guid, DateTime)>(StringComparer.Ordinal);
+        foreach (var entry in entries)
+        {
+            var absolute = Path.Combine(
+                repoRoot, entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar));
+            fingerprints[entry.CanonicalPath] = (
+                Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(absolute))),
+                ReadMvid(absolute),
+                File.GetLastWriteTimeUtc(absolute));
+        }
+
+        return fingerprints;
+    }
+
+    /// <summary>
+    /// §4-ENG-008 — verifikim i PASTËR i fingerprint-eve të një gjenerate kundër
+    /// gjendjes REALE në disk. Kthen path-et kanonike që kanë devijuar (bosh =
+    /// e shëndetshme). Ekziston si funksion i pastër që testet ta ushtrojnë me
+    /// gjenerata sintetike — pa prekur asnjë output real.
+    /// </summary>
+    internal static string[] VerifyGenerationFingerprints(CatalogGeneration generation)
+    {
+        var repoRoot = RepoRoot();
+        var drifted = new List<string>();
+        foreach (var entry in generation.Projects)
+        {
+            var absolute = Path.Combine(
+                repoRoot, entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(absolute))
+            {
+                drifted.Add(entry.CanonicalPath);
+                continue;
+            }
+
+            var sha = Convert.ToHexStringLower(
+                System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(absolute)));
+            var mvid = ReadMvid(absolute);
+            var writeTime = File.GetLastWriteTimeUtc(absolute);
+            if (!generation.Sha256ByCanonicalPath.TryGetValue(entry.CanonicalPath, out var frozenSha)
+                || !generation.MvidByCanonicalPath.TryGetValue(entry.CanonicalPath, out var frozenMvid)
+                || !generation.WriteTimeUtcByCanonicalPath.TryGetValue(entry.CanonicalPath, out var frozenWrite)
+                || sha != frozenSha || mvid != frozenMvid || writeTime != frozenWrite)
+            {
+                drifted.Add(entry.CanonicalPath);
+            }
+        }
+
+        return [.. drifted.Order(StringComparer.Ordinal)];
+    }
+
+    /// <summary>
+    /// Verifikuesi PRIMITIV i target-it të ngrirë. **I PRIVAT** — nga C4 e këtej
+    /// asnjë konsumator nuk merr path-in e artefaktit: rrugët e mbështetura janë
+    /// `ReadVerifiedImage` (snapshot i verifikuar), `LoadVerified` dhe
+    /// `MatchesVerifiedTarget`. Formulimi historik i C1 — "API-ja E VETME përmes
+    /// së cilës çdo konsumator merr path-in", me konsumatorët që e thërrasin
+    /// vetë PARA/PAS — është **[HISTORIK — I ZËVENDËSUAR NGA C4/C5]**.
+    ///
+    /// Kontrata: (1) anëtarësi EKZAKTE e `entry`-t në gjeneratën e ngrirë;
+    /// (2) fingerprint-i TRE-DIMENSIONAL i file-it real — SHA-256 + MVID +
+    /// WriteTimeUtc — krahasohet me vlerat E NGRIRA; (3) çdo devijim hidhet si
+    /// `catalog-generation-drift`, KURRË refresh i heshtur. Çiftin PARA/PAS e
+    /// jetojnë vetë operacionet e ngushta të katalogut, që një ndryshim gjatë
+    /// leximit/skanimit të mos kalojë pa u kapur.
+    /// </summary>
+    private static string VerifiedFrozenTargetPath(ProjectEntry entry, CatalogGeneration generation)
+    {
+        // C7: anëtarësia vendoset mbi STATE-IN PRIVAT të gjeneratës, jo mbi
+        // projeksionin `Projects` (i cili është kopje defensive për enumerim).
+        if (!generation.IsAuthoritativeMember(entry)
+            || !generation.Sha256ByCanonicalPath.TryGetValue(entry.CanonicalPath, out var frozenSha)
+            || !generation.MvidByCanonicalPath.TryGetValue(entry.CanonicalPath, out var frozenMvid)
+            || !generation.WriteTimeUtcByCanonicalPath.TryGetValue(entry.CanonicalPath, out var frozenWrite))
+        {
+            throw new InvalidOperationException(
+                $"Projekt jashtë gjeneratës autoritative të katalogut: {entry.CanonicalPath}");
+        }
+
+        var absolute = Path.Combine(
+            RepoRoot(), entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(absolute))
+        {
+            throw new InvalidOperationException(
+                $"catalog-generation-drift: output-i i ngrirë mungon në disk ({entry.CanonicalPath}).");
+        }
+
+        var sha = Convert.ToHexStringLower(
+            System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(absolute)));
+        var mvid = ReadMvid(absolute);
+        var writeTime = File.GetLastWriteTimeUtc(absolute);
+        if (sha != frozenSha || mvid != frozenMvid || writeTime != frozenWrite)
+        {
+            throw new InvalidOperationException(
+                "catalog-generation-drift: output-i production nuk përputhet me fingerprint-in "
+                + $"e ngrirë SHA-256+MVID+mtime ({entry.CanonicalPath}). Vlerësimi duhet të jetë read-only.");
+        }
+
+        return absolute;
+    }
+
+    /// <summary>
+    /// Correction C5 (§2) — snapshot OPAQUE, deep-immutable dhe **i
+    /// PAFALSIFIKUESHËM** i imazhit të verifikuar.
+    ///
+    /// **Root cause i C4 (i provuar):** `VerifiedAssemblyImage` ishte
+    /// *positional record* me konstruktor `internal` dhe me veti
+    /// `ImmutableArray&lt;byte&gt; Bytes`. Prandaj (a) `ImmutableCollectionsMarshal
+    /// .AsArray(image.Bytes)` kthente backing-un REAL `byte[]` dhe mutimi i tij
+    /// reflektohej në snapshot; (b) kushdo mund të ndërtonte një imazh me bajte
+    /// arbitrare dhe SHA/MVID të falsifikuar; (c) `with { … }` lejonte
+    /// falsifikim të identitetit. Testet e C4 kontrollonin vetëm mutimin
+    /// nëpërmjet interface-ve të koleksionit, pra nuk ishin diskriminuese.
+    ///
+    /// **Kontrata e C5:** klasë `sealed` **JO-record** (zero `with`/`init`/
+    /// `&lt;Clone&gt;$`/copy-ctor/`EqualityContract`), konstruktor **PRIVAT** —
+    /// vetëm katalogu e ndërton, te <see cref="ReadVerifiedImage(ProjectEntry,
+    /// CatalogGeneration)"/> — dhe backing storage privat e i papublikuar.
+    /// Nuk ekspozohet `ImmutableArray&lt;byte&gt;`, `byte[]`,
+    /// `Memory`/`ReadOnlyMemory` (nxirren me `MemoryMarshal.TryGetArray`),
+    /// path/`FileSystemInfo`, delegate apo koleksion i mutueshëm. Konsumi bëhet
+    /// VETËM me <see cref="OpenImage"/>.
+    /// </summary>
+    internal sealed class VerifiedAssemblyImage
+    {
+        private readonly byte[] verifiedBytes;
+
+        private VerifiedAssemblyImage(string assemblyName, byte[] ownedBytes, string sha256, Guid mvid)
+        {
+            verifiedBytes = ownedBytes;
+            AssemblyName = assemblyName;
+            Sha256 = sha256;
+            Mvid = mvid;
+        }
+
+        /// <summary>
+        /// Correction C6 (§3) — LEXIMI I VETËM që prodhon një snapshot të
+        /// verifikuar, dhe **vetëm nga gjenerata AUTORITATIVE**.
+        ///
+        /// **Root cause i C5 (i provuar):** `ReadVerifiedImage(entry, generation)`
+        /// pranonte një `CatalogGeneration` të kontrolluar nga thirrësi;
+        /// `SyntheticGenerationFor` prodhonte autoritet për një entry arbitrar,
+        /// ndaj një artefakt JO-production (p.sh. vetë assembly-ja e testeve)
+        /// bëhej `VerifiedAssemblyImage` dhe arrinte overload-et production të
+        /// skanerëve. Ai overload dhe fabrika `CreateVerified` **u hoqën**.
+        ///
+        /// Kontrata: `CurrentGeneration()` merret KËTU — asnjë parametër
+        /// gjenerate, fingerprint-i apo bajtesh; `entry` duhet të jetë anëtar
+        /// EKZAKT i saj; verify-before → lexim → `VerifyImageBytes` mbi po ato
+        /// bajte → verify-after → konstruktor privat. Konstruktori mbetet
+        /// privat dhe thirrësi i tij i vetëm është kjo metodë (call-site
+        /// parity mbi definicione reale).
+        /// </summary>
+        internal static VerifiedAssemblyImage Read(ProjectEntry entry)
+        {
+            var generation = CurrentGeneration();
+            var verifiedPath = VerifiedFrozenTargetPath(entry, generation);
+            var bytes = File.ReadAllBytes(verifiedPath);
+
+            VerifyImageBytes(entry, generation, bytes);
+            _ = VerifiedFrozenTargetPath(entry, generation);
+            return new VerifiedAssemblyImage(
+                entry.AssemblyName,
+                bytes,
+                generation.Sha256ByCanonicalPath[entry.CanonicalPath],
+                generation.MvidByCanonicalPath[entry.CanonicalPath]);
+        }
+
+        internal string AssemblyName { get; }
+
+        internal string Sha256 { get; }
+
+        internal Guid Mvid { get; }
+
+        internal int Length => verifiedBytes.Length;
+
+        /// <summary>
+        /// C5 (§2.8) — storage i RI, read-only dhe i PAVARUR për çdo konsum:
+        /// mutimi i konsumatorit A nuk prek as snapshot-in as konsumatorin B.
+        /// </summary>
+        internal Stream OpenImage() => OpenIndependentCopy(verifiedBytes);
+    }
+
+    /// <summary>
+    /// Correction C5 (§3) — kapaciteti FIXTURE: tip OPAQUE dhe **nominalisht i
+    /// veçantë** nga <see cref="VerifiedAssemblyImage"/> (pa trashëgimi, pa
+    /// konvertim, pa cast të vlefshëm midis të dyve). Ndërtohet VETËM nga
+    /// <see cref="OpenFixtureImage"/>, e cila refuzon fail-closed çdo artefakt
+    /// production.
+    /// </summary>
+    internal sealed class FixtureAssemblyImage
+    {
+        private readonly byte[] fixtureBytes;
+
+        private FixtureAssemblyImage(string assemblyName, byte[] ownedBytes)
+        {
+            fixtureBytes = ownedBytes;
+            AssemblyName = assemblyName;
+        }
+
+        /// <summary>
+        /// Correction C6 (§2) — HYRJA E VETME që prodhon kapacitet fixture.
+        ///
+        /// **Root cause i C5 (i provuar):** `OpenFixtureImage(string,
+        /// ProductionArtifactAuthority)` besonte një autoritet të kontrolluar
+        /// nga thirrësi; me tri sete bosh, një target REAL production
+        /// pranohej si fixture. Ai overload dhe fabrika `CreateFixture(byte[])`
+        /// **u hoqën**.
+        ///
+        /// Kontrata: autoriteti derivohet KËTU nga `CurrentGeneration()` — asnjë
+        /// parametër autoriteti, gjenerate, seti apo predikati; vendimi merret
+        /// nga funksioni PURE <see cref="ProductionArtifactRejection"/>; vetëm
+        /// pas refuzimit-negativ thirret konstruktori privat.
+        /// </summary>
+        internal static FixtureAssemblyImage Open(string fixturePath)
+        {
+            var fullPath = Path.GetFullPath(fixturePath);
+            var bytes = File.ReadAllBytes(fullPath);
+            var reason = ProductionArtifactRejection(
+                fullPath,
+                Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)),
+                TryReadMvidFromImage(bytes),
+                ProductionArtifacts());
+
+            return reason is null
+                ? new FixtureAssemblyImage(Path.GetFileNameWithoutExtension(fullPath), bytes)
+                : throw new InvalidOperationException(
+                    "fixture-production-artifact: rruga fixture NUK pranon artefakte production "
+                    + $"({reason}). Konsumi production kalon vetëm nga ReadVerifiedImage.");
+        }
+
+        internal string AssemblyName { get; }
+
+        /// <summary>Storage i ri, read-only dhe i pavarur për çdo konsum.</summary>
+        internal Stream OpenImage() => OpenIndependentCopy(fixtureBytes);
+    }
+
+    /// <summary>
+    /// C5 (§2.8/§3) — kopje e PAVARUR mbi stream read-only dhe JO
+    /// publicly-visible: `GetBuffer()` hedh `UnauthorizedAccessException`,
+    /// `Write` refuzohet, dhe `ToArray()` kthen kopje që s'e prek burimin.
+    /// </summary>
+    private static Stream OpenIndependentCopy(byte[] source)
+    {
+        var copy = new byte[source.Length];
+        Buffer.BlockCopy(source, 0, copy, 0, source.Length);
+        return new MemoryStream(copy, 0, copy.Length, writable: false, publiclyVisible: false);
+    }
+
+    /// <summary>
+    /// C5 (§3.4–3.6) — autoriteti që identifikon artefaktet PRODUCTION,
+    /// **i derivuar tërësisht nga e njëjta `CatalogGeneration` e ngrirë**.
+    /// ZERO listë manuale emrash, path-esh ose hash-esh: identiteti (path i
+    /// plotë i target-it), SHA-256 dhe MVID vijnë të tria nga gjenerata.
+    /// </summary>
+    internal sealed record ProductionArtifactAuthority(
+        FrozenSet<string> TargetFullPaths,
+        FrozenSet<string> Sha256Digests,
+        FrozenSet<Guid> Mvids);
+
+    internal static ProductionArtifactAuthority ProductionArtifacts()
+        => ProductionArtifacts(CurrentGeneration());
+
+    internal static ProductionArtifactAuthority ProductionArtifacts(CatalogGeneration generation)
+    {
+        var repoRoot = RepoRoot();
+        return new ProductionArtifactAuthority(
+            generation.Projects
+                .Select(entry => Path.GetFullPath(Path.Combine(
+                    repoRoot, entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar))))
+                .ToFrozenSet(StringComparer.Ordinal),
+            generation.Sha256ByCanonicalPath.Values.ToFrozenSet(StringComparer.Ordinal),
+            generation.MvidByCanonicalPath.Values.ToFrozenSet());
+    }
+
+    /// <summary>
+    /// Hyrja e VETME për fixtures sintetike — forward i pastër te
+    /// <see cref="FixtureAssemblyImage.Open"/>, e cila derivon autoritetin vetë.
+    /// C5 kishte këtu edhe një overload me `ProductionArtifactAuthority` të
+    /// thirrësit — **[HISTORIK — I HEQUR NGA C6 §2]**.
+    /// </summary>
+    internal static FixtureAssemblyImage OpenFixtureImage(string fixturePath)
+        => FixtureAssemblyImage.Open(fixturePath);
+
+    /// <summary>
+    /// C6 (§2.4) — klasifikues **PURE**: kthen VETËM arsyen e refuzimit (ose
+    /// `null` = i lejuar), kurrë kapacitet, stream apo bajte. Ekziston që
+    /// testet të izolojnë secilin dimension të autoritetit pa mundur kurrë
+    /// të prodhojnë një `FixtureAssemblyImage` me autoritet të vetin.
+    /// Refuzimi është FAIL-CLOSED mbi çdo dimension: path i plotë i
+    /// target-it, SHA-256 ose MVID i ngrirë.
+    /// </summary>
+    internal static string? ProductionArtifactRejection(
+        string fullPath, string sha256, Guid? mvid, ProductionArtifactAuthority authority)
+    {
+        if (authority.TargetFullPaths.Contains(fullPath))
+        {
+            return "path i target-it production";
+        }
+
+        if (authority.Sha256Digests.Contains(sha256))
+        {
+            return "SHA-256 i një artefakti production";
+        }
+
+        if (mvid is { } moduleVersionId && authority.Mvids.Contains(moduleVersionId))
+        {
+            return "MVID i një artefakti production";
+        }
+
+        return null;
+    }
+
+    /// <summary>MVID i imazhit, ose `null` nëse bajtet nuk janë PE i lexueshëm.</summary>
+    private static Guid? TryReadMvidFromImage(ReadOnlySpan<byte> image)
+    {
+        try
+        {
+            return ReadMvidFromImage(image);
+        }
+        catch (Exception exception) when (exception is BadImageFormatException or InvalidOperationException
+            or ArgumentOutOfRangeException or IOException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Correction C4/C6 — OPERACIONI I VETËM me të cilin lexohet një artefakt
+    /// production; nga C6 pranon VETËM `ProjectEntry` dhe gjenerata është
+    /// gjithmonë ajo AUTORITATIVE (`CurrentGeneration()`). Kontrata e detyruar:
+    ///  (1) kap NJË `CatalogGeneration` të pandryshueshme — atë autoritative;
+    ///  (2) **verify-before**: anëtarësi + SHA-256 + MVID + mtime ndaj gjeneratës;
+    ///  (3) lexon bajtet NJË herë;
+    ///  (4) llogarit SHA-256 **dhe MVID nga PIKËRISHT ATO bajte**;
+    ///  (5) i krahason të dyja me vlerat e NGRIRA — kjo kap edhe variantin
+    ///      **ABA** (pre/post shohin A, ndërsa reader-i mori bajte B);
+    ///  (6) **verify-after**: i njëjti verifikim ndaj së njëjtës gjeneratë;
+    ///  (7) vetëm pastaj kthen snapshot-in immutable.
+    /// Zero temp-copy, zero path jashtë.
+    /// </summary>
+    internal static VerifiedAssemblyImage ReadVerifiedImage(ProjectEntry entry)
+        => VerifiedAssemblyImage.Read(entry);
+
+    /// <summary>
+    /// C6 (§3.4) — verifikues **PURE** i target-it të ngrirë: anëtarësi
+    /// ekzakte + SHA-256 + MVID + mtime ndaj një gjenerate të DHËNË, që
+    /// gjeneratat sintetike/të helmuara të testeve të kenë një rrugë verifikimi
+    /// PA prodhuar asnjë kapacitet. Kthen `void`: ose kalon, ose hedh
+    /// `catalog-generation-drift` / refuzim anëtarësie. Path-i nuk del.
+    /// </summary>
+    internal static void VerifyFrozenTarget(ProjectEntry entry, CatalogGeneration generation)
+        => _ = VerifiedFrozenTargetPath(entry, generation);
+
+    /// <summary>
+    /// C4 — verifikim i BAJTEVE TË LEXUARA kundër gjeneratës së ngrirë (SHA-256
+    /// dhe MVID i llogaritur PIKËRISHT nga ato bajte). Ky është kontrolli që kap
+    /// variantin **ABA**: një lexim që kthen bajte B ndërsa verifikimet mbi
+    /// file-in shohin identitetin A. Seam i veçantë që testet ta ushtrojnë
+    /// drejtpërdrejt — përndryshe nuk do të ishte diskriminues.
+    /// </summary>
+    internal static void VerifyImageBytes(
+        ProjectEntry entry, CatalogGeneration generation, ReadOnlySpan<byte> bytes)
+    {
+        var frozenSha = generation.Sha256ByCanonicalPath[entry.CanonicalPath];
+        var frozenMvid = generation.MvidByCanonicalPath[entry.CanonicalPath];
+        var readSha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+        var readMvid = ReadMvidFromImage(bytes);
+        if (!string.Equals(readSha, frozenSha, StringComparison.Ordinal) || readMvid != frozenMvid)
+        {
+            throw new InvalidOperationException(
+                "catalog-generation-drift: bajtet e lexuara nuk përputhen me fingerprint-in e ngrirë "
+                + $"(SHA/MVID) — {entry.CanonicalPath}.");
+        }
+    }
+
+    /// <summary>MVID i lexuar nga BAJTET e imazhit (jo nga file-i) — pjesë e kontrollit ABA.</summary>
+    internal static Guid ReadMvidFromImage(ReadOnlySpan<byte> image)
+    {
+        using var stream = new MemoryStream(image.ToArray(), writable: false);
+        using var portableExecutable = new System.Reflection.PortableExecutable.PEReader(stream);
+        var reader = System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(portableExecutable);
+        return reader.GetGuid(reader.GetModuleDefinition().Mvid);
+    }
+
+    /// <summary>
+    /// Correction C3/C4 — krahasim identiteti PA publikuar path: a është
+    /// `candidateFullPath` EKZAKTËSISHT output-i autoritativ i këtij projekti?
+    /// Operacion i NGUSHTË catalog-owned: verify-before → krahasim → verify-after;
+    /// hyn një path kandidat, del vetëm `bool`.
+    /// </summary>
+    internal static bool MatchesVerifiedTarget(
+        ProjectEntry entry, CatalogGeneration generation, string candidateFullPath)
+    {
+        var verifiedPath = VerifiedFrozenTargetPath(entry, generation);
+        var matches = string.Equals(
+            Path.GetFullPath(candidateFullPath), Path.GetFullPath(verifiedPath), StringComparison.Ordinal);
+        _ = VerifiedFrozenTargetPath(entry, generation);
+        return matches;
+    }
+
+    /// <summary>
+    /// Correction C3 (§2B) — numri i `CanonicalTargetPath`-eve DISTINKTE, i
+    /// llogaritur BRENDA katalogut, që asnjë test të mos e lexojë vetë vetinë.
+    /// </summary>
+    internal static int DistinctCanonicalTargetPathCount()
+        => CurrentGeneration().Projects
+            .Select(entry => entry.CanonicalTargetPath)
+            .Distinct(StringComparer.Ordinal)
+            .Count();
+
+    /// <summary>
+    /// Correction C2 — ngarkim i një assembly-je TË REFERUAR gjatë ecjeve të
+    /// grafit: nëse emri i përket katalogut production, kalon DETYRIMISHT nga
+    /// <see cref="LoadVerified"/> (pra nga kufiri i ngrirë); përndryshe është
+    /// assembly framework-u/pakete dhe ngarkohet normalisht. Kështu asnjë
+    /// ecje grafi nuk e ngarkon një target production jashtë kufirit.
+    /// </summary>
+    internal static Assembly LoadReferencedAssembly(AssemblyName assemblyName)
+    {
+        var simpleName = assemblyName.Name ?? string.Empty;
+        var entry = CurrentGeneration().Projects
+            .FirstOrDefault(candidate => candidate.AssemblyName == simpleName);
+        return entry is not null ? LoadVerified(entry) : Assembly.Load(assemblyName);
+    }
+
+    /// <summary>
+    /// C2 — gjeneratë SINTETIKE minimale mbi një artefakt të dhënë (nën rrënjën
+    /// e repo-s), për testet e kufirit të konsumit: fingerprint-et llogariten
+    /// KËTU (primitivet e leximit mbeten vetëm në katalog), hartat e tjera janë
+    /// bosh. Zero prekje e katalogut real.
+    /// </summary>
+    internal static CatalogGeneration SyntheticGenerationFor(ProjectEntry entry)
+    {
+        var fingerprints = FingerprintTargets(RepoRoot(), [entry]);
+        var (sha, mvid, writeTime) = fingerprints[entry.CanonicalPath];
+        return new CatalogGeneration(
+            Guid.NewGuid(),
+            [entry],
+            new Dictionary<string, Guid> { [entry.CanonicalPath] = mvid }
+                .ToFrozenDictionary(StringComparer.Ordinal),
+            new Dictionary<string, string> { [entry.CanonicalPath] = sha }
+                .ToFrozenDictionary(StringComparer.Ordinal),
+            new Dictionary<string, DateTime> { [entry.CanonicalPath] = writeTime }
+                .ToFrozenDictionary(StringComparer.Ordinal),
+            new Dictionary<string, ImmutableArray<string>>().ToFrozenDictionary(StringComparer.Ordinal),
+            new Dictionary<string, ImmutableArray<ResolvedReference>>().ToFrozenDictionary(StringComparer.Ordinal),
+            new Dictionary<string, PackageAssetAuthority>().ToFrozenDictionary(StringComparer.Ordinal),
+            new Dictionary<string, FrozenSet<string>>().ToFrozenDictionary(StringComparer.Ordinal));
+    }
+
+    /// <summary>A i përket ky root pemës REALE të repo-s (pra gjeneratës së ngrirë)?</summary>
+    private static bool IsRealRepoRoot(string repoRoot)
+        => Path.GetFullPath(repoRoot) == Path.GetFullPath(RepoRoot());
 
     /// <summary>
     /// §5B-R6: kthehet gjithmonë KOPJE e re — mutimi nga thirrësi nuk mund
-    /// të helmojë thirrjet pasuese (vlerësimi mbetet një-për-proces në Lazy).
+    /// të helmojë thirrjet pasuese. §4-ENG-008: burimi është gjenerata e ngrirë.
     /// </summary>
-    internal static ProjectEntry[] DiscoverProduction() => [.. ProductionCatalog.Value];
+    internal static ProjectEntry[] DiscoverProduction() => [.. CurrentGeneration().Projects];
 
     /// <summary>
     /// Zbulim + vlerësim MSBuild + validim fail-closed mbi një pemë arbitrare
@@ -166,23 +787,20 @@ internal static class PlatformProjectCatalog
     {
         var repoRoot = RepoRoot();
         VerifyTargetAssembly(repoRoot, entry, approvedOutputRootRelative: "src/platform");
-        var absoluteTarget = Path.Combine(repoRoot, entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar));
 
-        Guid fileMvid;
-        using (var stream = File.OpenRead(absoluteTarget))
-        using (var portableExecutable = new System.Reflection.PortableExecutable.PEReader(stream))
-        {
-            var reader = System.Reflection.Metadata.PEReaderExtensions.GetMetadataReader(portableExecutable);
-            fileMvid = reader.GetGuid(reader.GetModuleDefinition().Mvid);
-        }
+        // C4/C5: operacion i NGUSHTË catalog-owned — verify-before → ngarkim →
+        // verify-after; path-i nuk i jepet kurrë kodit thirrës.
+        var generation = CurrentGeneration();
+        _ = VerifiedFrozenTargetPath(entry, generation);
 
         var loaded = Assembly.Load(new AssemblyName(entry.AssemblyName));
-        if (loaded.ManifestModule.ModuleVersionId != fileMvid)
+        if (loaded.ManifestModule.ModuleVersionId != generation.MvidByCanonicalPath[entry.CanonicalPath])
         {
             throw new InvalidOperationException(
                 $"Assembly i ngarkuar ≠ TargetPath (MVID mismatch — kopje stale/decoy?): {entry.AssemblyName}");
         }
 
+        _ = VerifiedFrozenTargetPath(entry, generation);
         return loaded;
     }
 
@@ -263,6 +881,7 @@ internal static class PlatformProjectCatalog
         startInfo.ArgumentList.Add("-nologo");
         startInfo.ArgumentList.Add("-getProperty:AssemblyName,TargetPath");
         startInfo.ArgumentList.Add($"-p:Configuration={BuildConfiguration}");
+        startInfo.ArgumentList.Add(ReadOnlyEvaluationArgument);
 
         using var process = new Process { StartInfo = startInfo };
         if (!process.Start())
@@ -318,6 +937,7 @@ internal static class PlatformProjectCatalog
         startInfo.ArgumentList.Add("-nologo");
         startInfo.ArgumentList.Add("-getItem:PackageReference");
         startInfo.ArgumentList.Add($"-p:Configuration={BuildConfiguration}");
+        startInfo.ArgumentList.Add(ReadOnlyEvaluationArgument);
 
         using var process = new Process { StartInfo = startInfo };
         if (!process.Start())
@@ -373,16 +993,12 @@ internal static class PlatformProjectCatalog
     /// pema production nuk ndryshon gjatë një test-run-i). Pemët sintetike
     /// nuk kalojnë kurrë këtej — ato thërrasin Discover(...) të freskët.
     /// </summary>
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string[]> ProductionProjectRefsMemo = new(StringComparer.Ordinal);
-
-    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, ResolvedReference[]> ProductionResolvedRefsMemo = new(StringComparer.Ordinal);
-
     internal static string[] EvaluateProjectReferences(string repoRoot, string canonicalCsprojPath)
     {
-        if (Path.GetFullPath(repoRoot) == Path.GetFullPath(RepoRoot()))
+        if (IsRealRepoRoot(repoRoot)
+            && CurrentGeneration().ProjectReferencesByCanonicalPath.TryGetValue(canonicalCsprojPath, out var frozen))
         {
-            return [.. ProductionProjectRefsMemo.GetOrAdd(canonicalCsprojPath,
-                path => EvaluateProjectReferencesCore(repoRoot, path))];
+            return [.. frozen];
         }
 
         return EvaluateProjectReferencesCore(repoRoot, canonicalCsprojPath);
@@ -472,10 +1088,10 @@ internal static class PlatformProjectCatalog
     /// </summary>
     internal static ResolvedReference[] EvaluateResolvedReferences(string repoRoot, string canonicalCsprojPath)
     {
-        if (Path.GetFullPath(repoRoot) == Path.GetFullPath(RepoRoot()))
+        if (IsRealRepoRoot(repoRoot)
+            && CurrentGeneration().ResolvedReferencesByCanonicalPath.TryGetValue(canonicalCsprojPath, out var frozen))
         {
-            return [.. ProductionResolvedRefsMemo.GetOrAdd(canonicalCsprojPath,
-                path => EvaluateResolvedReferencesCore(repoRoot, path))];
+            return [.. frozen];
         }
 
         return EvaluateResolvedReferencesCore(repoRoot, canonicalCsprojPath);
@@ -545,7 +1161,24 @@ internal static class PlatformProjectCatalog
         IReadOnlyDictionary<(string PackageId, string Version), IReadOnlySet<string>> AssetsByTuple,
         IReadOnlyDictionary<string, (string PackageId, string Version)> TupleByAsset)
     {
-        internal IReadOnlySet<string> Assets => TupleByAsset.Keys.ToHashSet(StringComparer.Ordinal);
+        /// <summary>
+        /// C7 — gjetje e meta-testit reflection-driven: kthente `HashSet` të
+        /// mutueshëm nën `IReadOnlySet`. Tani FrozenSet (i pamutueshëm, pa
+        /// backing të nxjerrshëm), i llogaritur nga autoriteti i tuple-ve.
+        /// </summary>
+        internal IReadOnlySet<string> Assets => TupleByAsset.Keys.ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Correction C1 (Hardening D): kopje me TË GJITHA strukturat — edhe vlerat
+    /// nested — të ngrira (`FrozenDictionary`/`FrozenSet`); përdoret nga
+    /// gjenerata e katalogut që asnjë hartë/set i brendshëm të mos mutohet.
+    /// </summary>
+    internal PackageAssetAuthority ToFrozen()
+        => new(
+            AssetsByTuple.ToFrozenDictionary(
+                pair => pair.Key,
+                pair => (IReadOnlySet<string>)pair.Value.ToFrozenSet(StringComparer.Ordinal)),
+            TupleByAsset.ToFrozenDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal));
 
         /// <summary>Anëtarësi EKZAKTE në asset-set-in e TUPLE-s (id case-insensitive, version ekzakt).</summary>
         internal bool ContainsForTuple(string packageId, string version, string canonicalAssetPath)
@@ -559,6 +1192,17 @@ internal static class PlatformProjectCatalog
     }
 
     internal static PackageAssetAuthority EvaluatePackageAssetAuthority(string repoRoot, string canonicalCsprojPath)
+    {
+        if (IsRealRepoRoot(repoRoot)
+            && CurrentGeneration().PackageAssetsByCanonicalPath.TryGetValue(canonicalCsprojPath, out var frozen))
+        {
+            return frozen;
+        }
+
+        return EvaluatePackageAssetAuthorityCore(repoRoot, canonicalCsprojPath);
+    }
+
+    private static PackageAssetAuthority EvaluatePackageAssetAuthorityCore(string repoRoot, string canonicalCsprojPath)
     {
         var canonicalRepoRoot = Path.GetFullPath(repoRoot);
         var projectDirectory = Path.GetDirectoryName(Path.Combine(
@@ -683,6 +1327,17 @@ internal static class PlatformProjectCatalog
     /// </summary>
     internal static IReadOnlySet<string> EvaluateFrameworkAssetAuthority(string repoRoot, string canonicalCsprojPath)
     {
+        if (IsRealRepoRoot(repoRoot)
+            && CurrentGeneration().FrameworkAssetsByCanonicalPath.TryGetValue(canonicalCsprojPath, out var frozen))
+        {
+            return frozen;
+        }
+
+        return EvaluateFrameworkAssetAuthorityCore(repoRoot, canonicalCsprojPath);
+    }
+
+    private static IReadOnlySet<string> EvaluateFrameworkAssetAuthorityCore(string repoRoot, string canonicalCsprojPath)
+    {
         var canonicalRepoRoot = Path.GetFullPath(repoRoot);
         var absoluteProjectPath = Path.Combine(
             canonicalRepoRoot, canonicalCsprojPath.Replace('/', Path.DirectorySeparatorChar));
@@ -750,6 +1405,12 @@ internal static class PlatformProjectCatalog
                 startInfo.ArgumentList.Add("-nodeReuse:false");
             }
         }
+
+        // §4-ENG-008: ÇDO thirrje fëmijë është READ-ONLY ndaj output-eve
+        // production. Pa këtë, `-t:ResolveReferences` rindërton ProjectReference-at
+        // dhe e ndryshon binarin NËN këmbët e një snapshot-i tashmë të ngrirë
+        // (root cause i provuar: mtime i output-it ndryshon vetëm pa këtë flag).
+        startInfo.ArgumentList.Add(ReadOnlyEvaluationArgument);
 
         using var process = new Process { StartInfo = startInfo };
         if (!process.Start())
