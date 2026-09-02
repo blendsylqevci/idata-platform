@@ -44,13 +44,16 @@ internal static class IdentityStoreIlScanner
 
     /// <summary>C4 — production: skanim mbi snapshot-in e verifikuar, zero path.</summary>
     internal static IReadOnlyList<Finding> Scan(PlatformProjectCatalog.VerifiedAssemblyImage image, bool isStoreOwner)
-        => ScanCore(
-            image.AssemblyName, () => new MemoryStream(image.Bytes.ToArray(), writable: false), isStoreOwner);
+        => ScanCore(image.AssemblyName, image.OpenImage, isStoreOwner);
 
-    /// <summary>C4 — VETËM fixtures sintetike/self-assembly.</summary>
-    internal static IReadOnlyList<Finding> ScanFixtureFile(string fixturePath, bool isStoreOwner)
-        => ScanCore(
-            Path.GetFileNameWithoutExtension(fixturePath), () => File.OpenRead(fixturePath), isStoreOwner);
+    /// <summary>
+    /// C5 (§3) — VETËM fixtures sintetike: kapacitet OPAQUE i tipizuar, i
+    /// prodhuar nga `PlatformProjectCatalog.OpenFixtureImage`, e cila refuzon
+    /// fail-closed çdo artefakt production. Zero path i papërpunuar.
+    /// </summary>
+    internal static IReadOnlyList<Finding> ScanFixture(
+        PlatformProjectCatalog.FixtureAssemblyImage fixture, bool isStoreOwner)
+        => ScanCore(fixture.AssemblyName, fixture.OpenImage, isStoreOwner);
 
     private static IReadOnlyList<Finding> ScanCore(string assemblyName, Func<Stream> openImage, bool isStoreOwner)
     {

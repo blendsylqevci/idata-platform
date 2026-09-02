@@ -194,8 +194,8 @@ public sealed class IdentityRoleSurfaceTests
     [InlineData("CustomAttribute", "IdentityRole`1")]
     public void Metadata_skan_kap_referencat_body_only_sipas_tabeles(string table, string detailFragment)
     {
-        var findings = RoleMetadataScanner.ScanFixtureFile(
-            Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"));
+        var findings = RoleMetadataScanner.ScanFixture(
+            PlatformProjectCatalog.OpenFixtureImage(Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll")));
         Assert.Contains(findings, finding =>
             finding.Table == table
             && finding.Detail.Contains(detailFragment, StringComparison.Ordinal));
@@ -210,7 +210,7 @@ public sealed class IdentityRoleSurfaceTests
         try
         {
             File.WriteAllText(temporary, "kjo nuk eshte assembly");
-            var findings = RoleMetadataScanner.ScanFixtureFile(temporary);
+            var findings = RoleMetadataScanner.ScanFixture(PlatformProjectCatalog.OpenFixtureImage(temporary));
             Assert.Contains(findings, finding => finding.Table == "unreadable-assembly");
         }
         finally
@@ -797,11 +797,16 @@ internal static class RoleMetadataScanner
 
     /// <summary>C4 — production: skanim mbi snapshot-in e verifikuar, zero path.</summary>
     internal static IReadOnlyList<MetadataFinding> Scan(PlatformProjectCatalog.VerifiedAssemblyImage image)
-        => ScanCore(image.AssemblyName, () => new MemoryStream(image.Bytes.ToArray(), writable: false));
+        => ScanCore(image.AssemblyName, image.OpenImage);
 
-    /// <summary>C4 — VETËM fixtures sintetike/self-assembly.</summary>
-    internal static IReadOnlyList<MetadataFinding> ScanFixtureFile(string fixturePath)
-        => ScanCore(Path.GetFileNameWithoutExtension(fixturePath), () => File.OpenRead(fixturePath));
+    /// <summary>
+    /// C5 (§3) — VETËM fixtures sintetike: kapacitet OPAQUE i tipizuar, i
+    /// prodhuar nga `PlatformProjectCatalog.OpenFixtureImage`, e cila refuzon
+    /// fail-closed çdo artefakt production. Zero path i papërpunuar.
+    /// </summary>
+    internal static IReadOnlyList<MetadataFinding> ScanFixture(
+        PlatformProjectCatalog.FixtureAssemblyImage fixture)
+        => ScanCore(fixture.AssemblyName, fixture.OpenImage);
 
     private static IReadOnlyList<MetadataFinding> ScanCore(string assemblyName, Func<Stream> openImage)
     {

@@ -220,16 +220,19 @@ internal static class PlatformProjectCatalog
     }
 
     /// <summary>
-    /// Correction C1 (Blocker C) — API-ja E VETME autoritative përmes së cilës
-    /// çdo konsumator i një production target-i (skanerët ENG-006, owner
-    /// public-surface guard, `LoadVerified`) merr path-in e artefaktit.
+    /// Verifikuesi PRIMITIV i target-it të ngrirë. **I PRIVAT** — nga C4 e këtej
+    /// asnjë konsumator nuk merr path-in e artefaktit: rrugët e mbështetura janë
+    /// `ReadVerifiedImage` (snapshot i verifikuar), `LoadVerified` dhe
+    /// `MatchesVerifiedTarget`. Formulimi historik i C1 — "API-ja E VETME përmes
+    /// së cilës çdo konsumator merr path-in", me konsumatorët që e thërrasin
+    /// vetë PARA/PAS — është **[HISTORIK — I ZËVENDËSUAR NGA C4/C5]**.
     ///
     /// Kontrata: (1) anëtarësi EKZAKTE e `entry`-t në gjeneratën e ngrirë;
     /// (2) fingerprint-i TRE-DIMENSIONAL i file-it real — SHA-256 + MVID +
     /// WriteTimeUtc — krahasohet me vlerat E NGRIRA; (3) çdo devijim hidhet si
-    /// `catalog-generation-drift`, KURRË refresh i heshtur. Konsumatorët e
-    /// thërrasin PARA dhe PAS leximit/skanimit, që një ndryshim gjatë scan-it
-    /// të mos kalojë pa u kapur.
+    /// `catalog-generation-drift`, KURRË refresh i heshtur. Çiftin PARA/PAS e
+    /// jetojnë vetë operacionet e ngushta të katalogut, që një ndryshim gjatë
+    /// leximit/skanimit të mos kalojë pa u kapur.
     /// </summary>
     private static string VerifiedFrozenTargetPath(ProjectEntry entry, CatalogGeneration generation)
     {
@@ -265,17 +268,215 @@ internal static class PlatformProjectCatalog
     }
 
     /// <summary>
-    /// Correction C4 — **snapshot DEEP-IMMUTABLE i imazhit të verifikuar**.
-    /// Zëvendëson çdo API që i dorëzonte kodit arbitrar raw verified path:
-    /// këtu **nuk ka path fare**, as `FileSystemInfo`, as `Stream`, as delegate,
-    /// as `byte[]` i mutueshëm — vetëm identitet immutable dhe bajtet e lexuara
-    /// nën verifikim, si `ImmutableArray&lt;byte&gt;`.
+    /// Correction C5 (§2) — snapshot OPAQUE, deep-immutable dhe **i
+    /// PAFALSIFIKUESHËM** i imazhit të verifikuar.
+    ///
+    /// **Root cause i C4 (i provuar):** `VerifiedAssemblyImage` ishte
+    /// *positional record* me konstruktor `internal` dhe me veti
+    /// `ImmutableArray&lt;byte&gt; Bytes`. Prandaj (a) `ImmutableCollectionsMarshal
+    /// .AsArray(image.Bytes)` kthente backing-un REAL `byte[]` dhe mutimi i tij
+    /// reflektohej në snapshot; (b) kushdo mund të ndërtonte një imazh me bajte
+    /// arbitrare dhe SHA/MVID të falsifikuar; (c) `with { … }` lejonte
+    /// falsifikim të identitetit. Testet e C4 kontrollonin vetëm mutimin
+    /// nëpërmjet interface-ve të koleksionit, pra nuk ishin diskriminuese.
+    ///
+    /// **Kontrata e C5:** klasë `sealed` **JO-record** (zero `with`/`init`/
+    /// `&lt;Clone&gt;$`/copy-ctor/`EqualityContract`), konstruktor **PRIVAT** —
+    /// vetëm katalogu e ndërton, te <see cref="ReadVerifiedImage(ProjectEntry,
+    /// CatalogGeneration)"/> — dhe backing storage privat e i papublikuar.
+    /// Nuk ekspozohet `ImmutableArray&lt;byte&gt;`, `byte[]`,
+    /// `Memory`/`ReadOnlyMemory` (nxirren me `MemoryMarshal.TryGetArray`),
+    /// path/`FileSystemInfo`, delegate apo koleksion i mutueshëm. Konsumi bëhet
+    /// VETËM me <see cref="OpenImage"/>.
     /// </summary>
-    internal sealed record VerifiedAssemblyImage(
-        string AssemblyName,
-        ImmutableArray<byte> Bytes,
-        string Sha256,
-        Guid Mvid);
+    internal sealed class VerifiedAssemblyImage
+    {
+        private readonly byte[] verifiedBytes;
+
+        private VerifiedAssemblyImage(string assemblyName, byte[] ownedBytes, string sha256, Guid mvid)
+        {
+            verifiedBytes = ownedBytes;
+            AssemblyName = assemblyName;
+            Sha256 = sha256;
+            Mvid = mvid;
+        }
+
+        /// <summary>
+        /// C5 (§2.5) — FABRIKA E VETME catalog-owned.
+        ///
+        /// Konstruktori mbetet **privat**, ndaj `new VerifiedAssemblyImage(…)`
+        /// është gabim kompilimi kudo (në C# aksesueshmëria rrjedh nga tipi
+        /// rrethues NË tipin e ngulitur, jo anasjelltas). Fabrika është
+        /// `internal` sepse katalogu duhet ta thërrasë, por ajo **nuk pranon
+        /// SHA/MVID nga jashtë**: identiteti merret nga gjenerata E NGRIRË dhe
+        /// bajtet ri-verifikohen ndaj saj. Prandaj as thirrja e drejtpërdrejtë
+        /// e fabrikës nuk mund të falsifikojë një snapshot. Call-site parity-a
+        /// provohet veçmas me meta-test.
+        /// </summary>
+        internal static VerifiedAssemblyImage CreateVerified(
+            ProjectEntry entry, CatalogGeneration generation, byte[] verifiedBytes)
+        {
+            VerifyImageBytes(entry, generation, verifiedBytes);
+            return new(
+                entry.AssemblyName,
+                verifiedBytes,
+                generation.Sha256ByCanonicalPath[entry.CanonicalPath],
+                generation.MvidByCanonicalPath[entry.CanonicalPath]);
+        }
+
+        internal string AssemblyName { get; }
+
+        internal string Sha256 { get; }
+
+        internal Guid Mvid { get; }
+
+        internal int Length => verifiedBytes.Length;
+
+        /// <summary>
+        /// C5 (§2.8) — storage i RI, read-only dhe i PAVARUR për çdo konsum:
+        /// mutimi i konsumatorit A nuk prek as snapshot-in as konsumatorin B.
+        /// </summary>
+        internal Stream OpenImage() => OpenIndependentCopy(verifiedBytes);
+    }
+
+    /// <summary>
+    /// Correction C5 (§3) — kapaciteti FIXTURE: tip OPAQUE dhe **nominalisht i
+    /// veçantë** nga <see cref="VerifiedAssemblyImage"/> (pa trashëgimi, pa
+    /// konvertim, pa cast të vlefshëm midis të dyve). Ndërtohet VETËM nga
+    /// <see cref="OpenFixtureImage"/>, e cila refuzon fail-closed çdo artefakt
+    /// production.
+    /// </summary>
+    internal sealed class FixtureAssemblyImage
+    {
+        private readonly byte[] fixtureBytes;
+
+        private FixtureAssemblyImage(string assemblyName, byte[] ownedBytes)
+        {
+            fixtureBytes = ownedBytes;
+            AssemblyName = assemblyName;
+        }
+
+        /// <summary>
+        /// C5 (§3.3) — fabrika e vetme e kapacitetit fixture. Konstruktori është
+        /// privat; thirrësi i vetëm i fabrikës provohet me meta-test call-site
+        /// parity = <see cref="OpenFixtureImage"/>, e cila bën refuzimin
+        /// fail-closed të artefakteve production.
+        /// </summary>
+        internal static FixtureAssemblyImage CreateFixture(string assemblyName, byte[] fixtureBytes)
+            => new(assemblyName, fixtureBytes);
+
+        internal string AssemblyName { get; }
+
+        /// <summary>Storage i ri, read-only dhe i pavarur për çdo konsum.</summary>
+        internal Stream OpenImage() => OpenIndependentCopy(fixtureBytes);
+    }
+
+    /// <summary>
+    /// C5 (§2.8/§3) — kopje e PAVARUR mbi stream read-only dhe JO
+    /// publicly-visible: `GetBuffer()` hedh `UnauthorizedAccessException`,
+    /// `Write` refuzohet, dhe `ToArray()` kthen kopje që s'e prek burimin.
+    /// </summary>
+    private static Stream OpenIndependentCopy(byte[] source)
+    {
+        var copy = new byte[source.Length];
+        Buffer.BlockCopy(source, 0, copy, 0, source.Length);
+        return new MemoryStream(copy, 0, copy.Length, writable: false, publiclyVisible: false);
+    }
+
+    /// <summary>
+    /// C5 (§3.4–3.6) — autoriteti që identifikon artefaktet PRODUCTION,
+    /// **i derivuar tërësisht nga e njëjta `CatalogGeneration` e ngrirë**.
+    /// ZERO listë manuale emrash, path-esh ose hash-esh: identiteti (path i
+    /// plotë i target-it), SHA-256 dhe MVID vijnë të tria nga gjenerata.
+    /// </summary>
+    internal sealed record ProductionArtifactAuthority(
+        FrozenSet<string> TargetFullPaths,
+        FrozenSet<string> Sha256Digests,
+        FrozenSet<Guid> Mvids);
+
+    internal static ProductionArtifactAuthority ProductionArtifacts()
+        => ProductionArtifacts(CurrentGeneration());
+
+    internal static ProductionArtifactAuthority ProductionArtifacts(CatalogGeneration generation)
+    {
+        var repoRoot = RepoRoot();
+        return new ProductionArtifactAuthority(
+            generation.Projects
+                .Select(entry => Path.GetFullPath(Path.Combine(
+                    repoRoot, entry.CanonicalTargetPath.Replace('/', Path.DirectorySeparatorChar))))
+                .ToFrozenSet(StringComparer.Ordinal),
+            generation.Sha256ByCanonicalPath.Values.ToFrozenSet(StringComparer.Ordinal),
+            generation.MvidByCanonicalPath.Values.ToFrozenSet());
+    }
+
+    /// <summary>
+    /// Correction C5 (§3) — hyrja e VETME për fixtures sintetike.
+    ///
+    /// **Root cause i C4 (i provuar):** skanerët ekspozonin
+    /// `…FixtureFile(string path)` të pakufizuar, ndaj
+    /// `ScanFixtureFile(Path.Combine(AppContext.BaseDirectory,
+    /// "Idata.Platform.Persistence.dll"))` skanonte një artefakt PRODUCTION
+    /// (kopje byte-identike që build-i e vendos pranë testeve) dhe të gjithë
+    /// guard-et mbeteshin GREEN.
+    ///
+    /// **Kontrata:** refuzim FAIL-CLOSED nëse artefakti përputhet me çdo
+    /// dimension të autoritetit të derivuar — path i plotë i target-it, SHA-256
+    /// ose MVID i ngrirë. Kështu kopja refuzohet pavarësisht path-it, emrit të
+    /// file-it, `AppContext.BaseDirectory`, `Path.Join`/`Path.Combine`,
+    /// helper-ave indirektë ose kopjimit në një direktori temp/fixture.
+    /// </summary>
+    internal static FixtureAssemblyImage OpenFixtureImage(string fixturePath)
+        => OpenFixtureImage(fixturePath, ProductionArtifacts());
+
+    /// <summary>
+    /// I njëjti refuzim, por ndaj një autoriteti të dhënë. Ekziston që testet
+    /// të ISOLOJNË secilin dimension: ndaj gjeneratës reale të tria dimensionet
+    /// janë reciprokisht të tepërta (bajtet identike nënkuptojnë MVID identik),
+    /// prandaj heqja e njërit nuk do të dukej kurrë. Me nën-autoritete të
+    /// derivuara nga E NJËJTA gjeneratë, secili dimension bëhet i domosdoshëm.
+    /// </summary>
+    internal static FixtureAssemblyImage OpenFixtureImage(
+        string fixturePath, ProductionArtifactAuthority authority)
+    {
+        var fullPath = Path.GetFullPath(fixturePath);
+        var bytes = File.ReadAllBytes(fullPath);
+        var sha = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+        var mvid = TryReadMvidFromImage(bytes);
+
+        string? reason = null;
+        if (authority.TargetFullPaths.Contains(fullPath))
+        {
+            reason = "path i target-it production";
+        }
+        else if (authority.Sha256Digests.Contains(sha))
+        {
+            reason = "SHA-256 i një artefakti production";
+        }
+        else if (mvid is { } moduleVersionId && authority.Mvids.Contains(moduleVersionId))
+        {
+            reason = "MVID i një artefakti production";
+        }
+
+        return reason is null
+            ? FixtureAssemblyImage.CreateFixture(Path.GetFileNameWithoutExtension(fullPath), bytes)
+            : throw new InvalidOperationException(
+                "fixture-production-artifact: rruga fixture NUK pranon artefakte production "
+                + $"({reason}). Konsumi production kalon vetëm nga ReadVerifiedImage.");
+    }
+
+    /// <summary>MVID i imazhit, ose `null` nëse bajtet nuk janë PE i lexueshëm.</summary>
+    private static Guid? TryReadMvidFromImage(ReadOnlySpan<byte> image)
+    {
+        try
+        {
+            return ReadMvidFromImage(image);
+        }
+        catch (Exception exception) when (exception is BadImageFormatException or InvalidOperationException
+            or ArgumentOutOfRangeException or IOException)
+        {
+            return null;
+        }
+    }
 
     /// <summary>
     /// Correction C4 — OPERACIONI I VETËM me të cilin lexohet një artefakt
@@ -300,11 +501,7 @@ internal static class PlatformProjectCatalog
 
         VerifyImageBytes(entry, generation, bytes);
         _ = VerifiedFrozenTargetPath(entry, generation);
-        return new VerifiedAssemblyImage(
-            entry.AssemblyName,
-            [.. bytes],
-            generation.Sha256ByCanonicalPath[entry.CanonicalPath],
-            generation.MvidByCanonicalPath[entry.CanonicalPath]);
+        return VerifiedAssemblyImage.CreateVerified(entry, generation, bytes);
     }
 
     /// <summary>
@@ -511,8 +708,8 @@ internal static class PlatformProjectCatalog
         var repoRoot = RepoRoot();
         VerifyTargetAssembly(repoRoot, entry, approvedOutputRootRelative: "src/platform");
 
-        // Correction C4: operacion i NGUSHTË catalog-owned — verify-before →
-        // ngarkim → verify-after, pa i dhënë asnjë callback-u raw path.
+        // C4/C5: operacion i NGUSHTË catalog-owned — verify-before → ngarkim →
+        // verify-after; path-i nuk i jepet kurrë kodit thirrës.
         var generation = CurrentGeneration();
         _ = VerifiedFrozenTargetPath(entry, generation);
 

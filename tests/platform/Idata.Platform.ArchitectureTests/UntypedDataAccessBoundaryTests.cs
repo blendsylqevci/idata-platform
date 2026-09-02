@@ -25,6 +25,14 @@ public sealed class UntypedDataAccessBoundaryTests
     private static string SelfAssemblyPath()
         => Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll");
 
+    /// <summary>
+    /// C5 (§3) — kapaciteti fixture i self-assembly-t, i prodhuar nga fabrika
+    /// catalog-owned. Nëse ky binar do të ishte ndonjëherë artefakt production,
+    /// fabrika do ta refuzonte fail-closed.
+    /// </summary>
+    private static PlatformProjectCatalog.FixtureAssemblyImage SelfFixtureImage()
+        => PlatformProjectCatalog.OpenFixtureImage(SelfAssemblyPath());
+
     /// <summary>C4: konsumim mbi SNAPSHOT-in deep-immutable të verifikuar (zero path).</summary>
     private static IReadOnlyList<UntypedDataAccessScanner.Finding> ScanVerified(
         PlatformProjectCatalog.ProjectEntry entry)
@@ -216,7 +224,7 @@ public sealed class UntypedDataAccessBoundaryTests
     [Fact]
     public void Guard_i_siperfaqes_publike_kap_escape_hatch_et_e_mbuluara()
     {
-        var findings = UntypedDataAccessScanner.ScanOwnerPublicSurfaceFixtureFile(SelfAssemblyPath());
+        var findings = UntypedDataAccessScanner.ScanOwnerPublicSurfaceFixture(SelfFixtureImage());
         var hatch = typeof(OwnerPublicEscapeHatchFixtures).FullName!;
 
         Assert.Contains(findings, finding =>
@@ -267,7 +275,7 @@ public sealed class UntypedDataAccessBoundaryTests
     [InlineData(nameof(RawSinkFixtures.UnknownSinkMemberFixture), "raw-type-member", "System.Data.Common.DbConnection.GetSchema")]
     public void Fixtures_RED_kapen_me_atribuim_te_sakte(string member, string kind, string detail)
     {
-        var findings = UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath());
+        var findings = UntypedDataAccessScanner.ScanFixture(SelfFixtureImage());
         Assert.Contains(findings, finding =>
             finding.DeclaringType == typeof(RawSinkFixtures).FullName
             && finding.Member == member
@@ -283,7 +291,7 @@ public sealed class UntypedDataAccessBoundaryTests
     [Fact]
     public void Sink_ne_helper_dhe_alias_delegate_nuk_fshihet()
     {
-        var findings = UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath());
+        var findings = UntypedDataAccessScanner.ScanFixture(SelfFixtureImage());
         var fixtures = typeof(RawSinkFixtures).FullName;
 
         // RED 8 — sink-u kapet TE HELPER-i (jo i humbur te thirrësi).
@@ -307,7 +315,7 @@ public sealed class UntypedDataAccessBoundaryTests
     [Fact]
     public void Kod_compiler_generated_pa_state_machine_eshte_fail_closed()
     {
-        var findings = UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath());
+        var findings = UntypedDataAccessScanner.ScanFixture(SelfFixtureImage());
         var unattributed = findings.Where(finding => finding.Kind == "unattributed-compiler-generated").ToArray();
 
         Assert.NotEmpty(unattributed);
@@ -358,12 +366,12 @@ public sealed class UntypedDataAccessBoundaryTests
         File.WriteAllText(notAnAssembly, "kjo nuk eshte PE");
         try
         {
-            var findings = UntypedDataAccessScanner.ScanFixtureFile(notAnAssembly);
+            var findings = UntypedDataAccessScanner.ScanFixture(PlatformProjectCatalog.OpenFixtureImage(notAnAssembly));
             var single = Assert.Single(findings);
             Assert.Equal("unreadable-assembly", single.Kind);
             Assert.True(UntypedDataAccessScanner.IsNeverAllowable(single));
 
-            var ownerFindings = UntypedDataAccessScanner.ScanOwnerPublicSurfaceFixtureFile(notAnAssembly);
+            var ownerFindings = UntypedDataAccessScanner.ScanOwnerPublicSurfaceFixture(PlatformProjectCatalog.OpenFixtureImage(notAnAssembly));
             Assert.Equal("unreadable-assembly", Assert.Single(ownerFindings).Kind);
         }
         finally
@@ -465,7 +473,7 @@ public sealed class UntypedDataAccessBoundaryTests
     [InlineData(nameof(RawSinkFixtures.DynamicRawAccessResidualPoC))]   // GREEN 21
     public void Fixtures_GREEN_nuk_prodhojne_gjetje_ENG007(string member)
     {
-        var findings = UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath());
+        var findings = UntypedDataAccessScanner.ScanFixture(SelfFixtureImage());
         Assert.DoesNotContain(findings, finding =>
             finding.DeclaringType == typeof(RawSinkFixtures).FullName && finding.Member == member);
     }
@@ -504,7 +512,7 @@ public sealed class UntypedDataAccessBoundaryTests
         Assert.Equal("System.Data.Common.DbCommand", resolved!.FullName);
 
         // …ndërsa skaneri statik nuk prodhon asnjë gjetje për të.
-        var findings = UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath());
+        var findings = UntypedDataAccessScanner.ScanFixture(SelfFixtureImage());
         Assert.DoesNotContain(findings, finding =>
             finding.DeclaringType == typeof(RawSinkFixtures).FullName
             && finding.Member == nameof(RawSinkFixtures.DynamicRawAccessResidualPoC));
@@ -533,9 +541,9 @@ public sealed class UntypedDataAccessBoundaryTests
     public void Heqja_e_cdo_familje_sink_esh_e_zhduk_zbulimin_perkates(
         string target, string member, string detail, string typesToRemove, string membersToRemove)
     {
-        // C3 (§1): skanimi kryhet BRENDA kufirit — path-i i verifikuar nuk del
-        // kurrë prej tij; për target-in production konsumohen TË DYJA skanimet
-        // (me taksonominë e plotë dhe me atë të reduktuar) brenda callback-ut.
+        // C4/C5: skanimi i production-it kryhet mbi snapshot-in e verifikuar;
+        // path-i nuk publikohet fare. Për target-in production konsumohen TË DYJA
+        // skanimet (me taksonominë e plotë dhe me atë të reduktuar).
         bool Detected(UntypedDataAccessScanner.SinkTaxonomy? taxonomy)
         {
             bool Matches(IReadOnlyList<UntypedDataAccessScanner.Finding> findings) => findings.Any(finding =>
@@ -543,7 +551,7 @@ public sealed class UntypedDataAccessBoundaryTests
 
             // C4: self = fixture file (jashtë katalogut); production = snapshot i verifikuar.
             return target == "self"
-                ? Matches(UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath(), taxonomy))
+                ? Matches(UntypedDataAccessScanner.ScanFixture(SelfFixtureImage(), taxonomy))
                 : Matches(UntypedDataAccessScanner.Scan(
                     PlatformProjectCatalog.ReadVerifiedImage(
                         PlatformProjectCatalog.DiscoverProduction().Single(entry =>
@@ -576,7 +584,7 @@ public sealed class UntypedDataAccessBoundaryTests
     public void Rregulli_unknown_eshte_finding_eshte_mbajtes()
     {
         bool Detected(UntypedDataAccessScanner.SinkTaxonomy? taxonomy)
-            => UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath(), taxonomy).Any(finding =>
+            => UntypedDataAccessScanner.ScanFixture(SelfFixtureImage(), taxonomy).Any(finding =>
                 finding.Member == nameof(RawSinkFixtures.UnknownSinkMemberFixture)
                 && finding.Detail.Contains("GetSchema", StringComparison.Ordinal));
 
@@ -683,7 +691,7 @@ public sealed class UntypedDataAccessBoundaryTests
         Assert.False(RawDataSinkTaxonomy.IsRawCapabilityType(
             "Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder"));
 
-        var findings = UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath());
+        var findings = UntypedDataAccessScanner.ScanFixture(SelfFixtureImage());
         var finding = Assert.Single(findings, candidate =>
             candidate.DeclaringType == typeof(RawSinkFixtures).FullName
             && candidate.Member == nameof(RawSinkFixtures.MigrationBuilderSqlFixture)
@@ -736,7 +744,7 @@ public sealed class UntypedDataAccessBoundaryTests
     [Fact]
     public void Anetar_homonim_Sql_mbi_tip_tjeter_nuk_eshte_gjetje()
     {
-        var findings = UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath());
+        var findings = UntypedDataAccessScanner.ScanFixture(SelfFixtureImage());
 
         foreach (var member in (string[])
         [
@@ -764,12 +772,14 @@ public sealed class UntypedDataAccessBoundaryTests
             RawDataSinkTaxonomy.RawExecutionMemberNames,
             new HashSet<(string, string)>());
 
-        bool DetectedIn(string assemblyPath, UntypedDataAccessScanner.SinkTaxonomy? taxonomy)
-            => UntypedDataAccessScanner.ScanFixtureFile(assemblyPath, taxonomy)
+        bool DetectedIn(
+            PlatformProjectCatalog.FixtureAssemblyImage fixture,
+            UntypedDataAccessScanner.SinkTaxonomy? taxonomy)
+            => UntypedDataAccessScanner.ScanFixture(fixture, taxonomy)
                 .Any(finding => finding.Detail == MigrationBuilderSql);
 
-        Assert.True(DetectedIn(SelfAssemblyPath(), null));
-        Assert.False(DetectedIn(SelfAssemblyPath(), empty));
+        Assert.True(DetectedIn(SelfFixtureImage(), null));
+        Assert.False(DetectedIn(SelfFixtureImage(), empty));
 
         // C4: një snapshot i verifikuar, dy skanime mbi TË NJËJTAT bajte.
         var persistenceImage = PlatformProjectCatalog.ReadVerifiedImage(
@@ -790,7 +800,7 @@ public sealed class UntypedDataAccessBoundaryTests
     [InlineData(nameof(RawSinkFixtures.DataAdapterUpdateFixture), "System.Data.Common.DataAdapter.Update")]
     public void Familja_DataAdapter_kapet_me_atribuim_te_sakte(string member, string detail)
     {
-        var findings = UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath());
+        var findings = UntypedDataAccessScanner.ScanFixture(SelfFixtureImage());
         Assert.Contains(findings, finding =>
             finding.DeclaringType == typeof(RawSinkFixtures).FullName
             && finding.Member == member
@@ -812,7 +822,7 @@ public sealed class UntypedDataAccessBoundaryTests
             Assert.DoesNotContain(name, RawDataSinkTaxonomy.RawExecutionMemberNames);
         }
 
-        var findings = UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath());
+        var findings = UntypedDataAccessScanner.ScanFixture(SelfFixtureImage());
         Assert.DoesNotContain(findings, finding =>
             finding.Detail.StartsWith("System.Array.", StringComparison.Ordinal));
         Assert.DoesNotContain(findings, finding =>
@@ -832,7 +842,7 @@ public sealed class UntypedDataAccessBoundaryTests
     public void Heqja_e_tipit_te_adapter_it_e_zhduk_zbulimin_perkates(string rawType, string detail)
     {
         bool Detected(UntypedDataAccessScanner.SinkTaxonomy? taxonomy)
-            => UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath(), taxonomy)
+            => UntypedDataAccessScanner.ScanFixture(SelfFixtureImage(), taxonomy)
                 .Any(finding => finding.Detail == detail);
 
         Assert.True(Detected(null));
@@ -868,7 +878,7 @@ public sealed class UntypedDataAccessBoundaryTests
     [InlineData(nameof(RawSinkFixtures.DbCommandBuilderInsertFixture), "System.Data.Common.DbCommandBuilder.GetInsertCommand")]
     public void Familja_provider_kapet_me_atribuim_te_sakte(string member, string detail)
     {
-        var findings = UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath());
+        var findings = UntypedDataAccessScanner.ScanFixture(SelfFixtureImage());
         var finding = Assert.Single(findings, candidate =>
             candidate.DeclaringType == typeof(RawSinkFixtures).FullName
             && candidate.Member == member
@@ -894,7 +904,7 @@ public sealed class UntypedDataAccessBoundaryTests
         Assert.DoesNotContain(memberName, RawDataSinkTaxonomy.RawExecutionMemberNames);
 
         bool Detected(UntypedDataAccessScanner.SinkTaxonomy? taxonomy)
-            => UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath(), taxonomy)
+            => UntypedDataAccessScanner.ScanFixture(SelfFixtureImage(), taxonomy)
                 .Any(finding => finding.Detail == detail);
 
         Assert.True(Detected(null));
@@ -922,7 +932,7 @@ public sealed class UntypedDataAccessBoundaryTests
             Assert.False(RawDataSinkTaxonomy.IsRawCapabilityType(syntheticName));
         }
 
-        var findings = UntypedDataAccessScanner.ScanFixtureFile(SelfAssemblyPath());
+        var findings = UntypedDataAccessScanner.ScanFixture(SelfFixtureImage());
         Assert.DoesNotContain(findings, finding =>
             finding.DeclaringType == typeof(RawSinkFixtures).FullName
             && finding.Member == nameof(RawSinkFixtures.SyntheticProviderHomonymsFixture));

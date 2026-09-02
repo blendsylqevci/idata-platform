@@ -1106,8 +1106,8 @@ public sealed class ConventionEnforcementTests
     [Fact]
     public void Skaneri_IL_kap_bypass_et_e_mbuluara_dhe_lejon_perdorimin_e_sakte()
     {
-        var findings = IdentityStoreIlScanner.ScanFixtureFile(
-            Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"),
+        var findings = IdentityStoreIlScanner.ScanFixture(
+            PlatformProjectCatalog.OpenFixtureImage(Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll")),
             isStoreOwner: false);
 
         foreach (var accessor in (string[])["get_Users", "get_UserClaims", "get_UserLogins", "get_UserTokens"])
@@ -1150,8 +1150,8 @@ public sealed class ConventionEnforcementTests
         // Inverse e OWNER-it: për owner-in tipet e store-it janë të lejuara —
         // i njëjti binar i skanuar si owner s'prodhon gjetje kufiri tipesh
         // (rregulli claim-id mbetet i zbatuar mbi të gjithë — provohet veçmas).
-        var ownerFindings = IdentityStoreIlScanner.ScanFixtureFile(
-            Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"),
+        var ownerFindings = IdentityStoreIlScanner.ScanFixture(
+            PlatformProjectCatalog.OpenFixtureImage(Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll")),
             isStoreOwner: true);
         Assert.DoesNotContain(ownerFindings, finding => finding.Kind == "record-type-ref");
         Assert.DoesNotContain(ownerFindings, finding => finding.Kind == "record-attribute-string");
@@ -1239,8 +1239,8 @@ public sealed class ConventionEnforcementTests
 
         // ÇDO accessor i derivuar prodhon gjetje reale te jo-owner (fixtures
         // getter + setter në IdentityBoundaryFixtures).
-        var findings = IdentityStoreIlScanner.ScanFixtureFile(
-            Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll"),
+        var findings = IdentityStoreIlScanner.ScanFixture(
+            PlatformProjectCatalog.OpenFixtureImage(Path.Combine(AppContext.BaseDirectory, "Idata.Platform.ArchitectureTests.dll")),
             isStoreOwner: false);
         Assert.All(derived, accessor => Assert.Contains(findings, finding =>
             finding.Kind == "identity-dbset-access"

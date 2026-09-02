@@ -54,13 +54,16 @@ internal static class DynamicRuntimeAccessScanner
     /// </summary>
     internal static IReadOnlyList<Finding> Scan(
         PlatformProjectCatalog.VerifiedAssemblyImage image, AccessTaxonomy? taxonomy = null)
-        => ScanCore(image.AssemblyName, () => new MemoryStream(image.Bytes.ToArray(), writable: false), taxonomy);
+        => ScanCore(image.AssemblyName, image.OpenImage, taxonomy);
 
-    /// <summary>C4 — VETËM për fixtures sintetike/self-assembly.</summary>
-    internal static IReadOnlyList<Finding> ScanFixtureFile(
-        string fixturePath, AccessTaxonomy? taxonomy = null)
-        => ScanCore(
-            Path.GetFileNameWithoutExtension(fixturePath), () => File.OpenRead(fixturePath), taxonomy);
+    /// <summary>
+    /// C5 (§3) — VETËM fixtures sintetike: kapacitet OPAQUE i tipizuar, i
+    /// prodhuar nga `PlatformProjectCatalog.OpenFixtureImage`, e cila refuzon
+    /// fail-closed çdo artefakt production. Zero path i papërpunuar.
+    /// </summary>
+    internal static IReadOnlyList<Finding> ScanFixture(
+        PlatformProjectCatalog.FixtureAssemblyImage fixture, AccessTaxonomy? taxonomy = null)
+        => ScanCore(fixture.AssemblyName, fixture.OpenImage, taxonomy);
 
     private static IReadOnlyList<Finding> ScanCore(
         string assemblyName, Func<Stream> openImage, AccessTaxonomy? taxonomy)
@@ -448,13 +451,16 @@ internal static class DynamicRuntimeAccessScanner
     /// </summary>
     /// <summary>C4 — owner surface mbi snapshot-in e verifikuar (production).</summary>
     internal static IReadOnlyList<Finding> ScanOwnerPublicSurface(PlatformProjectCatalog.VerifiedAssemblyImage image)
-        => ScanOwnerPublicSurfaceCore(
-            image.AssemblyName, () => new MemoryStream(image.Bytes.ToArray(), writable: false));
+        => ScanOwnerPublicSurfaceCore(image.AssemblyName, image.OpenImage);
 
-    /// <summary>C4 — VETËM fixtures sintetike.</summary>
-    internal static IReadOnlyList<Finding> ScanOwnerPublicSurfaceFixtureFile(string fixturePath)
-        => ScanOwnerPublicSurfaceCore(
-            Path.GetFileNameWithoutExtension(fixturePath), () => File.OpenRead(fixturePath));
+    /// <summary>
+    /// C5 (§3) — VETËM fixtures sintetike: kapacitet OPAQUE i tipizuar, i
+    /// prodhuar nga `PlatformProjectCatalog.OpenFixtureImage`, e cila refuzon
+    /// fail-closed çdo artefakt production. Zero path i papërpunuar.
+    /// </summary>
+    internal static IReadOnlyList<Finding> ScanOwnerPublicSurfaceFixture(
+        PlatformProjectCatalog.FixtureAssemblyImage fixture)
+        => ScanOwnerPublicSurfaceCore(fixture.AssemblyName, fixture.OpenImage);
 
     private static IReadOnlyList<Finding> ScanOwnerPublicSurfaceCore(string assemblyName, Func<Stream> openImage)
     {
