@@ -191,11 +191,11 @@ RED = Arch **2 FAIL** (`IdentityAuthorityBoundaryTests.Owner_i_protokollit_refer
 
 | Rreshti | Statusi | Evidencë |
 |---|---|---|
-| B1 issuer/audience | COMPLETED / MERGED (B.2a, PR #31 `42993f0`) | §5 |
-| B2 signature/unknown key/unavailable | COMPLETED / MERGED (B.2a, PR #31 `42993f0`; unavailable = N/A lokal, §5.3; DB e paarritshme → kurrë 200; **C1: tri politika JOSE të ndara, RSA1_5 401, koherencë startup**) | §5, §8 |
-| B3 rollover/expiry/skew | COMPLETED / MERGED (B.2a, PR #31 `42993f0`) | §5 |
-| C1 matrica e credentials | COMPLETED / MERGED (B.2a, PR #31 `42993f0`) | §4 |
-| C2 restart/rotation/expired-invalid-unavailable | COMPLETED / MERGED (B.2a, PR #31 `42993f0`) | §4/§5 |
+| B1 issuer/audience | IMPLEMENTED IN BRANCH / PENDING_INDEPENDENT_REVIEW | §5 |
+| B2 signature/unknown key/unavailable | IMPLEMENTED IN BRANCH / PENDING_INDEPENDENT_REVIEW (unavailable = N/A lokal, §5.3; DB e paarritshme → kurrë 200; **C1: tri politika JOSE të ndara, RSA1_5 401, koherencë startup**) | §5, §8 |
+| B3 rollover/expiry/skew | IMPLEMENTED IN BRANCH / PENDING_INDEPENDENT_REVIEW | §5 |
+| C1 matrica e credentials | IMPLEMENTED IN BRANCH / PENDING_INDEPENDENT_REVIEW | §4 |
+| C2 restart/rotation/expired-invalid-unavailable | IMPLEMENTED IN BRANCH / PENDING_INDEPENDENT_REVIEW | §4/§5 |
 | E2 code+PKCE / grant-e të refuzuara | OPEN — pjesa e provuar: flow i deklaruar + autorizim fail-closed + grant-e të ndaluara të refuzuara | §5 |
 | E5 architecture/keys/audit | PARTIAL — B.2a: zëvendësim i kontrolluar + guard MemberRefs + keys jashtë repo/log = IMPLEMENTED IN BRANCH; audit events = B.3 | §6 |
 
@@ -223,7 +223,7 @@ RED = Arch **2 FAIL** (`IdentityAuthorityBoundaryTests.Owner_i_protokollit_refer
 - **Merge = VETËM SQUASH** (commit-i `efcd4bd` nuk duhet të hyjë në `main`); ruleset-i aktiv `protect-main` kërkon `build-test` + `gitleaks` (required) — governance-advisory mbetet non-required dhe **RED vetëm për INCOMPLETE_SCAN historik**; waiver-i nuk e bën linter-in required, nuk dobëson fail-closed dhe nuk krijon precedent.
 - **Simulimi i squash-it (clone i izoluar, pa prekur historinë):** synthetic commit me parent `8d3aa85` dhe tree = tree EKZAKT i HEAD-it pas këtij fix-i (paritet i hash-it të tree-t i provuar) → DOC-CORE + HISTORY-PRIV mbi `8d3aa85..synthetic`: **exit 0, ERROR 0, WARNING 0, REVIEW 24** = baseline 21 + tri reflag-et HISTORY-PRIV të shpjeguara të Commit A (`SSOT:143` — rreshti 141 i Commit A — HP-EVIDENCE-METRIC, `Tracker:66` dhe `Roadmap:79` HP-OPERATIONAL-CLAIM — përmbajtje ekzistuese e sanitizuar në rreshta të modifikuar).
 - **Devijimi i C1 prej tre commit-esh: RECORDED / ZERO PRECEDENT** — commit-i i tretë (`d9a718d`) mbylli regresionin real HTTP 500 (encrypted-key i keqformuar) të gjetur nga review-i adversarial i brendshëm.
-- **Follow-up brenda narrativës ekzistuese GOV-001 (zero ID i ri) — OPEN / NOT IMPLEMENTED / NOT AUTHORIZED:** parser-i i linter-it duhet të mos aplikojë Markdown HTML collapsing mbi file jo-Markdown, pa dobësuar all-file privacy scanning; kërkon goal/scope të veçantë (para ose paralel me B.2b), i pa-përzier me identity code.
+- **Follow-up i regjistruar, JO i implementuar në PR #31 — GOV-001:** parser-i i linter-it duhet të mos aplikojë Markdown HTML collapsing mbi file jo-Markdown, pa dobësuar all-file privacy scanning; kërkon goal/scope të veçantë (para ose paralel me B.2b), i pa-përzier me identity code.
 - *(HISTORICAL — gjendja para merge-it:)* B.2a mbetej IMPLEMENTED IN BRANCH / PENDING_INDEPENDENT_REVIEW deri te Human Gate; PR #31 ishte OPEN (NDALO PARA MERGE). **Mbyllur — shih §15: PR #31 = MERGED (`42993f0`), B.2a = COMPLETED / MERGED.**
 
 ## 15. Closure post-merge (03.09.2026) — B.2a = COMPLETED / MERGED
