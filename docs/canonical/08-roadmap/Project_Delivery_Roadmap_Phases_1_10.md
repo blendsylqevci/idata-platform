@@ -587,7 +587,9 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 ### Faza 8 — PLANET POS/KDS → ★ PLANET LIVE
 
-**Qëllimi:** PLANET të dalë live me POS/KDS, multi-shank, finance settlement dhe LAN/offline-safe operations.
+**CURRENT (overlay §3a, ADR-030 PROPOSED / OWNER-DIRECTED, 02.09.2026 — pa rinumërim):** F8 = **PLANET POS/KDS/Finance Operations OPERATIONAL-READY** (jo LIVE). Etiketa historike "★ PLANET LIVE" mbetet vetëm si emër i fazës; live/source-of-record vjen VETËM pas pilotit të kontrolluar të janarit 2027 (stad i pa-numëruar i overlay-t) dhe F10 (Human Go/No-Go, datë TBD). Sistemi ekzistues = source-of-record/fallback gjatë pilotit.
+
+**Qëllimi:** *(HISTORICAL — "PLANET të dalë live")* **CURRENT:** PLANET të jetë operational-ready me POS/KDS, multi-shank, finance settlement dhe LAN/offline-safe operations për pilotin e kontrolluar.
 
 **Owner / kohëzgjatje / data më e vonë:** PLANET Ops + PLANET Finance + Tech Lead · 4–6 javë · nisje jo më vonë se 2026-10-25  
 **Feature buckets:** PLANET MVP, KDS/POS MVP, Finance Ops MVP, Requires-ATK, Requires-hardware.
@@ -634,7 +636,9 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 ### Faza 9 — Hardening + Cutover + Certifikim + Pilot
 
-**Qëllimi:** të ngrijë sistemi për go-live final: security, load, backup, opening balances, UAT, training, pilot dhe certifikime.
+**CURRENT (overlay §3a, ADR-030 PROPOSED — pa rinumërim):** F9 = hardening, rehearsal, UAT, training dhe **SEF-readiness deri më 2026-12-31** → statusi `OPERATIONAL_READY_FOR_CONTROLLED_PILOT` (≠ PRODUCTION_READY, ≠ SOURCE_OF_RECORD). **"Cutover" dhe "Pilot" në emrin historik të fazës NUK janë brenda F9:** piloti i kontrolluar = **janar 2027** (stad i pa-numëruar i overlay-t CURRENT, jo F10, jo F9); cutover-i i source-of-record = **F10** (datë TBD, vetëm pas evidencës së pilotit dhe Human Go/No-Go). KABI live/UAT/pilot = pas pranimit dhe stabilizimit të PLANET-it.
+
+**Qëllimi:** *(HISTORICAL — "go-live final")* **CURRENT:** të ngrijë sistemi për pilotin e kontrolluar: security, load, backup, opening balances rehearsal, UAT, training, SEF-readiness.
 
 **Owner / kohëzgjatje / data më e vonë:** PM + Accounting Lead + Ops Leads · 4 javë · nisje jo më vonë se 2026-12-01  
 **Feature buckets:** Hardening, Cutover, Security, UAT, Requires-accountant, Requires-ATK.
@@ -648,8 +652,8 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - UAT scripts për KABI/PLANET/accounting.
 - Training plan + attendance.
 - SEF final certification evidence.
-- Cutover dry-run.
-- Pilot me Go/No-Go.
+- Cutover dry-run *(rehearsal — cutover-i real = F10, TBD)*.
+- Readiness për pilotin e kontrolluar të janarit 2027 *(vetë piloti = stad i overlay-t pas F9; Go/No-Go = F10)*.
 
 **Jashtë scope**
 
@@ -658,9 +662,9 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 
 **Prerequisites**
 
-- KABI live path stabil ose pilot.
-- PLANET live path stabil ose pilot.
-- Accounting books reconciled.
+- ~~KABI live path stabil ose pilot.~~ *(HISTORICAL — KABI pas pranimit/stabilizimit të PLANET-it; N/A për rollout-in e parë)*
+- PLANET operational-ready path stabil (readiness për pilot).
+- Accounting books reconciled *(për scope-in PLANET të pilotit)*.
 - Hardware ready.
 
 **Acceptance criteria**
@@ -670,20 +674,23 @@ Këto PoC janë ura mes walking skeleton dhe moduleve reale. Secili PoC mbyll nj
 - UAT critical flows PASS.
 - Training completed.
 - **Paketa e certifikimit ATK e dorëzuar/aprovuar**: manual përdoruesi, deklarata e pajtueshmërisë, përshkrimi i zgjidhjes + lista e teknologjive; klienti ka njoftuar ATK-në për zgjidhjen/zhvilluesin/mirëmbajtësin (UA N35.10).
-- Go/No-Go board miraton cutover.
+- Go/No-Go board miraton **hyrjen në pilotin e kontrolluar** *(cutover-i i source-of-record = F10, Human Go/No-Go i veçantë pas evidencës së pilotit)*.
 
 **Risk / Plan-B**
 
-- Nëse critical UAT dështon, cutover shtyhet; PRO DATA mbetet source-of-record.
+- Nëse critical UAT dështon, piloti/cutover-i shtyhet; sistemi ekzistues (PRO DATA) mbetet source-of-record.
 - Nëse SEF/hardware dështon, live fiskal shtyhet.
 
 ---
 
 ### Faza 10 — Lansim
 
-**Qëllimi:** prodhimi i plotë, monitorim, rakordim ditor dhe handover.
+**CURRENT (overlay §3a, ADR-030 PROPOSED — pa rinumërim):** F10 = **Human Go/No-Go + source-of-record cutover**, data = **TBD — HUMAN GO/NO-GO AFTER JANUARY PILOT EVIDENCE**. **Piloti i janarit 2027 NUK është F10** — është stad i pa-numëruar i overlay-t midis F9 dhe F10; gjatë tij sistemi ekzistues mbetet source-of-record/fallback. KABI = pas pranimit/stabilizimit të PLANET-it.
 
-**Owner / kohëzgjatje / data më e vonë:** Group Owner + PM + Hypercare Team · 1 javë + hypercare · nisje 2027-01-01 vetëm me Go/No-Go PASS  
+**Qëllimi:** prodhimi i plotë (source-of-record), monitorim, rakordim ditor dhe handover — **vetëm pas Go/No-Go PASS mbi evidencën e pilotit**.
+
+**Owner / kohëzgjatje / data më e vonë:** Group Owner + PM + Hypercare Team · 1 javë + hypercare · ~~nisje 2027-01-01 vetëm me Go/No-Go PASS~~ *(HISTORICAL — SUPERSEDED nga ADR-030)* **CURRENT: nisje = TBD, vetëm me Human Go/No-Go PASS pas evidencës së pilotit të janarit 2027**
+
 **Feature buckets:** Launch, Hypercare, Operations.
 
 **Scope brenda**

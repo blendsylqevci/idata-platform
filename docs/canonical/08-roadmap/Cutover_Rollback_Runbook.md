@@ -108,9 +108,9 @@ Parallel run nuk është demo; është prova financiare/operative. Gjatë tij **
 - Libri i Shitjes dhe Libri i Blerjes.
 - Cash/card/bank/POS terminale.
 - Stoku: hyrje, dalje, kthime, transferime.
-- KABI: pranim qumështi, shlyerje, batch/LOT, van close.
-- PLANET: tavolina, porosi, KDS, Z-report, settlement.
-- SEF/fiscal outbox status.
+- ~~KABI: pranim qumështi, shlyerje, batch/LOT, van close.~~ **N/A për pilotin PLANET të janarit 2027 / future KABI phase** (KABI = pas pranimit/stabilizimit të PLANET-it).
+- PLANET: tavolina, porosi, KDS, Z-report, settlement — **pjesë e pilotit real** (reconciliation ditore, audit, fallback/rollback aktiv).
+- SEF/fiscal outbox status *(për scope-in PLANET të pilotit)*.
 
 ### PASS
 
@@ -211,8 +211,8 @@ Për 7 ditët e para minimum:
 - Shitjet ditore = POS/SEF/GL.
 - Cash/card/bank = finance settlement.
 - Stoku = lëvizje + shitje + kthime.
-- KABI van close = ngarkim - shitje - kthime - mbetje.
-- Farmer intake = pranim + lab + tank.
+- ~~KABI van close = ngarkim - shitje - kthime - mbetje.~~ **N/A / future KABI phase** (jo në pilotin PLANET të janarit 2027).
+- ~~Farmer intake = pranim + lab + tank.~~ **N/A / future KABI phase.**
 - PLANET Z-report = tavolina + pagesa + anulime.
 - Error logs dhe fiscal outbox = 0 bllokues P0.
 - Çdo diferencë ka owner dhe status.

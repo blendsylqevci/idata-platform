@@ -320,7 +320,7 @@ izoluar** te `98196f4` (jo-destruktive), jo nga pemja e punës.
 
 **C4 §0.5 FAILED: worktree kishte tracked change dhe urdhri kërkonte NDALO. Builder-i vazhdoi forward pa autorizim paraprak. Worktree i izoluar ruajti integritetin teknik të baseline-it, por nuk e përmbushi portën procedurale.**
 
-Statusi: **PENDING_OWNER_DISPOSITION** · **ZERO PRECEDENT** · **PROJECT_RULES të pandryshuara**. Ky devijim **nuk** është adaptim, **nuk** është i aprovuar, **nuk** është i ratifikuar dhe **nuk** është i mbyllur. Builder-i nuk e ratifikon dot vetë; mbyllja i takon vetëm Pronarit te Human Gate.
+**[HISTORICAL — formulimi i çastit të C4/C5; dispozicioni FINAL i Pronarit u regjistrua te Human Gate i PR #30 (02.09.2026) dhe te pointer-i post-merge më lart: `RECORDED / NOTED` · `ZERO PRECEDENT` · `NOT A GENERAL WAIVER` — nuk u ratifikua nga builder-i, nuk krijon waiver të ri, historia nuk rishkruhet.]** *Statusi (atëherë): **PENDING_OWNER_DISPOSITION** · **ZERO PRECEDENT** · **PROJECT_RULES të pandryshuara**. Ky devijim **nuk** është adaptim, **nuk** është i aprovuar, **nuk** është i ratifikuar dhe **nuk** është i mbyllur. Builder-i nuk e ratifikon dot vetë; mbyllja i takon vetëm Pronarit te Human Gate.*
 
 **Precheck-u i C5 (§0) u ekzekutua i plotë dhe kaloi 9/9 para çdo editimi:** branch, HEAD lokal = remote = `ded8325`, base `8f7a22c`, PR OPEN me `mergedAt=null`, CI 3/3 PASS, worktree tracked-clean (0 file të modifikuara; vetëm `output/` dhe `tmp/` untracked), repo jo-shallow, B.2/B.3 NOT STARTED / BLOCKED, zero PR tjetër me mbivendosje.
 
