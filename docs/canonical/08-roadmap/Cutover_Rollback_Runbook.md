@@ -1,6 +1,6 @@
 # iData+ — Cutover & Rollback Runbook
 
-**Status:** Draft PM/Architecture v0.4 për review · **Data:** 2026-07-07 · **Përditësuar:** 2026-09-02 (§1.6 kufiri i pilotit PLANET-first sipas ADR-030 PROPOSED; klasifikimi i rollout-it te §6) · *(v0.3, 2026-07-10: §3.1 legacy custody + ndarja custody↔ADR-023 në Go/No-Go/rollback/evidence)*
+**Status:** Draft PM/Architecture v0.4 për review · **Data:** 2026-07-07 · **Përditësuar:** 2026-09-03 (ADR-030 = ACCEPTED / EFFECTIVE me squash-merge të PR #31 `42993f0`; §1.6 kufiri i pilotit PLANET-first sipas ADR-030 ACCEPTED / EFFECTIVE; klasifikimi i rollout-it te §6) · *(v0.3, 2026-07-10: §3.1 legacy custody + ndarja custody↔ADR-023 në Go/No-Go/rollback/evidence)*
 
 **Qëllimi:** të përcaktojë si kalohet nga PRO DATA / proceset ekzistuese në iData+ pa humbur kontroll financiar, fiskal, stok apo operativ.
 
@@ -8,7 +8,7 @@
 
 ## 1. Parimet e cutover-it
 
-1. **[HISTORICAL / SUPERSEDED nga ADR-030 — vetëm data]** *Cutover i pastër më 2027-01-01 është objektivi planifikues.* **CURRENT (PLANET-FIRST, ADR-030 PROPOSED / OWNER-DIRECTED / PENDING_INDEPENDENT_REVIEW, 02.09.2026):** PLANET operational-ready deri më **2026-12-31** → **JANUARY 2027 CONTROLLED PILOT** (parallel-run me sistemin ekzistues si source-of-record/fallback) → source-of-record cutover = **TBD — HUMAN GO/NO-GO AFTER JANUARY PILOT EVIDENCE**; KABI pas pranimit/stabilizimit të PLANET-it. Cutover-i mbetet **i pastër** (parimet 2–6 të pandryshuara).
+1. **[HISTORICAL / SUPERSEDED nga ADR-030 — vetëm data]** *Cutover i pastër më 2027-01-01 është objektivi planifikues.* **CURRENT (PLANET-FIRST, ADR-030 ACCEPTED / EFFECTIVE (03.09.2026: Fable → Codex → HG-PR31-MERGE → squash-merge PR #31 `42993f0`), 02.09.2026):** PLANET operational-ready deri më **2026-12-31** → **JANUARY 2027 CONTROLLED PILOT** (parallel-run me sistemin ekzistues si source-of-record/fallback) → source-of-record cutover = **TBD — HUMAN GO/NO-GO AFTER JANUARY PILOT EVIDENCE**; KABI pas pranimit/stabilizimit të PLANET-it. Cutover-i mbetet **i pastër** (parimet 2–6 të pandryshuara).
 2. **Nuk migrohet historiku transaksional.** Migrohen master-data dhe saldo hapëse.
 3. **PRO DATA mbetet golden reference baseline** deri në go-live final dhe gjatë parallel run.
 4. **Nëse nuk rakordon, nuk kalon.** Nuk bëjmë “hajt se e rregullojmë pas live”.
