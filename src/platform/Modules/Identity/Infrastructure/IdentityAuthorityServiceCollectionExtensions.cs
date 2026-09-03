@@ -134,9 +134,13 @@ public static class IdentityAuthorityServiceCollectionExtensions
                     });
 
                     // JOSE (2)+(3): header-i i JASHTËM (`alg`/`enc`) kontrollohet PARA
-                    // `ValidateIdentityModelToken`, pra para çdo unwrap-i të CEK-ut me çelës
-                    // privat — IdentityModel 8.19.2 nuk e validon kurrë `alg`-un e jashtëm.
-                    // Missing/unknown/jashtë allowlist-it/malformed → refuzim (401), kurrë 500.
+                    // `ValidateIdentityModelToken` të stack-ut të VALIDIMIT (access tokens),
+                    // pra para çdo unwrap-i të CEK-ut me çelës privat — IdentityModel 8.19.2
+                    // nuk e validon kurrë `alg`-un e jashtëm. Parse pa `JsonWebToken` (vetëm
+                    // segmenti 0), catch-all: missing/unknown/jashtë allowlist-it/malformed
+                    // (çdo segment) → refuzim (401), kurrë 500. Stack-u i SERVER-it
+                    // (`/connect/token`: kode autorizimi/refresh) nuk lëshon token sot
+                    // (autorizimi fail-closed) — gate i njëjtë = follow-up i E2.
                     options.AddEventHandler<OpenIddictValidationEvents.ValidateTokenContext>(descriptor =>
                         descriptor.UseInlineHandler(context => jose.ValidateOuterHeader(context))
                             .SetOrder(OpenIddictValidationHandlers.Protection.ValidateIdentityModelToken.Descriptor.Order - 500));
@@ -147,6 +151,18 @@ public static class IdentityAuthorityServiceCollectionExtensions
         // `ImmutableArray<string>`; state-i dhe mutator-i nuk dalin nga ky assembly.
         var snapshot = state.Freeze();
         services.AddSingleton(snapshot);
+
+        // Klasifikim DETERMINIST: dështimet e regjistrimit hidhen si `IConfigureOptions`
+        // të `OpenIddictServerOptions` (regjistruar PAS AddServer) — configure-delegate-t
+        // ekzekutohen para `PostConfigure`-it të OpenIddict (ID0085/ID0086), pavarësisht
+        // se cili komponent i materializon opsionet i pari apo rendit të StartupValidator-it.
+        services.Configure<OpenIddictServerOptions>(_ =>
+        {
+            if (!snapshot.Failures.IsDefaultOrEmpty)
+            {
+                throw new IdentityCredentialsPolicyException(snapshot.Failures);
+            }
+        });
 
         // Kufiri i startup-it (pika e VETME fail-closed, pa përjashtim runtime):
         // (1) konfigurimi + dështimet e shtyra; (2) credentials REALE + koherenca JOSE.
@@ -411,8 +427,12 @@ public sealed class IdentityJosePolicy
             : securityToken is JsonWebToken { IsEncrypted: false } && AllowsSignature(algorithm);
 
     /// <summary>
-    /// Vendim PURE mbi header-in e jashtëm të një tokeni compact (pa kriptografi):
-    /// null = i pranuar; ndryshe klasa e refuzimit (asnjë përmbajtje header-i/tokeni).
+    /// Vendim PURE mbi header-in e JASHTËM të një tokeni compact — pa kriptografi
+    /// dhe pa ndërtuar `JsonWebToken` (parser-i i tij dekodon EDHE segmentet e
+    /// tjera dhe mund të hedhë `FormatException` për encrypted-key të keqformuar):
+    /// kërkohen saktësisht 5 segmente jo-bosh (JWE compact), dekodohet VETËM
+    /// segmenti 0 brenda catch-all, lexohen `alg`/`enc` si string. null = i pranuar;
+    /// ndryshe klasa e refuzimit (asnjë përmbajtje header-i/tokeni).
     /// </summary>
     public string? RejectOuterHeader(string? token)
     {
@@ -421,37 +441,54 @@ public sealed class IdentityJosePolicy
             return "jose-token-missing";
         }
 
-        JsonWebToken parsed;
-        try
-        {
-            parsed = new JsonWebToken(token);
-        }
-        catch (Exception exception) when (exception is ArgumentException or SecurityTokenException)
-        {
-            return "jose-token-malformed";
-        }
-
-        if (!parsed.IsEncrypted)
+        var segments = token.Split('.');
+        if (segments.Length == 3)
         {
             return "jose-token-not-encrypted";
         }
 
-        if (string.IsNullOrEmpty(parsed.Alg))
+        if (segments.Length != 5 || segments.Any(string.IsNullOrEmpty))
+        {
+            return "jose-token-malformed";
+        }
+
+        string? alg;
+        string? enc;
+        try
+        {
+            using var header = System.Text.Json.JsonDocument.Parse(Base64UrlEncoder.DecodeBytes(segments[0]));
+            if (header.RootElement.ValueKind != System.Text.Json.JsonValueKind.Object)
+            {
+                return "jose-token-malformed";
+            }
+
+            alg = header.RootElement.TryGetProperty("alg", out var algElement)
+                && algElement.ValueKind == System.Text.Json.JsonValueKind.String ? algElement.GetString() : null;
+            enc = header.RootElement.TryGetProperty("enc", out var encElement)
+                && encElement.ValueKind == System.Text.Json.JsonValueKind.String ? encElement.GetString() : null;
+        }
+        catch (Exception)
+        {
+            // Çdo dështim dekodimi/parsimi (base64url, JSON, madhësi) = malformed, kurrë 500.
+            return "jose-token-malformed";
+        }
+
+        if (string.IsNullOrEmpty(alg))
         {
             return "jose-key-management-algorithm-missing";
         }
 
-        if (!AllowsKeyManagement(parsed.Alg))
+        if (!AllowsKeyManagement(alg))
         {
             return "jose-key-management-algorithm-not-allowed";
         }
 
-        if (string.IsNullOrEmpty(parsed.Enc))
+        if (string.IsNullOrEmpty(enc))
         {
             return "jose-content-encryption-algorithm-missing";
         }
 
-        if (!AllowsContentEncryption(parsed.Enc))
+        if (!AllowsContentEncryption(enc))
         {
             return "jose-content-encryption-algorithm-not-allowed";
         }

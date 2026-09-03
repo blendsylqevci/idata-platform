@@ -64,12 +64,8 @@
   </ItemGroup>
   <!-- Njësoj si hook-u i paketës (BeforeTargets=Build, jo inner build), por përmes një
        msbuild-i të ngulitur që trashëgon environment-in eksplicit te Exec-i i tool-it. -->
-  <Target Name="GenerateOpenApiDocumentsWithExplicitDevelopmentIdentity"
-          BeforeTargets="Build"
-          Condition="'$(OpenApiGenerateDocuments)' == 'true' AND ('$(TargetFramework)' == '' OR '$(TargetFrameworks)' == '')">
-    <Exec Command="&quot;$(_IdataDotnetHost)&quot; msbuild &quot;$(MSBuildProjectFullPath)&quot; -t:GenerateOpenApiDocuments -p:Configuration=$(Configuration) -nologo -nr:false -v:minimal"
-          EnvironmentVariables="@(_IdataOpenApiDesignTimeEnvironment)"
-          LogStandardErrorAsError="true" />
+  <Target Name="GenerateOpenApiDocumentsWithExplicitDevelopmentIdentity" BeforeTargets="Build" Condition="'$(OpenApiGenerateDocuments)' == 'true' AND ('$(TargetFramework)' == '' OR '$(TargetFrameworks)' == '')">
+    <Exec Command="&quot;$(_IdataDotnetHost)&quot; msbuild &quot;$(MSBuildProjectFullPath)&quot; -t:GenerateOpenApiDocuments -p:Configuration=$(Configuration) -nologo -nr:false -v:minimal" EnvironmentVariables="@(_IdataOpenApiDesignTimeEnvironment)" LogStandardErrorAsError="true" />
   </Target>
   <Target Name="CopyPlatformOpenApiContract" AfterTargets="GenerateOpenApiDocuments" Condition="Exists('$(BaseIntermediateOutputPath)openapi/platform_platform-v1.json')">
     <!-- Emri kanonik i kontratës së commit-uar: contracts/openapi/platform-v1.json -->

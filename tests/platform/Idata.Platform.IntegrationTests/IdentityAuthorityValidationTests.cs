@@ -225,6 +225,22 @@ public sealed class IdentityAuthorityValidationTests
         Assert.Equal(HttpStatusCode.Unauthorized, await ProbeStatusAsync(client, SyntheticTokenCrafter.WithOuterHeader(accessToken, "not-json")));
         Assert.Equal(HttpStatusCode.Unauthorized, await ProbeStatusAsync(client, SyntheticTokenCrafter.WithOuterHeader(accessToken, "{\"alg\":\"RSA-OAEP\",\"enc\":\"X-UNKNOWN\"}")));
 
+        // Segmentet 2–5 të keqformuara (encrypted-key/iv/ciphertext/tag) → 401, KURRË 500
+        // (regresi i kapur nga review-i adversarial: parser-i i JsonWebToken hidhte FormatException).
+        foreach (var index in (int[])[1, 2, 3, 4])
+        {
+            foreach (var replacement in (string[])["A", "", "AA*A", "AAAA"])
+            {
+                var segments = accessToken.Split('.');
+                segments[index] = replacement;
+                var status = await ProbeStatusAsync(client, string.Join('.', segments));
+                Assert.True(HttpStatusCode.Unauthorized == status, $"segmenti[{index}]='{replacement}' → {status}");
+            }
+        }
+
+        Assert.Equal(HttpStatusCode.Unauthorized, await ProbeStatusAsync(client, accessToken + ".AAAA"));
+        Assert.Equal(HttpStatusCode.Unauthorized, await ProbeStatusAsync(client, accessToken[..accessToken.LastIndexOf('.')]));
+
         // Token-i real ekzistues vazhdon të pranohet.
         Assert.Equal(HttpStatusCode.OK, await ProbeStatusAsync(client, accessToken));
     }

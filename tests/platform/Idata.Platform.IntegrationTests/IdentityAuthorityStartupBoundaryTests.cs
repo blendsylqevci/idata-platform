@@ -23,12 +23,20 @@ public sealed class IdentityAuthorityStartupBoundaryTests
     private static readonly string[] EntryNames = ["Idata.Platform.Api.dll", "GetDocument.Insider.dll", "dotnet-getdocument.dll"];
 
     [Theory]
-    [InlineData("Idata.Platform.Api.dll")]
-    [InlineData("GetDocument.Insider.dll")]
-    [InlineData("dotnet-getdocument.dll")]
-    public async Task Production_me_signing1_te_pangarkueshem_del_jo_zero_para_bind_it_pavaresisht_emrit_te_entry_dll(string entryName)
+    [InlineData("Idata.Platform.Api.dll", "signing1-unloadable")]
+    [InlineData("GetDocument.Insider.dll", "signing1-unloadable")]
+    [InlineData("dotnet-getdocument.dll", "signing1-unloadable")]
+    [InlineData("Idata.Platform.Api.dll", "jose-incoherent")]
+    [InlineData("GetDocument.Insider.dll", "jose-incoherent")]
+    [InlineData("dotnet-getdocument.dll", "jose-incoherent")]
+    public async Task Production_del_jo_zero_para_bind_it_pavaresisht_emrit_te_entry_dll(string entryName, string scenario)
     {
+        // Dy skenarë me burim dështimi TË NDRYSHËM: (a) `signing[1]` i pangarkueshëm →
+        // snapshot-i i regjistrimit (validatori 1); (b) credentials valide + allowlist
+        // firme PS256 ndaj certifikatës RSA → koherenca JOSE mbi credentials REALE
+        // (validatori 2) — dështimi mund të vijë VETËM prej andej.
         Assert.Contains(entryName, EntryNames);
+        var joseIncoherent = scenario == "jose-incoherent";
         using var signing = SyntheticCertificates.Signing("CN=synthetic-process-signing");
         using var encryption = SyntheticCertificates.Encryption("CN=synthetic-process-encryption");
         var root = Directory.CreateTempSubdirectory("idata-b2a-startup-boundary-");
@@ -43,19 +51,24 @@ public sealed class IdentityAuthorityStartupBoundaryTests
                 ["ASPNETCORE_URLS"] = $"http://127.0.0.1:{port}",
                 ["Identity__Authority__Issuer"] = "https://localhost/",
                 ["Identity__Authority__Audiences__0"] = "synthetic-api",
-                ["Identity__Authority__Jose__SignatureAlgorithms__0"] = "RS256",
+                ["Identity__Authority__Jose__SignatureAlgorithms__0"] = joseIncoherent ? "PS256" : "RS256",
                 ["Identity__Authority__Jose__KeyManagementAlgorithms__0"] = "RSA-OAEP",
                 ["Identity__Authority__Jose__ContentEncryptionAlgorithms__0"] = "A256CBC-HS512",
                 ["Identity__Authority__ClockSkewSeconds"] = "0",
                 ["Identity__Authority__Credentials__Signing__0__Pfx"] = SyntheticCertificates.ToPfxBase64(signing, PfxPassphrase),
                 ["Identity__Authority__Credentials__Signing__0__PfxPassword"] = PfxPassphrase,
-                // signing[1] i PANGARKUESHËM — dështimi duhet të vijë nga policy-ja jonë.
-                ["Identity__Authority__Credentials__Signing__1__Pfx"] = "this-is-not-base64!!",
-                ["Identity__Authority__Credentials__Signing__1__PfxPassword"] = PfxPassphrase,
                 ["Identity__Authority__Credentials__Encryption__0__Pfx"] = SyntheticCertificates.ToPfxBase64(encryption, PfxPassphrase),
                 ["Identity__Authority__Credentials__Encryption__0__PfxPassword"] = PfxPassphrase,
             };
 
+            if (!joseIncoherent)
+            {
+                // signing[1] i PANGARKUESHËM — dështimi duhet të vijë nga snapshot-i i regjistrimit.
+                environment["Identity__Authority__Credentials__Signing__1__Pfx"] = "this-is-not-base64!!";
+                environment["Identity__Authority__Credentials__Signing__1__PfxPassword"] = PfxPassphrase;
+            }
+
+            var expectedClass = joseIncoherent ? "jose-signature-algorithm-mismatch:signing[0]:RS256" : "signing[1]";
             var (exitCode, exited, output, portOpened) = await RunAsync(appDir, entryName, environment, port, TimeSpan.FromSeconds(60));
 
             Assert.False(portOpened, $"Procesi '{entryName}' LIDHI portin {port} (u pranua lidhje TCP):{Environment.NewLine}{Redact(output)}");
@@ -63,7 +76,7 @@ public sealed class IdentityAuthorityStartupBoundaryTests
             Assert.True(exitCode != 0, $"Procesi '{entryName}' doli me exit 0:{Environment.NewLine}{Redact(output)}");
             Assert.True(!output.Contains("Now listening", StringComparison.Ordinal), $"Procesi '{entryName}' LIDHI port para dështimit:{Environment.NewLine}{Redact(output)}");
             Assert.True(output.Contains("identity-credentials-policy", StringComparison.Ordinal), $"Dështimi i '{entryName}' nuk vjen nga policy-ja:{Environment.NewLine}{Redact(output)}");
-            Assert.True(output.Contains("signing[1]", StringComparison.Ordinal), $"Dështimi i '{entryName}' nuk identifikon signing[1]:{Environment.NewLine}{Redact(output)}");
+            Assert.True(output.Contains(expectedClass, StringComparison.Ordinal), $"Dështimi i '{entryName}' nuk mbart klasën e pritur '{expectedClass}':{Environment.NewLine}{Redact(output)}");
             Assert.DoesNotContain(PfxPassphrase, output, StringComparison.Ordinal);
             Assert.DoesNotContain("this-is-not-base64", output, StringComparison.Ordinal);
         }

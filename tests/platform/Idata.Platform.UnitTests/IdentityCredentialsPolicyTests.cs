@@ -311,6 +311,52 @@ public sealed class IdentityCredentialsPolicyTests
         Assert.Equal("jose-token-malformed", jose.RejectOuterHeader(Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode("not-json") + ".AAAA.AAAA.AAAA.AAAA"));
         Assert.Equal("jose-token-missing", jose.RejectOuterHeader(null));
         Assert.Equal("jose-token-missing", jose.RejectOuterHeader(" "));
+
+        // Segmentet 2–5 të keqformuara (encrypted-key me gjatësi %4==1, segment bosh,
+        // 4 ose 6 segmente) → malformed ose vendim mbi header — KURRË exception (500).
+        var header = Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode("{\"alg\":\"RSA-OAEP\",\"enc\":\"A256CBC-HS512\"}");
+        Assert.Null(jose.RejectOuterHeader(header + ".A.AAAA.AAAA.AAAA"));           // encrypted-key i keqformuar → vendimi mbi header (dekriptimi e refuzon më pas)
+        Assert.Equal("jose-token-malformed", jose.RejectOuterHeader(header + "..AAAA.AAAA.AAAA"));
+        Assert.Equal("jose-token-malformed", jose.RejectOuterHeader(header + ".AAAA.AAAA.AAAA"));
+        Assert.Equal("jose-token-malformed", jose.RejectOuterHeader(header + ".AAAA.AAAA.AAAA.AAAA.AAAA"));
+        Assert.Equal("jose-token-malformed", jose.RejectOuterHeader(header + ".AAAA.AAAA.AAAA."));
+        Assert.Equal("jose-token-malformed", jose.RejectOuterHeader("A.AAAA.AAAA.AAAA.AAAA"));      // header base64url me gjatësi %4==1
+        Assert.Equal("jose-token-malformed", jose.RejectOuterHeader(Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode("[1]") + ".AAAA.AAAA.AAAA.AAAA"));
+        Assert.Equal("jose-key-management-algorithm-missing", jose.RejectOuterHeader(Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode("{\"alg\":1,\"enc\":\"A256CBC-HS512\"}") + ".AAAA.AAAA.AAAA.AAAA"));
+    }
+
+    /// <summary>
+    /// Delegate-i i validator-it REAL: për `enc` IdentityModel e thërret me token-in e
+    /// JASHTËM (`IsEncrypted`), për firmën me token-in e BRENDSHËM — çdo kryqëzim
+    /// kategorish → false (mbulim i pavarur i degës `enc`, defense-in-depth pas gate-it).
+    /// </summary>
+    [Fact]
+    public void Delegate_i_algoritmeve_dallon_enc_te_jashtem_nga_firma_e_brendshme_dhe_refuzon_kryqezimet()
+    {
+        var jose = Jose();
+        using var rsa = RSA.Create(2048);
+        var handler = new Microsoft.IdentityModel.JsonWebTokens.JsonWebTokenHandler { SetDefaultTimesOnTokenCreation = false };
+        var key = new RsaSecurityKey(rsa);
+        var parameters = new TokenValidationParameters();
+        var innerJws = handler.CreateToken(new SecurityTokenDescriptor
+        {
+            Claims = new Dictionary<string, object> { ["sub"] = "synthetic" },
+            SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.RsaSha256),
+        });
+        var outerJwe = handler.EncryptToken(innerJws,
+            new EncryptingCredentials(key, SecurityAlgorithms.RsaOAEP, SecurityAlgorithms.Aes256CbcHmacSha512));
+        var inner = new Microsoft.IdentityModel.JsonWebTokens.JsonWebToken(innerJws);
+        var outer = new Microsoft.IdentityModel.JsonWebTokens.JsonWebToken(outerJwe);
+        Assert.False(inner.IsEncrypted);
+        Assert.True(outer.IsEncrypted);
+
+        Assert.True(jose.ValidateAlgorithm("A256CBC-HS512", key, outer, parameters));   // enc e lejuar, token i jashtëm
+        Assert.False(jose.ValidateAlgorithm("A128CBC-HS256", key, outer, parameters));  // enc jashtë allowlist-it
+        Assert.False(jose.ValidateAlgorithm("RS256", key, outer, parameters));          // firmë ndaj token-it të jashtëm = kryqëzim
+        Assert.True(jose.ValidateAlgorithm("RS256", key, inner, parameters));           // firmë e lejuar, token i brendshëm
+        Assert.False(jose.ValidateAlgorithm("PS256", key, inner, parameters));          // firmë jashtë allowlist-it
+        Assert.False(jose.ValidateAlgorithm("A256CBC-HS512", key, inner, parameters));  // enc ndaj token-it të brendshëm = kryqëzim
+        Assert.False(jose.ValidateAlgorithm("RSA-OAEP", key, outer, parameters));       // key-management nuk kalon kurrë nga delegate-i
     }
 
     [Fact]
