@@ -120,15 +120,18 @@ public sealed class ConventionEnforcementTests
     }
 
     /// <summary>
-    /// B.1 = STORE foundation: paketat e protokollit OIDC (Server/Validation/
-    /// Client/AspNetCore metapackage), Identity UI dhe çdo provider komercial
-    /// (Duende/IdentityServer/Auth0/Okta) = TË NDALUARA në props + çdo csproj.
+    /// ZËVENDËSIM I KONTROLLUAR (B.2a, ADR-028 §7 — jo fshirje, coverage FORCOHET):
+    /// B.1 ndalonte çdo paketë protokolli. B.2a lejon VETËM `OpenIddict.Server.AspNetCore`,
+    /// `OpenIddict.Validation.AspNetCore` dhe `OpenIddict.Validation.ServerIntegration`
+    /// dhe VETËM në csproj-in e owner-it të protokollit (Identity.Infrastructure).
+    /// Mbeten TË NDALUARA kudo (props + çdo csproj): metapackage `OpenIddict.AspNetCore`
+    /// (tërheq Client), `OpenIddict.Client*`, Identity UI, Duende/IdentityServer/Auth0/Okta.
     /// </summary>
     [Fact]
     public void Zero_paketa_identity_protokolli_ose_provider_te_paaprovuar()
     {
         string[] forbidden =
-            ["OpenIddict.AspNetCore", "OpenIddict.Server", "OpenIddict.Validation", "OpenIddict.Client",
+            ["OpenIddict.AspNetCore\"", "OpenIddict.Client",
              "Microsoft.AspNetCore.Identity.UI", "IdentityServer", "Duende", "Auth0", "Okta"];
 
         var props = File.ReadAllText(Path.Combine(PlatformRoot, "Directory.Packages.props"));
@@ -140,6 +143,31 @@ public sealed class ConventionEnforcementTests
                 Assert.DoesNotContain(name, File.ReadAllText(project), StringComparison.OrdinalIgnoreCase);
             }
         }
+
+        // Rrënjët e protokollit: prezente si PackageReference VETËM te owner-i i
+        // protokollit; askund tjetër (as Api, as Persistence, as teste).
+        var repoRoot = PlatformProjectCatalog.RepoRoot();
+        var ownerProject = Path.Combine(repoRoot,
+            IdentitySecurityDependencyInventory.ProtocolOwnerCanonicalPath.Replace('/', Path.DirectorySeparatorChar));
+        foreach (var root in IdentitySecurityDependencyInventory.ProtocolRoots.Keys)
+        {
+            var needle = $"Include=\"{root}\"";
+            Assert.Contains(needle, File.ReadAllText(ownerProject), StringComparison.Ordinal);
+            Assert.Contains(needle, props, StringComparison.Ordinal);
+            foreach (var project in AllProjectFiles().Where(project =>
+                !string.Equals(Path.GetFullPath(project), Path.GetFullPath(ownerProject), StringComparison.Ordinal)))
+            {
+                Assert.DoesNotContain(needle, File.ReadAllText(project), StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        // Familjet e protokollit nuk hyjnë kurrë në csproj-in e Persistence-it
+        // (as Server, as Validation, as ServerIntegration).
+        var persistenceProject = Path.Combine(repoRoot,
+            "src/platform/Idata.Platform.Persistence/Idata.Platform.Persistence.csproj".Replace('/', Path.DirectorySeparatorChar));
+        var persistence = File.ReadAllText(persistenceProject);
+        Assert.DoesNotContain("OpenIddict.Server", persistence, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("OpenIddict.Validation", persistence, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -203,6 +231,32 @@ public sealed class ConventionEnforcementTests
                         .Single(candidate => candidate.Name == root);
                     Assert.Equal("Direct", dependency.Value.GetProperty("type").GetString());
                 }
+            }
+
+            var allDependencies = document.RootElement.GetProperty("dependencies").EnumerateObject()
+                .SelectMany(framework => framework.Value.EnumerateObject()).ToArray();
+            if (string.Equals(entry.CanonicalPath, IdentitySecurityDependencyInventory.ProtocolOwnerCanonicalPath, StringComparison.Ordinal))
+            {
+                // B.2a: owner-i i protokollit mban TË TRIA rrënjët e protokollit si Direct.
+                foreach (var root in IdentitySecurityDependencyInventory.ProtocolRoots.Keys)
+                {
+                    var dependency = Assert.Single(allDependencies, candidate => candidate.Name == root);
+                    Assert.Equal("Direct", dependency.Value.GetProperty("type").GetString());
+                }
+            }
+            else
+            {
+                // Askush tjetër nuk i mban rrënjët e protokollit si Direct.
+                Assert.DoesNotContain(allDependencies, candidate =>
+                    IdentitySecurityDependencyInventory.ProtocolRoots.ContainsKey(candidate.Name)
+                    && candidate.Value.GetProperty("type").GetString() == "Direct");
+            }
+
+            if (string.Equals(entry.CanonicalPath, OwnerCanonicalPath, StringComparison.Ordinal))
+            {
+                // Persistence: ZERO paketë protokolli, as transitive.
+                Assert.DoesNotContain(allDependencies, candidate =>
+                    IdentitySecurityDependencyInventory.IsProtocolPackage(candidate.Name));
             }
 
             audited++;
@@ -391,12 +445,39 @@ public sealed class ConventionEnforcementTests
     {
         // (1) E NDALUAR edhe BRENDA closure-it (edge nga rrënja) — gjetja
         //     është e familjes së ndaluar, jo thjesht "e pa-inventarizuar".
-        using (var document = SyntheticWithRoot("OpenIddict.Server", "7.6.0", "Transitive"))
+        //     B.2a: familja e ndaluar e provuar = OpenIddict.Client (Server/
+        //     Validation dolën nga e ndaluara si rrënjë protokolli te owner-i).
+        using (var document = SyntheticWithRoot("OpenIddict.Client", "7.6.0", "Transitive"))
         {
             var findings = IdentitySecurityDependencyInventory.Audit(OwnerCanonicalPath, document);
             Assert.Contains(findings, finding =>
                 finding.Contains("familje provider-i e ndaluar", StringComparison.Ordinal)
-                && finding.Contains("OpenIddict.Server", StringComparison.Ordinal));
+                && finding.Contains("OpenIddict.Client", StringComparison.Ordinal));
+        }
+
+        // (1b) B.2a — metapackage `OpenIddict.AspNetCore` (tërheq Client) mbetet
+        //      i ndaluar, ndërsa `OpenIddict.Server.AspNetCore` NUK kapet gabimisht
+        //      nga ajo familje (kufi me pikë): te Persistence kapet si PROTOKOLL,
+        //      te owner-i i protokollit kalon (i inventarizuar).
+        using (var document = SyntheticStandalone("OpenIddict.AspNetCore", "7.6.0", "Direct"))
+        {
+            Assert.Contains(IdentitySecurityDependencyInventory.Audit(NonOwnerCanonicalPath, document),
+                finding => finding.Contains("familje provider-i e ndaluar", StringComparison.Ordinal));
+        }
+
+        using (var document = SyntheticWithRoot("OpenIddict.Server", "7.6.0", "Transitive"))
+        {
+            var findings = IdentitySecurityDependencyInventory.Audit(OwnerCanonicalPath, document);
+            Assert.Contains(findings, finding =>
+                finding.Contains("paketë PROTOKOLLI në owner-in e store-it", StringComparison.Ordinal));
+            Assert.DoesNotContain(findings, finding =>
+                finding.Contains("familje provider-i e ndaluar", StringComparison.Ordinal));
+        }
+
+        using (var document = SyntheticWithRoot("OpenIddict.Server", "7.6.0", "Transitive"))
+        {
+            Assert.Empty(IdentitySecurityDependencyInventory.Audit(
+                IdentitySecurityDependencyInventory.ProtocolOwnerCanonicalPath, document));
         }
 
         // (2) ReviewRequired STANDALONE jashtë closure → gjetje (kurrë skip i heshtur).
@@ -444,8 +525,10 @@ public sealed class ConventionEnforcementTests
         var shared = manifest.Where(name => !IdentitySecurityDependencyInventory.IsIdentitySpecific(name))
             .Order(StringComparer.Ordinal).ToArray();
 
-        // Rrënjët + Crypto/IdentityModel/Bcl janë specifike.
+        // Rrënjët (store + protokoll) + Crypto/IdentityModel/Bcl janë specifike.
         Assert.All(IdentitySecurityDependencyInventory.ApprovedRoots.Keys,
+            root => Assert.Contains(root, specific));
+        Assert.All(IdentitySecurityDependencyInventory.ProtocolRoots.Keys,
             root => Assert.Contains(root, specific));
         Assert.Contains("Microsoft.AspNetCore.Cryptography.Internal", specific);
         Assert.Contains("Microsoft.AspNetCore.Cryptography.KeyDerivation", specific);

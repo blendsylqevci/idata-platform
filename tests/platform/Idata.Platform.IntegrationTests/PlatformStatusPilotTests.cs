@@ -29,7 +29,7 @@ public sealed class PlatformStatusPilotTests
     }
 
     private static WebApplicationFactory<Program> Host(DatabaseState state, string? environment = null) =>
-        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        new PlatformTestHostFactory().WithWebHostBuilder(builder =>
         {
             if (environment is not null)
             {

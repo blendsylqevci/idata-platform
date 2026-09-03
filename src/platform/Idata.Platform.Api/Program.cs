@@ -38,16 +38,21 @@ builder.Services.AddMediator(options =>
 // AccessControl mbeten të paprekura deri në Increment C.
 builder.Services.AddControllers();
 
-// ADR-028 Increment B.1 — Identity STORE foundation VETËM: Identity roleless
+// ADR-028 Increment B.1 — Identity STORE foundation: Identity roleless
 // (UserOnlyStore) + OpenIddict Core/EF me Guid mbi PlatformDbContext.
-// ZERO endpoint/protokoll OIDC, ZERO token issuance/validation, ZERO
-// credentials — B.2; ZERO projection drejt platform.app_user — B.3.
 builder.Services.AddIdentityStoreFoundation();
 
-// AccessControl (F1.1) — provider-neutral: host-i NUK regjistron asnjë
-// authentication scheme (B.1 shton vetëm STORE foundation — asnjë scheme,
-// asnjë cookie; authority/flows = B.2) → principal bosh → deny-by-default;
-// override auth lejohet VETËM në integration-test assembly.
+// ADR-028 Increment B.2a — authority OpenIddict CO-LOCATED (owner i wiring-ut =
+// Identity.Infrastructure; host-i nuk referon asnjë tip OpenIddict): Server
+// (issuer/endpoint-e/PKCE, credentials FAIL-CLOSED nga konfigurimi i jashtëm)
+// + Validation lokale (UseLocalServer) + skema default = handler-i i validimit.
+// Zero login/consent UI (E2 OPEN), zero projection (B.3), zero flow biznesi.
+builder.Services.AddIdentityAuthority(builder.Configuration, builder.Environment);
+
+// AccessControl (F1.1) — provider-neutral: autoriteti i autorizimit tenant mbetet
+// DB-backed deny-by-default; principal-i vjen VETËM nga handler-i i validimit
+// OpenIddict (B.2a) — pa token valid principal-i mbetet bosh; override auth
+// lejohet VETËM në integration-test assembly.
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IAccessControlStore, EfAccessControlStore>();
 builder.Services.AddScoped<IMembershipRoleUnitOfWork, EfMembershipRoleUnitOfWork>();
@@ -66,6 +71,10 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi("/openapi/{documentName}.json");
     app.MapScalarApiReference(options => options.AddDocument("platform-v1"));
 }
+
+// B.2a: middleware-i REAL i autentikimit/autorizimit — PARA çdo endpoint-i.
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapAccessControl();

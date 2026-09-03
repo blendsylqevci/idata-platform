@@ -416,12 +416,28 @@
         "resolved": "8.19.2",
         "contentHash": "HJbo/lnSfNHUfphPRT910poQc4T2/9+8svFLvzuaYHGAOJ2Tu+oEDqpX0BVP3BJ4OuUM1kylEKyaiX2fCAK3Cw=="
       },
+      "Microsoft.IdentityModel.JsonWebTokens": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "ui3fuBT4fs8kdKfBthI4NzLYIBIneEVS8UrL1JVBzAn80UiKmngBBi0BEByE7n/9c+EElcfFlCMFFTqpkBSLNA==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Tokens": "8.19.2"
+        }
+      },
       "Microsoft.IdentityModel.Logging": {
         "type": "Transitive",
         "resolved": "8.19.2",
         "contentHash": "r5YLDIxGOnkVJHrqXv/iD1FM1CgGrQOdriXuvuWvTPmKbnGANhEysq9XKmN6IHjf2a+9bAGEpnoRBsAQlvJU5w==",
         "dependencies": {
           "Microsoft.IdentityModel.Abstractions": "8.19.2"
+        }
+      },
+      "Microsoft.IdentityModel.Protocols": {
+        "type": "Transitive",
+        "resolved": "8.19.2",
+        "contentHash": "sGxSsSrZXNmca6D+jHH2rVRyo2nNRd/g4H9CFbPmLLq0xgoH1U0orLWE5minfijw7+zq49tBs7txenbfAErRoQ==",
+        "dependencies": {
+          "Microsoft.IdentityModel.Tokens": "8.19.2"
         }
       },
       "Microsoft.IdentityModel.Tokens": {
@@ -507,6 +523,27 @@
         "type": "Transitive",
         "resolved": "7.6.0",
         "contentHash": "DrWB0dLfsg3mZhWABAlqSZKXin4Q4Pn8V4S7/1JxP5T/7Ncl0y45rM9L2EWv/zdydaiTOFKi4jRDBZAgBxUjaQ=="
+      },
+      "OpenIddict.Server": {
+        "type": "Transitive",
+        "resolved": "7.6.0",
+        "contentHash": "0c7wlRYcP2Smgjp3PWyyojZ972H26otp6irW/WAFEbg4ZylcUvtlw0lkrCr/K8s5lAnYZwrpyzguwrJhXGKPVg==",
+        "dependencies": {
+          "Microsoft.Extensions.Logging": "10.0.10",
+          "Microsoft.IdentityModel.JsonWebTokens": "8.19.2",
+          "OpenIddict.Abstractions": "7.6.0"
+        }
+      },
+      "OpenIddict.Validation": {
+        "type": "Transitive",
+        "resolved": "7.6.0",
+        "contentHash": "ovzLQJ31uWZpgLdRVuD9Gmu8wxvhvbXW32MFTglFblhfqRwj/hMcEGOo8hdl+ir3QpDr9NUDAORA+v3S7xc6IA==",
+        "dependencies": {
+          "Microsoft.Extensions.Logging": "10.0.10",
+          "Microsoft.IdentityModel.JsonWebTokens": "8.19.2",
+          "Microsoft.IdentityModel.Protocols": "8.19.2",
+          "OpenIddict.Abstractions": "7.6.0"
+        }
       },
       "System.Diagnostics.EventLog": {
         "type": "Transitive",
@@ -634,7 +671,10 @@
         "dependencies": {
           "Idata.Platform.Persistence": "[1.0.0, )",
           "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "[10.0.10, )",
-          "OpenIddict.EntityFrameworkCore": "[7.6.0, )"
+          "OpenIddict.EntityFrameworkCore": "[7.6.0, )",
+          "OpenIddict.Server.AspNetCore": "[7.6.0, )",
+          "OpenIddict.Validation.AspNetCore": "[7.6.0, )",
+          "OpenIddict.Validation.ServerIntegration": "[7.6.0, )"
         }
       },
       "idata.platform.modules.platformstatus.application": {
@@ -764,6 +804,34 @@
           "Microsoft.EntityFrameworkCore.Relational": "10.0.10",
           "OpenIddict.Core": "7.6.0",
           "OpenIddict.EntityFrameworkCore.Models": "7.6.0"
+        }
+      },
+      "OpenIddict.Server.AspNetCore": {
+        "type": "CentralTransitive",
+        "requested": "[7.6.0, )",
+        "resolved": "7.6.0",
+        "contentHash": "m2Hk2R4gaTlEYBvNHz2fvIr38p1agiR2nW2gi5WMgSByFHxeEK5uhxqVGdSB2kEHRtp9kza/zBWBgIM4TdcVqw==",
+        "dependencies": {
+          "OpenIddict.Server": "7.6.0"
+        }
+      },
+      "OpenIddict.Validation.AspNetCore": {
+        "type": "CentralTransitive",
+        "requested": "[7.6.0, )",
+        "resolved": "7.6.0",
+        "contentHash": "oby5/Ymdxd+g1TGtyTGrcK5J3/NSI80aw2CJgULwwIxraiCjiIfexrBjCxkPchWqPNFe6aAdGJ/Jz6amHNfrzg==",
+        "dependencies": {
+          "OpenIddict.Validation": "7.6.0"
+        }
+      },
+      "OpenIddict.Validation.ServerIntegration": {
+        "type": "CentralTransitive",
+        "requested": "[7.6.0, )",
+        "resolved": "7.6.0",
+        "contentHash": "0bHhKsMV45UMPM5Phh51+g/tMUJNRzOWe6p/5opKeMQV8XoO3y3J9o/ZbfZ0j4qTTbQ7pqzEKSZaS4cGs0B3nQ==",
+        "dependencies": {
+          "OpenIddict.Server": "7.6.0",
+          "OpenIddict.Validation": "7.6.0"
         }
       },
       "Scalar.AspNetCore": {

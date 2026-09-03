@@ -24,7 +24,7 @@ public sealed class PlatformStatusEndpointTests
     }
 
     private static WebApplicationFactory<Program> HostWithProbe(DatabaseState state) =>
-        new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
+        new PlatformTestHostFactory().WithWebHostBuilder(builder =>
             builder.ConfigureServices(services =>
                 services.Replace(ServiceDescriptor.Singleton<IDatabaseReadinessProbe>(
                     new FakeProbe(state)))));

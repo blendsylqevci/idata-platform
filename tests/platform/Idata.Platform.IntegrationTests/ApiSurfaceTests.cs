@@ -16,8 +16,15 @@ namespace Idata.Platform.IntegrationTests;
 [Collection(nameof(MigratorEnvCollection))]
 public sealed class ApiSurfaceTests
 {
+    /// <summary>
+    /// Kontrata (a): route inventory i MVC/minimal API (`EndpointDataSource`).
+    /// Endpoint-et e protokollit OpenIddict (`connect/authorize`, `connect/token`,
+    /// discovery/JWKS) janë MIDDLEWARE dhe NUK shfaqen si `RouteEndpoint` — prania
+    /// dhe inventari i tyre provohen te `IdentityAuthorityEndpointInventoryTests`
+    /// (kontrata b). Ky test NUK pretendon mungesën e tyre.
+    /// </summary>
     [Fact]
-    public async Task Route_table_permban_vetem_endpointet_e_lejuara()
+    public async Task Route_table_MVC_minimal_permban_vetem_endpointet_e_lejuara_endpointet_OpenIddict_jane_middleware()
     {
         await using var factory = new AccessControlApiFactory();
         _ = factory.CreateClient(); // ndez host-in

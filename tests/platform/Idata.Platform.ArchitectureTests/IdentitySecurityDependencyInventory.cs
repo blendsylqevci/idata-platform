@@ -21,7 +21,7 @@ namespace Idata.Platform.ArchitectureTests;
 /// </summary>
 internal static class IdentitySecurityDependencyInventory
 {
-    /// <summary>Rrënjët e aprovuara të store-it (ADR-028 B.1) — të vetmet Direct te owner-at.</summary>
+    /// <summary>Rrënjët e aprovuara të store-it (ADR-028 B.1) — Direct te TË DY owner-at e store-it.</summary>
     internal static readonly IReadOnlyDictionary<string, string> ApprovedRoots =
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
@@ -30,8 +30,39 @@ internal static class IdentitySecurityDependencyInventory
         };
 
     /// <summary>
-    /// Manifest-i i plotë i closure-it (31 paketa — i derivuar nga lockfiles
-    /// reale; barazia me closure-in real imponohet nga meta-testi §4).
+    /// B.2a (ADR-028 §5.1/§5.2) — rrënjët e aprovuara të PROTOKOLLIT OpenIddict:
+    /// Server + Validation ASP.NET Core + Validation.ServerIntegration
+    /// (`UseLocalServer` për API + authority co-located). Direct VETËM te
+    /// <see cref="ProtocolOwnerCanonicalPath"/> — Persistence mbetet pa
+    /// protocol/token/credential behavior (Convention §2/§3). Zero Client,
+    /// zero metapackage `OpenIddict.AspNetCore`, zero DataProtection.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, string> ProtocolRoots =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["OpenIddict.Server.AspNetCore"] = "7.6.0",
+            ["OpenIddict.Validation.AspNetCore"] = "7.6.0",
+            ["OpenIddict.Validation.ServerIntegration"] = "7.6.0",
+        };
+
+    /// <summary>Owner-i i VETËM i protokollit (path kanonik — Convention §2).</summary>
+    internal const string ProtocolOwnerCanonicalPath =
+        "src/platform/Modules/Identity/Infrastructure/Idata.Platform.Modules.Identity.Infrastructure.csproj";
+
+    /// <summary>
+    /// Paketat e protokollit (rrënjë + transitive) që NUK guxojnë të shfaqen
+    /// në closure-in e Persistence-it (zero protocol behavior) — të derivuara
+    /// nga familjet, jo listë e dyfishtë.
+    /// </summary>
+    internal static bool IsProtocolPackage(string packageName)
+        => MatchesFamily(packageName, "OpenIddict.Server")
+           || MatchesFamily(packageName, "OpenIddict.Validation");
+
+    /// <summary>
+    /// Manifest-i i plotë i closure-it (38 paketa — i derivuar nga lockfiles
+    /// reale; B.2a shtoi 7: OpenIddict.Server/.AspNetCore, OpenIddict.Validation/
+    /// .AspNetCore/.ServerIntegration, Microsoft.IdentityModel.JsonWebTokens/
+    /// .Protocols; barazia me closure-in real imponohet nga meta-testi §4).
     /// </summary>
     internal static readonly IReadOnlyDictionary<string, string> ClosureManifest =
         new Dictionary<string, string>(StringComparer.Ordinal)
@@ -61,12 +92,19 @@ internal static class IdentitySecurityDependencyInventory
             ["Microsoft.Extensions.Options.ConfigurationExtensions"] = "10.0.10",
             ["Microsoft.Extensions.Primitives"] = "10.0.10",
             ["Microsoft.IdentityModel.Abstractions"] = "8.19.2",
+            ["Microsoft.IdentityModel.JsonWebTokens"] = "8.19.2",
             ["Microsoft.IdentityModel.Logging"] = "8.19.2",
+            ["Microsoft.IdentityModel.Protocols"] = "8.19.2",
             ["Microsoft.IdentityModel.Tokens"] = "8.19.2",
             ["OpenIddict.Abstractions"] = "7.6.0",
             ["OpenIddict.Core"] = "7.6.0",
             ["OpenIddict.EntityFrameworkCore"] = "7.6.0",
             ["OpenIddict.EntityFrameworkCore.Models"] = "7.6.0",
+            ["OpenIddict.Server"] = "7.6.0",
+            ["OpenIddict.Server.AspNetCore"] = "7.6.0",
+            ["OpenIddict.Validation"] = "7.6.0",
+            ["OpenIddict.Validation.AspNetCore"] = "7.6.0",
+            ["OpenIddict.Validation.ServerIntegration"] = "7.6.0",
         };
 
     /// <summary>
@@ -85,7 +123,11 @@ internal static class IdentitySecurityDependencyInventory
     /// </summary>
     internal static readonly string[] ForbiddenFamilies =
         ["IdentityServer", "IdentityServer4", "Duende", "Auth0", "Okta",
-         "OpenIddict.Server", "OpenIddict.Validation", "OpenIddict.Client", "OpenIddict.AspNetCore",
+         // B.2a (zëvendësim i KONTROLLUAR, ADR-028 §7): OpenIddict.Server dhe
+         // OpenIddict.Validation dolën nga e ndaluara → rrënjë protokolli
+         // VETËM te owner-i (ProtocolRoots). Client, metapackage AspNetCore
+         // (tërheq Client) dhe Identity.UI mbeten TË NDALUARA kudo.
+         "OpenIddict.Client", "OpenIddict.AspNetCore",
          "Microsoft.AspNetCore.Identity.UI"];
 
     /// <summary>
@@ -165,6 +207,10 @@ internal static class IdentitySecurityDependencyInventory
             {
                 ["Microsoft.AspNetCore.Identity.EntityFrameworkCore"] = "10.0.10",
                 ["OpenIddict.EntityFrameworkCore"] = "7.6.0",
+                // B.2a — protocol roots (owner i vetëm).
+                ["OpenIddict.Server.AspNetCore"] = "7.6.0",
+                ["OpenIddict.Validation.AspNetCore"] = "7.6.0",
+                ["OpenIddict.Validation.ServerIntegration"] = "7.6.0",
             },
             ["src/platform/Modules/PlatformStatus/Application/Idata.Platform.Modules.PlatformStatus.Application.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
             {
@@ -695,7 +741,8 @@ internal static class IdentitySecurityDependencyInventory
         {
             var graph = framework.Value.EnumerateObject()
                 .ToDictionary(dependency => dependency.Name, dependency => dependency.Value, StringComparer.Ordinal);
-            var stack = new Stack<string>(ApprovedRoots.Keys.Where(graph.ContainsKey));
+            var stack = new Stack<string>(
+                ApprovedRoots.Keys.Concat(ProtocolRoots.Keys).Where(graph.ContainsKey));
             var visited = new HashSet<string>(StringComparer.Ordinal);
             while (stack.Count > 0)
             {
@@ -734,6 +781,7 @@ internal static class IdentitySecurityDependencyInventory
     {
         var isStoreOwner = PlatformProjectCatalog.StoreOwnerCanonicalPaths
             .Contains(canonicalProjectPath, StringComparer.Ordinal);
+        var isProtocolOwner = string.Equals(canonicalProjectPath, ProtocolOwnerCanonicalPath, StringComparison.Ordinal);
         var (closure, findings) = ComputeClosure(canonicalProjectPath, lockfile);
 
         foreach (var framework in lockfile.RootElement.GetProperty("dependencies").EnumerateObject())
@@ -780,9 +828,16 @@ internal static class IdentitySecurityDependencyInventory
                     }
                     else if (dependencyType == "Direct"
                         && IsIdentitySpecific(dependency.Name)
-                        && (!isStoreOwner || !ApprovedRoots.ContainsKey(dependency.Name)))
+                        && !((isStoreOwner && ApprovedRoots.ContainsKey(dependency.Name))
+                             || (isProtocolOwner && ProtocolRoots.ContainsKey(dependency.Name))))
                     {
                         findings.Add($"{canonicalProjectPath}: Direct i PAAUTORIZUAR për {dependency.Name}");
+                    }
+
+                    // B.2a: protokolli NUK hyn kurrë në Persistence (as transitiv).
+                    if (isStoreOwner && !isProtocolOwner && IsProtocolPackage(dependency.Name))
+                    {
+                        findings.Add($"{canonicalProjectPath}: paketë PROTOKOLLI në owner-in e store-it '{dependency.Name}'");
                     }
 
                     continue;

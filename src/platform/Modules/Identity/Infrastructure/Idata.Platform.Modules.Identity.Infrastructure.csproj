@@ -1,15 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Identity Infrastructure (ADR-028, Increment B.1): kompozimi i store
-       foundation-it — AddIdentityCore ROLELESS + OpenIddict Core/EF mbi
-       PlatformDbContext (Persistence = migration owner + storage mapping).
-       ZERO endpoint, ZERO protokoll OIDC, ZERO credentials — B.2/B.3.
-       Domain/Application të modulit vijnë kur ekzistojnë koncepte reale
-       (flows/projection) — B.1 nuk krijon projekte bosh (ADR-029 §14). -->
+  <!-- Identity Infrastructure (ADR-028): B.1 = kompozimi i store foundation-it
+       (AddIdentityCore ROLELESS + OpenIddict Core/EF mbi PlatformDbContext;
+       Persistence = migration owner + storage mapping). B.2a = OWNER I VETEM i
+       protokollit OpenIddict: Server + Validation ASP.NET Core co-located
+       (UseLocalServer), credentials policy fail-closed, option validation.
+       ZERO Client, ZERO external IdP, ZERO projection (B.3). Domain/Application
+       te modulit vijne kur ekzistojne koncepte reale (ADR-029 §14). -->
   <ItemGroup>
     <ProjectReference Include="..\..\..\Idata.Platform.Persistence\Idata.Platform.Persistence.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
     <PackageReference Include="OpenIddict.EntityFrameworkCore" />
+    <PackageReference Include="OpenIddict.Server.AspNetCore" />
+    <PackageReference Include="OpenIddict.Validation.AspNetCore" />
+    <PackageReference Include="OpenIddict.Validation.ServerIntegration" />
   </ItemGroup>
 </Project>

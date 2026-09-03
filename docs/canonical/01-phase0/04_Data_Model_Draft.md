@@ -11,6 +11,8 @@
 
 **Rishikime v2.2.5 (F1.1 concurrency correction pass, 26.07.2026):** pa ndryshim skeme. Sqarohet se ndryshimi i `business_membership.role_id` kalon nga një **authority-lock protocol** (lock eksplicit i business/memberships/users/role/permission/role_permission sipas rendit kanonik, rivlerësim përfundimtar nën lock, pastaj UPDATE i guarduar me `status='active'` + `version`), sepse nën READ COMMITTED një `UPDATE ... WHERE EXISTS(...)` i vetëm mund të vlerësojë faktet e autorizimit mbi një snapshot të vjetruar. Unique index-i `(business_id, user_id)` garanton se `user_id` i një membership-i nuk mund të ripikëzohet te një user që ka tashmë membership në atë business.
 
+**Shënim rendi delivery (02.09.2026, ADR-030 PROPOSED — PLANET-first; pa ndryshim skeme/modeli):** etiketat historike të fazave në këtë dokument (p.sh. "KABI MVP (Faza 1)" te §N, "Payroll Faza 1", "Faza 2") janë **identitet feature-bucket/faze sipas SSOT §3 dhe NUK janë rendi CURRENT i delivery-t**. Rendi CURRENT = execution-order overlay PLANET-first (Roadmap §3a: F1 → F2 → F3 → F7 → F8 → F9 → pilot janar 2027 → F10 → F4 → F5 → F6). Zero entitet/kolonë/constraint nuk ndryshon nga ky shënim.
+
 **Rishikime v2.2.6 (F1.1 correction pass i kufizuar, 26.07.2026):** pa ndryshim skeme. Terminologjia "linearization point atomik" zëvendësohet me "faza transaksionale authority-lock/validation/mutation"; DB contention (deadlock/lock timeout/serialization/statement timeout) → 503, JO 409 CAS; humbësi i garës same-Idempotency-Key rikuperohet me rilexim deterministik të receipt-it.
 
 ## Konventa globale

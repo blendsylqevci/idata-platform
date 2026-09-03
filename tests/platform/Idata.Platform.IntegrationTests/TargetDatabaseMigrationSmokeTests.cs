@@ -39,7 +39,7 @@ public sealed class TargetDatabaseMigrationSmokeTests
         Environment.SetEnvironmentVariable("PLATFORM_PGDATABASE", db);
         try
         {
-            await using var factory = new WebApplicationFactory<Program>();
+            await using var factory = new PlatformTestHostFactory();
             using var client = factory.CreateClient();
             var response = await client.GetAsync(new Uri("/api/platform/status", UriKind.Relative), TestContext.Current.CancellationToken);
             var raw = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
