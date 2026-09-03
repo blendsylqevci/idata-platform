@@ -1,10 +1,12 @@
+using System.Collections.Immutable;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 using OpenIddict.Abstractions;
 using OpenIddict.Server;
 using OpenIddict.Validation;
@@ -13,25 +15,27 @@ using OpenIddict.Validation.AspNetCore;
 namespace Idata.Platform.Modules.Identity.Infrastructure;
 
 /// <summary>
-/// Wiring i VETËM i authority-t OpenIddict co-located (ADR-028, Increment B.2a)
-/// — konsumohet nga composition root-i (API host) pa asnjë referencë direkte
-/// OpenIddict aty:
+/// Wiring i VETËM i authority-t OpenIddict co-located (ADR-028, Increment B.2a,
+/// correction C1) — konsumohet nga composition root-i (API host) pa asnjë
+/// referencë direkte OpenIddict aty:
 ///  - OpenIddict **Server** (issuer/endpoint-e/credentials/PKCE) me
-///    Authorization Code + PKCE të DEKLARUAR si flow-i target; endpoint-i i
-///    autorizimit është FAIL-CLOSED (refuzon çdo kërkesë) derisa E2 të
-///    implementohet — zero implicit, zero password, zero client-credentials,
+///    Authorization Code + PKCE të DEKLARUAR si flow-i i vetëm production;
+///    endpoint-i i autorizimit është FAIL-CLOSED (refuzon çdo kërkesë) derisa E2
+///    të implementohet — zero implicit, zero password, zero client-credentials,
 ///    zero refresh në production;
 ///  - OpenIddict **Validation** lokale (`UseLocalServer`) + handler-i ASP.NET
-///    Core: issuer, audiences, algorithm allowlist, lifetime/nbf/exp, clock
-///    skew i kufizuar, token-entry validation (revocation) — unknown → 401;
-///  - policy FAIL-CLOSED e credentials (mbi credentials REALE) në STARTUP
-///    (<see cref="IdentityCredentialsStartupGuard"/>): `StartAsync` dështon për
-///    konfigurim/credentials të munguar, të pavlefshëm ose të ndaluar për
-///    environment-in. Përjashtimi i VETËM, eksplicit dhe i testuar:
-///    <see cref="IsDesignTimeDocumentGenerationHost"/> (gjenerimi build-time i
-///    OpenAPI starton host-in brenda procesit të tool-it pa konfigurim
-///    deployment-i dhe pa shërbyer trafik);
-///  - skema default e autentikimit = handler-i i validimit OpenIddict.
+///    Core: issuer, audiences, **tri politika JOSE të ndara** (firma e JWS-së së
+///    brendshme · key-management i JWE-së së jashtme · content-encryption i JWE-së
+///    së jashtme — header-i i jashtëm kontrollohet PARA çdo unwrap/dekriptimi),
+///    lifetime/nbf/exp, clock skew i kufizuar, token-entry validation (revocation)
+///    — unknown → 401;
+///  - kufiri i startup-it FAIL-CLOSED **pa asnjë përjashtim runtime**: validim
+///    `ValidateOnStart` (ekzekutohet nga host-i PARA çdo hosted service, pra para
+///    çdo bind-i të server-it) mbi (1) konfigurimin + dështimet e regjistrimit
+///    (snapshot i pandryshueshëm) dhe (2) credentials REALE të
+///    `OpenIddictServerOptions` + koherencën issuance↔validation të algoritmeve;
+///  - skema default e autentikimit (authenticate + challenge) = handler-i i
+///    validimit OpenIddict — `[Authorize]` i zhveshur mjafton.
 /// Product-neutral: zero client/audience/scope/rol specifik produkti.
 /// </summary>
 public static class IdentityAuthorityServiceCollectionExtensions
@@ -50,27 +54,22 @@ public static class IdentityAuthorityServiceCollectionExtensions
         var section = configuration.GetSection(IdentityAuthorityOptions.SectionName);
         var authority = section.Get<IdentityAuthorityOptions>() ?? new IdentityAuthorityOptions();
         var isDevelopment = environment.IsDevelopment();
-
-        // Validimi i konfigurimit: IValidateOptions për çdo konsumator + guard-i i
-        // startup-it si pika e VETME fail-closed (jo ValidateOnStart, që të mos
-        // ekzistojnë dy pika me përjashtime të ndryshme).
-        services.AddOptions<IdentityAuthorityOptions>().Bind(section);
-        services.AddSingleton<IValidateOptions<IdentityAuthorityOptions>>(
-            new IdentityAuthorityOptionsValidator(isDevelopment));
-        services.TryAddSingleton(TimeProvider.System);
+        var jose = IdentityJosePolicy.From(authority.Jose);
 
         // Dështimet e regjistrimit (konfigurim i pavlefshëm, certifikatë e
-        // pangarkueshme, credentials development jashtë Development) shtyhen
-        // FAIL-CLOSED te startup guard — kurrë të heshtura, kurrë me material.
-        var startup = new IdentityAuthorityStartupState();
-        services.AddSingleton(startup);
-
+        // pangarkueshme, credentials development jashtë Development, set i munguar)
+        // mblidhen në një state TË BRENDSHËM dhe ngrihen në snapshot të
+        // PANDRYSHUESHËM para se të dalin nga kjo metodë — kurrë të heshtura,
+        // kurrë me material, kurrë të ndryshueshme nga konsumatorët.
+        var state = new IdentityAuthorityStartupState();
         var configurationErrors = ValidateConfiguration(authority, isDevelopment);
         var configured = configurationErrors.Count == 0;
         foreach (var error in configurationErrors)
         {
-            startup.Fail($"configuration:{error}");
+            state.Fail($"configuration:{error}");
         }
+
+        services.TryAddSingleton(TimeProvider.System);
 
         services.AddOpenIddict()
             .AddServer(options =>
@@ -100,7 +99,7 @@ public static class IdentityAuthorityServiceCollectionExtensions
                 if (configured)
                 {
                     options.SetIssuer(new Uri(authority.Issuer!, UriKind.Absolute));
-                    RegisterCredentials(options, authority.Credentials, isDevelopment, startup);
+                    RegisterCredentials(options, authority.Credentials, isDevelopment, state);
                 }
             })
             .AddValidation(options =>
@@ -117,92 +116,72 @@ public static class IdentityAuthorityServiceCollectionExtensions
                     {
                         // Skew i KUFIZUAR (nga konfigurimi i validuar) — zbatohet nga
                         // OpenIddict `ValidateExpirationDate` (exp autoritativ nga token
-                        // entry-i i store-it kur token-entry validation është aktiv) DHE
-                        // nga validimi i lifetime-it të IdentityModel më poshtë.
+                        // entry-i i store-it) DHE nga validimi i lifetime-it të IdentityModel.
                         validation.TokenValidationParameters.ClockSkew = clockSkew;
 
-                        // OpenIddict e çaktivizon default lifetime-in e IdentityModel (e
-                        // validon exp vetë, nga entry-i). Aktivizimi = kontroll SHTESË i
-                        // validator-it real mbi `exp`/`nbf` të vetë JWT-së (jo validator
-                        // paralel): një JWT me exp të skaduar ose nbf të ardhshëm jashtë
-                        // skew-it refuzohet edhe nëse entry-i i store-it është valid.
+                        // D2 (KEEP): OpenIddict e çaktivizon default lifetime-in e IdentityModel
+                        // (validon `exp` vetë, nga entry-i; nuk validon `nbf`). Aktivizimi =
+                        // kontroll SHTESË i validator-it real mbi `exp`/`nbf` të vetë JWT-së.
                         validation.TokenValidationParameters.ValidateLifetime = true;
+
+                        // JOSE (1) firma e JWS-së së brendshme + (3) `enc` i JWE-së së jashtme:
+                        // delegate-i i validator-it REAL (IdentityModel e thërret për `enc` me
+                        // token-in e jashtëm të enkriptuar dhe për `alg`-un e firmës me
+                        // token-in e brendshëm). `ValidAlgorithms` (listë e vetme e përbashkët)
+                        // NUK përdoret — nuk mbulon key-management-in e jashtëm.
+                        validation.TokenValidationParameters.ValidAlgorithms = null;
+                        validation.TokenValidationParameters.AlgorithmValidator = jose.ValidateAlgorithm;
                     });
+
+                    // JOSE (2)+(3): header-i i JASHTËM (`alg`/`enc`) kontrollohet PARA
+                    // `ValidateIdentityModelToken`, pra para çdo unwrap-i të CEK-ut me çelës
+                    // privat — IdentityModel 8.19.2 nuk e validon kurrë `alg`-un e jashtëm.
+                    // Missing/unknown/jashtë allowlist-it/malformed → refuzim (401), kurrë 500.
+                    options.AddEventHandler<OpenIddictValidationEvents.ValidateTokenContext>(descriptor =>
+                        descriptor.UseInlineHandler(context => jose.ValidateOuterHeader(context))
+                            .SetOrder(OpenIddictValidationHandlers.Protection.ValidateIdentityModelToken.Descriptor.Order - 500));
                 }
             });
 
-        if (configured)
-        {
-            // Allowlist-i i algoritmeve: firma = VETËM ato të konfiguruara; JWE-ja
-            // (alg/enc) = VETËM ato që prodhojnë credentials REALE të enkriptimit
-            // (të importuara nga server-i përmes UseLocalServer) — të derivuara,
-            // jo hardcode; çdo algoritëm tjetër → refuzim. PostConfigure pas
-            // integrimit të server-it, që lista të pasqyrojë credentials reale.
-            var signatureAlgorithms = authority.AllowedAlgorithms.ToArray();
-            services.AddOptions<OpenIddictValidationOptions>().PostConfigure(validation =>
-                validation.TokenValidationParameters.ValidAlgorithms = signatureAlgorithms
-                    .Concat(validation.EncryptionCredentials.SelectMany(credential => new[] { credential.Alg, credential.Enc }))
-                    .Where(algorithm => !string.IsNullOrEmpty(algorithm))
-                    .Distinct(StringComparer.Ordinal)
-                    .ToArray());
-        }
+        // Snapshot-i ngrihet PAS çdo vlerësimi regjistrimi — konsumatorët marrin VETËM
+        // `ImmutableArray<string>`; state-i dhe mutator-i nuk dalin nga ky assembly.
+        var snapshot = state.Freeze();
+        services.AddSingleton(snapshot);
 
-        services.AddAuthentication(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme);
+        // Kufiri i startup-it (pika e VETME fail-closed, pa përjashtim runtime):
+        // (1) konfigurimi + dështimet e shtyra; (2) credentials REALE + koherenca JOSE.
+        // `ValidateOnStart` ekzekutohet nga host-i para çdo hosted service (para bind-it).
+        services.AddOptions<IdentityAuthorityOptions>().Bind(section).ValidateOnStart();
+        services.AddSingleton<IValidateOptions<IdentityAuthorityOptions>>(
+            new IdentityAuthorityOptionsValidator(isDevelopment, snapshot));
+        services.AddOptions<OpenIddictServerOptions>().ValidateOnStart();
+        services.AddSingleton<IValidateOptions<OpenIddictServerOptions>>(provider =>
+            new IdentityAuthorityCredentialsValidator(isDevelopment, jose, provider.GetRequiredService<TimeProvider>()));
+
+        // Skema DEFAULT eksplicite (authenticate + challenge) = validimi OpenIddict.
+        services.AddAuthentication(options =>
+        {
+            options.DefaultScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+            options.DefaultAuthenticateScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+            options.DefaultChallengeScheme = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+        });
         services.AddAuthorization();
 
-        // Guard-i i startup-it: dështimet e shtyra + policy mbi credentials REALE
-        // (edhe nëse dikush shton credentials jashtë këtij wiring-u).
-        services.AddHostedService<IdentityCredentialsStartupGuard>();
-
         return services;
-    }
-
-    /// <summary>
-    /// Emrat e entry assembly-t të tool-it zyrtar të gjenerimit build-time të
-    /// OpenAPI (`Microsoft.Extensions.ApiDescription.Server` → `dotnet-getdocument`
-    /// → `GetDocument.Insider`). Tool-i e ekzekuton `Program` deri te
-    /// `ApplicationStarted` brenda procesit të VET, pa konfigurim deployment-i.
-    /// </summary>
-    public static IReadOnlyList<string> DesignTimeDocumentGenerationEntryAssemblies { get; } =
-        ["GetDocument.Insider", "dotnet-getdocument"];
-
-    /// <summary>
-    /// TRUE vetëm kur procesi aktual është tool-i i gjenerimit build-time të
-    /// OpenAPI. Sinjali është identiteti i PROCESIT (assembly-i i entry point-it
-    /// nga command line-i i procesit: `dotnet <entry>.dll …`) — jo environment,
-    /// konfigurim apo argument i aplikacionit (të kontrollueshëm nga operatori/
-    /// deployment-i). Lexohet pa reflection (ENG-006: manifesti i aksesit dinamik
-    /// në production mbetet BOSH). Host-i real (`Idata.Platform.Api`) dhe host-et
-    /// e testeve japin FALSE → guard-i fail-closed vlerësohet gjithmonë.
-    /// </summary>
-    public static bool IsDesignTimeDocumentGenerationHost
-        => IsDesignTimeDocumentGenerationEntry(Environment.GetCommandLineArgs());
-
-    /// <summary>Forma PURE e predikatit (e testueshme): argumenti i parë = entry-i i procesit.</summary>
-    public static bool IsDesignTimeDocumentGenerationEntry(IReadOnlyList<string> processCommandLine)
-    {
-        ArgumentNullException.ThrowIfNull(processCommandLine);
-        if (processCommandLine.Count == 0 || string.IsNullOrWhiteSpace(processCommandLine[0]))
-        {
-            return false;
-        }
-
-        var entry = Path.GetFileNameWithoutExtension(processCommandLine[0]);
-        return DesignTimeDocumentGenerationEntryAssemblies.Contains(entry, StringComparer.Ordinal);
     }
 
     private static void RegisterCredentials(
         OpenIddictServerBuilder options,
         IdentityAuthorityCredentialsOptions credentials,
         bool isDevelopment,
-        IdentityAuthorityStartupState startup)
+        IdentityAuthorityStartupState state)
     {
         var development = credentials.Development;
         var hasDevelopmentConfiguration = !string.IsNullOrWhiteSpace(development.Signing)
             || !string.IsNullOrWhiteSpace(development.Encryption);
         if (hasDevelopmentConfiguration && !isDevelopment)
         {
-            startup.Fail("development-credentials-outside-development");
+            state.Fail("development-credentials-outside-development");
         }
 
         var now = TimeProvider.System.GetUtcNow();
@@ -210,7 +189,7 @@ public static class IdentityAuthorityServiceCollectionExtensions
         var encryption = 0;
         for (var index = 0; index < credentials.Signing.Length; index++)
         {
-            if (TryLoadValidPersistent(credentials.Signing[index], "signing", index, now, startup, out var certificate))
+            if (TryLoadValidPersistent(credentials.Signing[index], "signing", index, now, state, out var certificate))
             {
                 try
                 {
@@ -219,14 +198,14 @@ public static class IdentityAuthorityServiceCollectionExtensions
                 }
                 catch (Exception exception)
                 {
-                    startup.Fail(Describe(exception, "signing", index));
+                    state.Fail(Describe(exception, "signing", index));
                 }
             }
         }
 
         for (var index = 0; index < credentials.Encryption.Length; index++)
         {
-            if (TryLoadValidPersistent(credentials.Encryption[index], "encryption", index, now, startup, out var certificate))
+            if (TryLoadValidPersistent(credentials.Encryption[index], "encryption", index, now, state, out var certificate))
             {
                 try
                 {
@@ -235,7 +214,7 @@ public static class IdentityAuthorityServiceCollectionExtensions
                 }
                 catch (Exception exception)
                 {
-                    startup.Fail(Describe(exception, "encryption", index));
+                    state.Fail(Describe(exception, "encryption", index));
                 }
             }
         }
@@ -256,7 +235,7 @@ public static class IdentityAuthorityServiceCollectionExtensions
                 case null or "":
                     break;
                 default:
-                    startup.Fail("development-signing-unknown-choice");
+                    state.Fail("development-signing-unknown-choice");
                     break;
             }
 
@@ -273,19 +252,19 @@ public static class IdentityAuthorityServiceCollectionExtensions
                 case null or "":
                     break;
                 default:
-                    startup.Fail("development-encryption-unknown-choice");
+                    state.Fail("development-encryption-unknown-choice");
                     break;
             }
         }
 
         if (signing == 0)
         {
-            startup.Fail("signing-missing");
+            state.Fail("signing-missing");
         }
 
         if (encryption == 0)
         {
-            startup.Fail("encryption-missing");
+            state.Fail("encryption-missing");
         }
     }
 
@@ -300,7 +279,7 @@ public static class IdentityAuthorityServiceCollectionExtensions
         string kind,
         int index,
         DateTimeOffset now,
-        IdentityAuthorityStartupState startup,
+        IdentityAuthorityStartupState state,
         out System.Security.Cryptography.X509Certificates.X509Certificate2 certificate)
     {
         certificate = null!;
@@ -310,14 +289,13 @@ public static class IdentityAuthorityServiceCollectionExtensions
         }
         catch (IdentityCredentialsPolicyException exception)
         {
-            startup.Fail(exception.Message);
+            state.Fail(exception.Message);
             return false;
         }
 
-        if (!IdentityCredentialsPolicy.IsValidPersistent(
-                new Microsoft.IdentityModel.Tokens.X509SecurityKey(certificate), now, out var reason))
+        if (!IdentityCredentialsPolicy.IsValidPersistent(new X509SecurityKey(certificate), now, out var reason))
         {
-            startup.Fail($"{reason}:{kind}[{index}]");
+            state.Fail($"{reason}:{kind}[{index}]");
             return false;
         }
 
@@ -350,9 +328,19 @@ public static class IdentityAuthorityServiceCollectionExtensions
             errors.Add("audiences-missing");
         }
 
-        if (options.AllowedAlgorithms.Length == 0 || options.AllowedAlgorithms.Any(string.IsNullOrWhiteSpace))
+        if (options.Jose.SignatureAlgorithms.Length == 0 || options.Jose.SignatureAlgorithms.Any(string.IsNullOrWhiteSpace))
         {
-            errors.Add("allowed-algorithms-missing");
+            errors.Add("jose-signature-algorithms-missing");
+        }
+
+        if (options.Jose.KeyManagementAlgorithms.Length == 0 || options.Jose.KeyManagementAlgorithms.Any(string.IsNullOrWhiteSpace))
+        {
+            errors.Add("jose-key-management-algorithms-missing");
+        }
+
+        if (options.Jose.ContentEncryptionAlgorithms.Length == 0 || options.Jose.ContentEncryptionAlgorithms.Any(string.IsNullOrWhiteSpace))
+        {
+            errors.Add("jose-content-encryption-algorithms-missing");
         }
 
         if (options.ClockSkewSeconds is null)
@@ -368,73 +356,238 @@ public static class IdentityAuthorityServiceCollectionExtensions
     }
 }
 
-/// <summary>Dështimet e regjistrimit të shtyra te startup (klasa + identifikues jo-sekret vetëm).</summary>
-public sealed class IdentityAuthorityStartupState
+/// <summary>
+/// Tri politika JOSE të NDARA, ekzakte (ordinal), PURE: (1) firma e JWS-së së
+/// brendshme; (2) key-management i JWE-së së jashtme; (3) content-encryption i
+/// JWE-së së jashtme. Kriptografia mbetet te framework-u — këtu vetëm vendime
+/// allowlist-i mbi emra algoritmesh (asnjë material tokeni/çelësi nuk mbahet).
+/// </summary>
+public sealed class IdentityJosePolicy
+{
+    private IdentityJosePolicy(
+        ImmutableArray<string> signatureAlgorithms,
+        ImmutableArray<string> keyManagementAlgorithms,
+        ImmutableArray<string> contentEncryptionAlgorithms)
+    {
+        SignatureAlgorithms = signatureAlgorithms;
+        KeyManagementAlgorithms = keyManagementAlgorithms;
+        ContentEncryptionAlgorithms = contentEncryptionAlgorithms;
+    }
+
+    public ImmutableArray<string> SignatureAlgorithms { get; }
+
+    public ImmutableArray<string> KeyManagementAlgorithms { get; }
+
+    public ImmutableArray<string> ContentEncryptionAlgorithms { get; }
+
+    public static IdentityJosePolicy From(IdentityAuthorityJoseOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return new IdentityJosePolicy(
+            [.. options.SignatureAlgorithms.Where(algorithm => !string.IsNullOrWhiteSpace(algorithm)).Distinct(StringComparer.Ordinal)],
+            [.. options.KeyManagementAlgorithms.Where(algorithm => !string.IsNullOrWhiteSpace(algorithm)).Distinct(StringComparer.Ordinal)],
+            [.. options.ContentEncryptionAlgorithms.Where(algorithm => !string.IsNullOrWhiteSpace(algorithm)).Distinct(StringComparer.Ordinal)]);
+    }
+
+    public bool AllowsSignature(string? algorithm)
+        => algorithm is not null && SignatureAlgorithms.Contains(algorithm, StringComparer.Ordinal);
+
+    public bool AllowsKeyManagement(string? algorithm)
+        => algorithm is not null && KeyManagementAlgorithms.Contains(algorithm, StringComparer.Ordinal);
+
+    public bool AllowsContentEncryption(string? algorithm)
+        => algorithm is not null && ContentEncryptionAlgorithms.Contains(algorithm, StringComparer.Ordinal);
+
+    /// <summary>
+    /// Delegate-i i validator-it REAL (IdentityModel `AlgorithmValidator`): për
+    /// `enc` thirret me token-in e JASHTËM të enkriptuar (politika 3, dhe emri
+    /// duhet të përputhet ekzakt me `enc` të header-it); për firmën thirret me
+    /// token-in e BRENDSHËM (politika 1). Çdo rast tjetër → refuzim.
+    /// </summary>
+    public bool ValidateAlgorithm(
+        string algorithm, SecurityKey securityKey, SecurityToken securityToken, TokenValidationParameters validationParameters)
+        => securityToken is JsonWebToken { IsEncrypted: true } encrypted
+            ? string.Equals(algorithm, encrypted.Enc, StringComparison.Ordinal) && AllowsContentEncryption(algorithm)
+            : securityToken is JsonWebToken { IsEncrypted: false } && AllowsSignature(algorithm);
+
+    /// <summary>
+    /// Vendim PURE mbi header-in e jashtëm të një tokeni compact (pa kriptografi):
+    /// null = i pranuar; ndryshe klasa e refuzimit (asnjë përmbajtje header-i/tokeni).
+    /// </summary>
+    public string? RejectOuterHeader(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return "jose-token-missing";
+        }
+
+        JsonWebToken parsed;
+        try
+        {
+            parsed = new JsonWebToken(token);
+        }
+        catch (Exception exception) when (exception is ArgumentException or SecurityTokenException)
+        {
+            return "jose-token-malformed";
+        }
+
+        if (!parsed.IsEncrypted)
+        {
+            return "jose-token-not-encrypted";
+        }
+
+        if (string.IsNullOrEmpty(parsed.Alg))
+        {
+            return "jose-key-management-algorithm-missing";
+        }
+
+        if (!AllowsKeyManagement(parsed.Alg))
+        {
+            return "jose-key-management-algorithm-not-allowed";
+        }
+
+        if (string.IsNullOrEmpty(parsed.Enc))
+        {
+            return "jose-content-encryption-algorithm-missing";
+        }
+
+        if (!AllowsContentEncryption(parsed.Enc))
+        {
+            return "jose-content-encryption-algorithm-not-allowed";
+        }
+
+        return null;
+    }
+
+    /// <summary>Handler-i OpenIddict (para `ValidateIdentityModelToken`): refuzim gjenerik, kurrë 500.</summary>
+    internal ValueTask ValidateOuterHeader(OpenIddictValidationEvents.ValidateTokenContext context)
+    {
+        if (context.IsRejected)
+        {
+            return default;
+        }
+
+        if (RejectOuterHeader(context.Token) is not null)
+        {
+            context.Reject(
+                error: OpenIddictConstants.Errors.InvalidToken,
+                description: "The specified token is invalid.");
+        }
+
+        return default;
+    }
+
+    /// <summary>
+    /// Koherencë issuance↔validation (B2): algoritmet REALE që lëshuesi do të
+    /// përdorë (firma e çdo signing credential; `alg`/`enc` i çdo encryption
+    /// credential) duhet të pranohen nga policy-ja e validator-it — ndryshe host-i
+    /// do të niste por do të refuzonte token-at e vet → startup FAIL.
+    /// </summary>
+    public IReadOnlyList<string> EvaluateCoherence(
+        IReadOnlyList<string?> signingAlgorithms, IReadOnlyList<(string? Alg, string? Enc)> encryptionAlgorithms)
+    {
+        ArgumentNullException.ThrowIfNull(signingAlgorithms);
+        ArgumentNullException.ThrowIfNull(encryptionAlgorithms);
+        var violations = new List<string>();
+        for (var index = 0; index < signingAlgorithms.Count; index++)
+        {
+            if (!AllowsSignature(signingAlgorithms[index]))
+            {
+                violations.Add($"jose-signature-algorithm-mismatch:signing[{index}]:{signingAlgorithms[index] ?? "none"}");
+            }
+        }
+
+        for (var index = 0; index < encryptionAlgorithms.Count; index++)
+        {
+            if (!AllowsKeyManagement(encryptionAlgorithms[index].Alg))
+            {
+                violations.Add($"jose-key-management-algorithm-mismatch:encryption[{index}]:{encryptionAlgorithms[index].Alg ?? "none"}");
+            }
+
+            if (!AllowsContentEncryption(encryptionAlgorithms[index].Enc))
+            {
+                violations.Add($"jose-content-encryption-algorithm-mismatch:encryption[{index}]:{encryptionAlgorithms[index].Enc ?? "none"}");
+            }
+        }
+
+        return violations;
+    }
+}
+
+/// <summary>State i BRENDSHËM i dështimeve të regjistrimit — jeton vetëm brenda `AddIdentityAuthority`.</summary>
+internal sealed class IdentityAuthorityStartupState
 {
     private readonly List<string> _failures = [];
 
-    public IReadOnlyList<string> Failures => _failures;
-
-    public void Fail(string failure)
+    internal void Fail(string failure)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(failure);
         _failures.Add(failure);
     }
+
+    /// <summary>Snapshot i PANDRYSHUESHËM (kopje) — e vetmja formë që del nga regjistrimi.</summary>
+    internal IdentityAuthorityStartupSnapshot Freeze() => new([.. _failures]);
 }
 
-internal sealed class IdentityAuthorityOptionsValidator(bool isDevelopment) : IValidateOptions<IdentityAuthorityOptions>
+/// <summary>Snapshot i ngrirë i dështimeve të regjistrimit: vetëm `ImmutableArray&lt;string&gt;`, pa mutator.</summary>
+internal sealed class IdentityAuthorityStartupSnapshot
+{
+    internal IdentityAuthorityStartupSnapshot(ImmutableArray<string> failures)
+    {
+        Failures = failures;
+    }
+
+    public ImmutableArray<string> Failures { get; }
+}
+
+/// <summary>
+/// Kufiri (1): konfigurimi + dështimet e shtyra të regjistrimit. Ekzekutohet nga
+/// `ValidateOnStart` para çdo hosted service; dështimi = `IdentityCredentialsPolicyException`
+/// me klasa pa material.
+/// </summary>
+internal sealed class IdentityAuthorityOptionsValidator(bool isDevelopment, IdentityAuthorityStartupSnapshot snapshot)
+    : IValidateOptions<IdentityAuthorityOptions>
 {
     public ValidateOptionsResult Validate(string? name, IdentityAuthorityOptions options)
     {
+        if (!snapshot.Failures.IsDefaultOrEmpty)
+        {
+            throw new IdentityCredentialsPolicyException(snapshot.Failures);
+        }
+
         var errors = IdentityAuthorityServiceCollectionExtensions.ValidateConfiguration(options, isDevelopment);
-        return errors.Count == 0
-            ? ValidateOptionsResult.Success
-            : ValidateOptionsResult.Fail(errors.Select(error => $"identity-authority-configuration: {error}"));
+        if (errors.Count > 0)
+        {
+            throw new IdentityCredentialsPolicyException([.. errors.Select(error => $"configuration:{error}")]);
+        }
+
+        return ValidateOptionsResult.Success;
     }
 }
 
 /// <summary>
-/// Startup guard (pika e VETME fail-closed): (1) dështimet e shtyra të
-/// regjistrimit (konfigurim, ngarkim certifikate, development jashtë
-/// Development); (2) policy-ja mbi credentials REALE të
-/// `OpenIddictServerOptions` (pas konfigurimit të plotë të OpenIddict). Çdo
-/// dështim ndal host-in. Përjashtim i vetëm: host-i design-time i gjenerimit
-/// të dokumentit (i logohet si warning, s'shërben trafik).
+/// Kufiri (2): policy-ja mbi credentials REALE të `OpenIddictServerOptions` (pas
+/// konfigurimit të plotë të OpenIddict) + koherenca JOSE issuance↔validation.
+/// Ekzekutohet nga `ValidateOnStart` para çdo hosted service.
 /// </summary>
-internal sealed class IdentityCredentialsStartupGuard(
-    IdentityAuthorityStartupState startup,
-    IOptionsMonitor<OpenIddictServerOptions> serverOptions,
-    IHostEnvironment environment,
-    TimeProvider timeProvider,
-    ILogger<IdentityCredentialsStartupGuard> logger) : IHostedService
+internal sealed class IdentityAuthorityCredentialsValidator(bool isDevelopment, IdentityJosePolicy jose, TimeProvider timeProvider)
+    : IValidateOptions<OpenIddictServerOptions>
 {
-    public Task StartAsync(CancellationToken cancellationToken)
+    public ValidateOptionsResult Validate(string? name, OpenIddictServerOptions options)
     {
-        if (IdentityAuthorityServiceCollectionExtensions.IsDesignTimeDocumentGenerationHost)
-        {
-            logger.LogWarning(
-                "identity-authority: design-time document generation host — credentials policy not evaluated (no traffic is served)");
-            return Task.CompletedTask;
-        }
-
-        if (startup.Failures.Count > 0)
-        {
-            throw new IdentityCredentialsPolicyException(startup.Failures);
-        }
-
-        var options = serverOptions.Get(Options.DefaultName);
-        var violations = IdentityCredentialsPolicy.Evaluate(
-            environment.IsDevelopment(),
+        var violations = new List<string>(IdentityCredentialsPolicy.Evaluate(
+            isDevelopment,
             [.. options.SigningCredentials.Select(credential => credential.Key)],
             [.. options.EncryptionCredentials.Select(credential => credential.Key)],
-            timeProvider.GetUtcNow());
+            timeProvider.GetUtcNow()));
+        violations.AddRange(jose.EvaluateCoherence(
+            [.. options.SigningCredentials.Select(credential => credential.Algorithm)],
+            [.. options.EncryptionCredentials.Select(credential => (credential.Alg, credential.Enc))]));
         if (violations.Count > 0)
         {
             throw new IdentityCredentialsPolicyException(violations);
         }
 
-        return Task.CompletedTask;
+        return ValidateOptionsResult.Success;
     }
-
-    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 }

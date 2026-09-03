@@ -33,9 +33,44 @@
   </ItemGroup>
   <PropertyGroup>
     <OpenApiGenerateDocuments>true</OpenApiGenerateDocuments>
+    <!-- B.2a C1 (A1): hook-u automatik i paketës çaktivizohet dhe gjenerimi ZYRTAR
+         (target-i i vetë paketës, komandë e pandryshuar) thirret nga target-i më poshtë
+         me environment EKSPLICIT Development + zgjedhje eksplicite EphemeralKey, që
+         host-i i tool-it (GetDocument.Insider → Program.Main deri te ApplicationStarted)
+         të kalojë policy-në REALE të credentials (rruga standarde Development, jo
+         flamur skip). Zero material kredencialesh: çelësat ephemeral gjenerohen në
+         memorie brenda procesit të tool-it. Environment-i i build-it (p.sh.
+         DOTNET_ENVIRONMENT=Production në CI) nuk ndikon dokumentin (AddOpenApi +
+         transformer-at janë të pakushtëzuar); kontrata mbetet byte-identike. -->
+    <OpenApiGenerateDocumentsOnBuild>false</OpenApiGenerateDocumentsOnBuild>
     <OpenApiDocumentsDirectory>$(BaseIntermediateOutputPath)openapi</OpenApiDocumentsDirectory>
     <OpenApiGenerateDocumentsOptions>--file-name platform</OpenApiGenerateDocumentsOptions>
+    <_IdataDotnetHost Condition="'$(DOTNET_HOST_PATH)' != ''">$(DOTNET_HOST_PATH)</_IdataDotnetHost>
+    <_IdataDotnetHost Condition="'$(_IdataDotnetHost)' == ''">dotnet</_IdataDotnetHost>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- Environment-i EKSPLICIT i host-it design-time të OpenAPI-t: rruga standarde
+         Development e policy-së (matrica reale vlerësohet), zero material sekret. -->
+    <_IdataOpenApiDesignTimeEnvironment Include="DOTNET_ENVIRONMENT=Development" />
+    <_IdataOpenApiDesignTimeEnvironment Include="ASPNETCORE_ENVIRONMENT=Development" />
+    <_IdataOpenApiDesignTimeEnvironment Include="Identity__Authority__Issuer=https://localhost/" />
+    <_IdataOpenApiDesignTimeEnvironment Include="Identity__Authority__Audiences__0=synthetic-openapi-design-time" />
+    <_IdataOpenApiDesignTimeEnvironment Include="Identity__Authority__Jose__SignatureAlgorithms__0=RS256" />
+    <_IdataOpenApiDesignTimeEnvironment Include="Identity__Authority__Jose__KeyManagementAlgorithms__0=RSA-OAEP" />
+    <_IdataOpenApiDesignTimeEnvironment Include="Identity__Authority__Jose__ContentEncryptionAlgorithms__0=A256CBC-HS512" />
+    <_IdataOpenApiDesignTimeEnvironment Include="Identity__Authority__ClockSkewSeconds=0" />
+    <_IdataOpenApiDesignTimeEnvironment Include="Identity__Authority__Credentials__Development__Signing=EphemeralKey" />
+    <_IdataOpenApiDesignTimeEnvironment Include="Identity__Authority__Credentials__Development__Encryption=EphemeralKey" />
+  </ItemGroup>
+  <!-- Njësoj si hook-u i paketës (BeforeTargets=Build, jo inner build), por përmes një
+       msbuild-i të ngulitur që trashëgon environment-in eksplicit te Exec-i i tool-it. -->
+  <Target Name="GenerateOpenApiDocumentsWithExplicitDevelopmentIdentity"
+          BeforeTargets="Build"
+          Condition="'$(OpenApiGenerateDocuments)' == 'true' AND ('$(TargetFramework)' == '' OR '$(TargetFrameworks)' == '')">
+    <Exec Command="&quot;$(_IdataDotnetHost)&quot; msbuild &quot;$(MSBuildProjectFullPath)&quot; -t:GenerateOpenApiDocuments -p:Configuration=$(Configuration) -nologo -nr:false -v:minimal"
+          EnvironmentVariables="@(_IdataOpenApiDesignTimeEnvironment)"
+          LogStandardErrorAsError="true" />
+  </Target>
   <Target Name="CopyPlatformOpenApiContract" AfterTargets="GenerateOpenApiDocuments" Condition="Exists('$(BaseIntermediateOutputPath)openapi/platform_platform-v1.json')">
     <!-- Emri kanonik i kontratës së commit-uar: contracts/openapi/platform-v1.json -->
     <Copy SourceFiles="$(BaseIntermediateOutputPath)openapi/platform_platform-v1.json"

@@ -142,26 +142,125 @@ public sealed class IdentityAuthorityValidationTests
         }
     }
 
+    /// <summary>
+    /// B2 (C1) — koherencë issuance↔validation: një host që NIS por refuzon token-at
+    /// e vet nuk lejohet. Nëse allowlist-i i firmës (PS256) nuk përfshin algoritmin
+    /// REAL të credential-it (RS256 për X.509 RSA), ose key-management/content-
+    /// encryption i JWE-së nuk përfshin atë që prodhojnë credentials reale
+    /// (RSA-OAEP / A256CBC-HS512), startup-i DËSHTON fail-closed me klasë.
+    /// Allowlist me RS256/RSA-OAEP/A256CBC-HS512 → round-trip 200.
+    /// </summary>
     [Fact]
-    public async Task Algoritmi_jashte_allowlist_401_dhe_allowlist_me_RS256_200()
+    public async Task Allowlist_JOSE_jo_koherent_me_credentials_reale_deshton_ne_startup_koherent_kalon_round_trip()
     {
-        await using var lab = await Lab.CreateAsync("b2aalg");
+        await using var lab = await Lab.CreateAsync("b2acoherent");
+
+        static IdentityCredentialsPolicyException StartupFails(IdentityAuthorityHostSettings settings, string fragment)
+        {
+            using var factory = new IdentityAuthorityFactory(settings);
+            var exception = Assert.ThrowsAny<Exception>(() => factory.CreateHttpsClient());
+            for (var current = exception; current is not null; current = current.InnerException)
+            {
+                if (current is IdentityCredentialsPolicyException policy)
+                {
+                    Assert.Contains(fragment, policy.Message, StringComparison.Ordinal);
+                    return policy;
+                }
+            }
+
+            throw new Xunit.Sdk.XunitException($"Host-i NISI ose dështoi jashtë policy-së: {exception.GetType().FullName}: {exception.Message}");
+        }
+
+        StartupFails(lab.Settings with { SignatureAlgorithms = ["PS256"] }, "jose-signature-algorithm-mismatch");
+        StartupFails(lab.Settings with { KeyManagementAlgorithms = ["A256KW"] }, "jose-key-management-algorithm-mismatch");
+        StartupFails(lab.Settings with { ContentEncryptionAlgorithms = ["A128GCM"] }, "jose-content-encryption-algorithm-mismatch");
+
+        await using var coherent = lab.Host(lab.Settings with { SignatureAlgorithms = ["PS256", "RS256"] });
+        using var client = coherent.CreateHttpsClient();
+        var credentials = await coherent.RegisterSyntheticClientAsync();
+        Assert.Equal(HttpStatusCode.OK, await ProbeStatusAsync(client, await coherent.IssueAccessTokenAsync(client, credentials)));
+    }
+
+    /// <summary>
+    /// B1 (C1) — tri politika JOSE të NDARA, të provuara përmes middleware-it REAL
+    /// + token-entry validation, mbi të NJËJTIN inner JWS (firma RS256, claims, entry
+    /// id, typ, iss, aud, lifetime, çelësa të pandryshuar): vetëm `alg`/`enc` i
+    /// jashtëm, wrapping-u i CEK-ut dhe tag/AAD ndryshojnë. Kontrolli RSA-OAEP → 200;
+    /// key-management RSA1_5 → 401; `enc` jashtë allowlist-it → 401; header i jashtëm
+    /// malformed/missing → 401 (kurrë 500); token-i real ekzistues → 200.
+    /// </summary>
+    [Fact]
+    public async Task JOSE_outer_header_RSA_OAEP_200_RSA1_5_401_enc_jashte_allowlist_401_malformed_401()
+    {
+        await using var lab = await Lab.CreateAsync("b2ajose");
         await using var factory = lab.Host();
         using var client = factory.CreateHttpsClient();
         var credentials = await factory.RegisterSyntheticClientAsync();
         var accessToken = await factory.IssueAccessTokenAsync(client, credentials);
+        Assert.Equal(HttpStatusCode.OK, await ProbeStatusAsync(client, accessToken));
 
-        await using (var strict = lab.Host(lab.Settings with { AllowedAlgorithms = ["PS256"] }))
-        {
-            using var strictClient = strict.CreateHttpsClient();
-            Assert.Equal(HttpStatusCode.Unauthorized, await ProbeStatusAsync(strictClient, accessToken));
-        }
+        var outerHeader = SyntheticTokenCrafter.OuterHeader(accessToken);
+        Assert.Equal(SecurityAlgorithms.RsaOAEP, outerHeader["alg"]);
+        Assert.Equal(SecurityAlgorithms.Aes256CbcHmacSha512, outerHeader["enc"]);
+        var innerJws = SyntheticTokenCrafter.ExtractInnerJws(lab.Signing, lab.Encryption, accessToken);
+        Assert.Equal(3, innerJws.Split('.').Length);
 
-        await using (var permissive = lab.Host(lab.Settings with { AllowedAlgorithms = ["PS256", "RS256"] }))
-        {
-            using var permissiveClient = permissive.CreateHttpsClient();
-            Assert.Equal(HttpStatusCode.OK, await ProbeStatusAsync(permissiveClient, accessToken));
-        }
+        // KONTROLL: ri-enkriptim i të njëjtit inner JWS me RSA-OAEP + A256CBC-HS512 → 200.
+        var control = SyntheticTokenCrafter.ReEncrypt(innerJws, lab.Encryption, SecurityAlgorithms.RsaOAEP, SecurityAlgorithms.Aes256CbcHmacSha512, outerHeader);
+        Assert.Equal(HttpStatusCode.OK, await ProbeStatusAsync(client, control));
+
+        // Key-management RSA1_5 (jashtë allowlist-it; i njëjti çelës dekriptimi) → 401.
+        var rsa15 = SyntheticTokenCrafter.ReEncrypt(innerJws, lab.Encryption, SecurityAlgorithms.RsaPKCS1, SecurityAlgorithms.Aes256CbcHmacSha512, outerHeader);
+        Assert.Equal("RSA1_5", SyntheticTokenCrafter.OuterHeader(rsa15)["alg"]);
+        Assert.Equal(HttpStatusCode.Unauthorized, await ProbeStatusAsync(client, rsa15));
+
+        // Content-encryption jashtë allowlist-it (A128CBC-HS256; RSA-OAEP i lejuar) → 401.
+        var encOutside = SyntheticTokenCrafter.ReEncrypt(innerJws, lab.Encryption, SecurityAlgorithms.RsaOAEP, SecurityAlgorithms.Aes128CbcHmacSha256, outerHeader);
+        Assert.Equal(HttpStatusCode.Unauthorized, await ProbeStatusAsync(client, encOutside));
+
+        // Header i jashtëm malformed/missing → 401, kurrë 500.
+        Assert.Equal(HttpStatusCode.Unauthorized, await ProbeStatusAsync(client, SyntheticTokenCrafter.WithOuterHeader(accessToken, "{}")));
+        Assert.Equal(HttpStatusCode.Unauthorized, await ProbeStatusAsync(client, SyntheticTokenCrafter.WithOuterHeader(accessToken, "{\"enc\":\"A256CBC-HS512\"}")));
+        Assert.Equal(HttpStatusCode.Unauthorized, await ProbeStatusAsync(client, SyntheticTokenCrafter.WithOuterHeader(accessToken, "{\"alg\":\"RSA-OAEP\"}")));
+        Assert.Equal(HttpStatusCode.Unauthorized, await ProbeStatusAsync(client, SyntheticTokenCrafter.WithOuterHeader(accessToken, "not-json")));
+        Assert.Equal(HttpStatusCode.Unauthorized, await ProbeStatusAsync(client, SyntheticTokenCrafter.WithOuterHeader(accessToken, "{\"alg\":\"RSA-OAEP\",\"enc\":\"X-UNKNOWN\"}")));
+
+        // Token-i real ekzistues vazhdon të pranohet.
+        Assert.Equal(HttpStatusCode.OK, await ProbeStatusAsync(client, accessToken));
+    }
+
+    /// <summary>
+    /// C1 (correction) — skema DEFAULT e autentikimit: `[Authorize]` i ZHVESHUR (pa
+    /// `AuthenticationSchemes`, pa override test-only) mbron probe-n; default
+    /// authenticate + challenge = skema e validimit OpenIddict, e provuar mbi
+    /// `AuthenticationOptions` dhe mbi provider-in real të skemave.
+    /// </summary>
+    [Fact]
+    public async Task Skema_default_e_autentikimit_eshte_validimi_OpenIddict_dhe_Authorize_i_zhveshur_mbron_probe_n()
+    {
+        await using var lab = await Lab.CreateAsync("b2ascheme");
+        await using var factory = lab.Host();
+        using var client = factory.CreateHttpsClient();
+
+        var scheme = OpenIddict.Validation.AspNetCore.OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme;
+        var options = factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Authentication.AuthenticationOptions>>().Value;
+        Assert.Equal(scheme, options.DefaultAuthenticateScheme);
+        Assert.Equal(scheme, options.DefaultChallengeScheme);
+
+        var provider = factory.Services.GetRequiredService<Microsoft.AspNetCore.Authentication.IAuthenticationSchemeProvider>();
+        Assert.Equal(scheme, (await provider.GetDefaultAuthenticateSchemeAsync())?.Name);
+        Assert.Equal(scheme, (await provider.GetDefaultChallengeSchemeAsync())?.Name);
+
+        // Probe-i ka [Authorize] të zhveshur (provuar mbi metadata reale, jo supozuar).
+        var attribute = typeof(IdentityAuthorityProbeController).GetMethod(nameof(IdentityAuthorityProbeController.Protected))!
+            .GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), inherit: true)
+            .Cast<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>().Single();
+        Assert.Null(attribute.AuthenticationSchemes);
+
+        var credentials = await factory.RegisterSyntheticClientAsync();
+        Assert.Equal(HttpStatusCode.OK, await ProbeStatusAsync(client, await factory.IssueAccessTokenAsync(client, credentials)));
+        Assert.Equal(HttpStatusCode.Unauthorized, await ProbeStatusAsync(client, null));
+        Assert.Equal(HttpStatusCode.Unauthorized, await ProbeStatusAsync(client, "invalid.synthetic.value"));
     }
 
     [Fact]

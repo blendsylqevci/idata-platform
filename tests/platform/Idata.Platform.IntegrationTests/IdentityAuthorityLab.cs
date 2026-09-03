@@ -106,7 +106,14 @@ public sealed record IdentityAuthorityHostSettings
 
     public string[] Audiences { get; init; } = ["synthetic-api"];
 
-    public string[] AllowedAlgorithms { get; init; } = ["RS256"];
+    /// <summary>JOSE (1): allowlist i firmës së JWS-së së brendshme.</summary>
+    public string[] SignatureAlgorithms { get; init; } = ["RS256"];
+
+    /// <summary>JOSE (2): allowlist i key-management-it të JWE-së së jashtme.</summary>
+    public string[] KeyManagementAlgorithms { get; init; } = ["RSA-OAEP"];
+
+    /// <summary>JOSE (3): allowlist i content-encryption-it të JWE-së së jashtme.</summary>
+    public string[] ContentEncryptionAlgorithms { get; init; } = ["A256CBC-HS512"];
 
     public int? ClockSkewSeconds { get; init; } = 0;
 
@@ -149,9 +156,19 @@ public sealed record IdentityAuthorityHostSettings
             values[$"{prefix}Audiences:{index}"] = Audiences[index];
         }
 
-        for (var index = 0; index < AllowedAlgorithms.Length; index++)
+        for (var index = 0; index < SignatureAlgorithms.Length; index++)
         {
-            values[$"{prefix}AllowedAlgorithms:{index}"] = AllowedAlgorithms[index];
+            values[$"{prefix}Jose:SignatureAlgorithms:{index}"] = SignatureAlgorithms[index];
+        }
+
+        for (var index = 0; index < KeyManagementAlgorithms.Length; index++)
+        {
+            values[$"{prefix}Jose:KeyManagementAlgorithms:{index}"] = KeyManagementAlgorithms[index];
+        }
+
+        for (var index = 0; index < ContentEncryptionAlgorithms.Length; index++)
+        {
+            values[$"{prefix}Jose:ContentEncryptionAlgorithms:{index}"] = ContentEncryptionAlgorithms[index];
         }
 
         if (ClockSkewSeconds is not null)
@@ -380,8 +397,9 @@ public sealed class IdentityAuthorityFactory(IdentityAuthorityHostSettings setti
 [Route("__b2a")]
 public sealed class IdentityAuthorityProbeController : ControllerBase
 {
+    /// <summary>`[Authorize]` i ZHVESHUR — mbrojtja varet VETËM nga skema default e host-it real (C1).</summary>
     [HttpGet("protected")]
-    [Authorize(AuthenticationSchemes = OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme)]
+    [Authorize]
     public IActionResult Protected() => Ok(new { subject = User.GetClaim(Claims.Subject) });
 }
 
@@ -428,6 +446,74 @@ public static class SyntheticTokenCrafter
         }
 
         return claims;
+    }
+
+    /// <summary>Dekripton JWE-në reale dhe kthen JWS-në e BRENDSHME compact TË PANDRYSHUAR.</summary>
+    public static string ExtractInnerJws(X509Certificate2 signing, X509Certificate2 encryption, string encodedToken)
+    {
+        var handler = new JsonWebTokenHandler();
+        var result = handler.ValidateTokenAsync(encodedToken, new TokenValidationParameters
+        {
+            TokenDecryptionKey = new X509SecurityKey(encryption),
+            IssuerSigningKey = new X509SecurityKey(signing),
+            ValidateAudience = false,
+            ValidateIssuer = false,
+            ValidateLifetime = false,
+            ValidateTokenReplay = false,
+            ValidTypes = null,
+        }).GetAwaiter().GetResult();
+        if (!result.IsValid)
+        {
+            throw new InvalidOperationException("Dekriptimi i tokenit sintetik dështoi.", result.Exception);
+        }
+
+        var outer = (JsonWebToken)result.SecurityToken;
+        return (outer.InnerToken ?? throw new InvalidOperationException("Token-i nuk është JWE me JWS të brendshëm.")).EncodedToken;
+    }
+
+    /// <summary>Header-i i jashtëm (JOSE) i JWE-së, pa asnjë kriptografi.</summary>
+    public static IReadOnlyDictionary<string, object> OuterHeader(string encodedToken)
+    {
+        var segment = encodedToken.Split('.')[0];
+        using var document = JsonDocument.Parse(Base64UrlEncoder.DecodeBytes(segment));
+        return document.RootElement.EnumerateObject().ToDictionary(
+            property => property.Name,
+            property => (object)(property.Value.ValueKind == JsonValueKind.String ? property.Value.GetString()! : property.Value.GetRawText()),
+            StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// Ri-enkripton të NJËJTIN inner JWS (firmë, claims, entry id, typ, iss, aud,
+    /// lifetime të pandryshuara) me `alg`/`enc` të jashtëm të zgjedhur — vetëm
+    /// wrapping-u i CEK-ut, `alg`/`enc` dhe tag/AAD ndryshojnë. Header-i i jashtëm
+    /// riprodhon `typ`/`cty` të tokenit real.
+    /// </summary>
+    public static string ReEncrypt(
+        string innerJws, X509Certificate2 encryption, string keyManagementAlgorithm, string contentEncryptionAlgorithm,
+        IReadOnlyDictionary<string, object> outerHeader)
+    {
+        var handler = new JsonWebTokenHandler();
+        var additional = new Dictionary<string, object>(StringComparer.Ordinal);
+        foreach (var name in (string[])["typ", "cty"])
+        {
+            if (outerHeader.TryGetValue(name, out var value))
+            {
+                additional[name] = value;
+            }
+        }
+
+        return handler.EncryptToken(
+            innerJws,
+            new EncryptingCredentials(new X509SecurityKey(encryption), keyManagementAlgorithm, contentEncryptionAlgorithm),
+            additional);
+    }
+
+    /// <summary>Zëvendëson header-in e jashtëm me JSON arbitrar (malformed/missing alg-enc) — pa kriptografi.</summary>
+    public static string WithOuterHeader(string encodedToken, string headerJson)
+    {
+        var parts = encodedToken.Split('.');
+        parts[0] = Base64UrlEncoder.Encode(headerJson);
+        return string.Join('.', parts);
     }
 
     public static string Create(

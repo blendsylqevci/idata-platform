@@ -198,7 +198,12 @@ public sealed class IdentityCredentialsPolicyTests
     {
         Issuer = "https://authority.synthetic.local/",
         Audiences = ["synthetic-api"],
-        AllowedAlgorithms = ["RS256"],
+        Jose = new IdentityAuthorityJoseOptions
+        {
+            SignatureAlgorithms = ["RS256"],
+            KeyManagementAlgorithms = ["RSA-OAEP"],
+            ContentEncryptionAlgorithms = ["A256CBC-HS512"],
+        },
         ClockSkewSeconds = 30,
     };
 
@@ -208,7 +213,9 @@ public sealed class IdentityCredentialsPolicyTests
         Assert.Empty(IdentityAuthorityServiceCollectionExtensions.ValidateConfiguration(Valid(), false));
         Assert.Empty(IdentityAuthorityServiceCollectionExtensions.ValidateConfiguration(Valid(), true));
 
-        Assert.Equal(["issuer-missing-or-relative", "audiences-missing", "allowed-algorithms-missing", "clock-skew-missing"],
+        Assert.Equal(
+            ["issuer-missing-or-relative", "audiences-missing", "jose-signature-algorithms-missing",
+             "jose-key-management-algorithms-missing", "jose-content-encryption-algorithms-missing", "clock-skew-missing"],
             IdentityAuthorityServiceCollectionExtensions.ValidateConfiguration(new IdentityAuthorityOptions(), false));
 
         var relative = Valid(); relative.Issuer = "authority/relative";
@@ -222,8 +229,12 @@ public sealed class IdentityCredentialsPolicyTests
         var blankAudience = Valid(); blankAudience.Audiences = ["synthetic-api", " "];
         Assert.Equal(["audiences-missing"], IdentityAuthorityServiceCollectionExtensions.ValidateConfiguration(blankAudience, false));
 
-        var noAlgorithms = Valid(); noAlgorithms.AllowedAlgorithms = [];
-        Assert.Equal(["allowed-algorithms-missing"], IdentityAuthorityServiceCollectionExtensions.ValidateConfiguration(noAlgorithms, false));
+        var noSignature = Valid(); noSignature.Jose.SignatureAlgorithms = [];
+        Assert.Equal(["jose-signature-algorithms-missing"], IdentityAuthorityServiceCollectionExtensions.ValidateConfiguration(noSignature, false));
+        var blankKeyManagement = Valid(); blankKeyManagement.Jose.KeyManagementAlgorithms = ["RSA-OAEP", " "];
+        Assert.Equal(["jose-key-management-algorithms-missing"], IdentityAuthorityServiceCollectionExtensions.ValidateConfiguration(blankKeyManagement, false));
+        var noContentEncryption = Valid(); noContentEncryption.Jose.ContentEncryptionAlgorithms = [];
+        Assert.Equal(["jose-content-encryption-algorithms-missing"], IdentityAuthorityServiceCollectionExtensions.ValidateConfiguration(noContentEncryption, false));
 
         var negativeSkew = Valid(); negativeSkew.ClockSkewSeconds = -1;
         Assert.Equal(["clock-skew-out-of-bounds"], IdentityAuthorityServiceCollectionExtensions.ValidateConfiguration(negativeSkew, false));
@@ -243,7 +254,9 @@ public sealed class IdentityCredentialsPolicyTests
         var options = new IdentityAuthorityOptions();
         Assert.Null(options.Issuer);
         Assert.Empty(options.Audiences);
-        Assert.Empty(options.AllowedAlgorithms);
+        Assert.Empty(options.Jose.SignatureAlgorithms);
+        Assert.Empty(options.Jose.KeyManagementAlgorithms);
+        Assert.Empty(options.Jose.ContentEncryptionAlgorithms);
         Assert.Null(options.ClockSkewSeconds);
         Assert.Null(options.Credentials.Development.Signing);
         Assert.Null(options.Credentials.Development.Encryption);
@@ -255,29 +268,61 @@ public sealed class IdentityCredentialsPolicyTests
         Assert.False(Uri.TryCreate(IdentityAuthorityServiceCollectionExtensions.AuthorizationEndpointPath, UriKind.Absolute, out _));
     }
 
-    // ══════════ Predikati design-time ══════════
+    // ══════════ Tri politikat JOSE (PURE) ══════════
+
+    private static IdentityJosePolicy Jose() => IdentityJosePolicy.From(new IdentityAuthorityJoseOptions
+    {
+        SignatureAlgorithms = ["RS256"],
+        KeyManagementAlgorithms = ["RSA-OAEP"],
+        ContentEncryptionAlgorithms = ["A256CBC-HS512"],
+    });
 
     [Fact]
-    public void Predikati_design_time_eshte_FALSE_ne_procesin_e_testit_dhe_lidhet_vetem_me_toolin_zyrtar()
+    public void Politikat_JOSE_jane_te_ndara_ekzakte_ordinal_dhe_pa_fallback()
     {
-        Assert.False(IdentityAuthorityServiceCollectionExtensions.IsDesignTimeDocumentGenerationHost);
-        Assert.Equal<string>(["GetDocument.Insider", "dotnet-getdocument"],
-            IdentityAuthorityServiceCollectionExtensions.DesignTimeDocumentGenerationEntryAssemblies);
-
-        // Forma PURE: vetëm entry-i i tool-it zyrtar → TRUE; host real/test/bosh → FALSE.
-        Assert.True(IdentityAuthorityServiceCollectionExtensions.IsDesignTimeDocumentGenerationEntry(
-            ["/synthetic/tools/net10.0/GetDocument.Insider.dll", "--assembly", "x.dll"]));
-        Assert.True(IdentityAuthorityServiceCollectionExtensions.IsDesignTimeDocumentGenerationEntry(
-            ["/synthetic/dotnet-getdocument.dll"]));
-        Assert.False(IdentityAuthorityServiceCollectionExtensions.IsDesignTimeDocumentGenerationEntry(
-            ["/synthetic/app/Idata.Platform.Api.dll"]));
-        Assert.False(IdentityAuthorityServiceCollectionExtensions.IsDesignTimeDocumentGenerationEntry(
-            ["/synthetic/app/Idata.Platform.Api"]));
-        Assert.False(IdentityAuthorityServiceCollectionExtensions.IsDesignTimeDocumentGenerationEntry(
-            ["/synthetic/tests/Idata.Platform.IntegrationTests.dll"]));
-        Assert.False(IdentityAuthorityServiceCollectionExtensions.IsDesignTimeDocumentGenerationEntry(
-            ["/synthetic/GetDocument.Insider.Fake.dll"])); // pa prefix/contains matching
-        Assert.False(IdentityAuthorityServiceCollectionExtensions.IsDesignTimeDocumentGenerationEntry([]));
-        Assert.False(IdentityAuthorityServiceCollectionExtensions.IsDesignTimeDocumentGenerationEntry([""]));
+        var jose = Jose();
+        Assert.True(jose.AllowsSignature("RS256"));
+        Assert.False(jose.AllowsSignature("rs256"));
+        Assert.False(jose.AllowsSignature("RSA-OAEP"));   // key-management ≠ firmë
+        Assert.False(jose.AllowsSignature("A256CBC-HS512"));
+        Assert.True(jose.AllowsKeyManagement("RSA-OAEP"));
+        Assert.False(jose.AllowsKeyManagement("RSA1_5"));
+        Assert.False(jose.AllowsKeyManagement("RS256"));
+        Assert.True(jose.AllowsContentEncryption("A256CBC-HS512"));
+        Assert.False(jose.AllowsContentEncryption("A128CBC-HS256"));
+        Assert.False(jose.AllowsContentEncryption("RSA-OAEP"));
+        Assert.False(jose.AllowsSignature(null));
+        Assert.False(jose.AllowsKeyManagement(""));
     }
+
+    [Fact]
+    public void Header_i_jashtem_refuzohet_kur_mungon_eshte_i_panjohur_jashte_allowlist_it_ose_malformed()
+    {
+        var jose = Jose();
+        static string Compact(string headerJson) => Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode(headerJson) + ".AAAA.AAAA.AAAA.AAAA";
+        Assert.Null(jose.RejectOuterHeader(Compact("{\"alg\":\"RSA-OAEP\",\"enc\":\"A256CBC-HS512\"}")));
+        Assert.Equal("jose-key-management-algorithm-not-allowed", jose.RejectOuterHeader(Compact("{\"alg\":\"RSA1_5\",\"enc\":\"A256CBC-HS512\"}")));
+        Assert.Equal("jose-content-encryption-algorithm-not-allowed", jose.RejectOuterHeader(Compact("{\"alg\":\"RSA-OAEP\",\"enc\":\"A128CBC-HS256\"}")));
+        Assert.Equal("jose-key-management-algorithm-missing", jose.RejectOuterHeader(Compact("{\"enc\":\"A256CBC-HS512\"}")));
+        Assert.Equal("jose-content-encryption-algorithm-missing", jose.RejectOuterHeader(Compact("{\"alg\":\"RSA-OAEP\"}")));
+        Assert.Equal("jose-key-management-algorithm-not-allowed", jose.RejectOuterHeader(Compact("{\"alg\":\"rsa-oaep\",\"enc\":\"A256CBC-HS512\"}")));
+        Assert.Equal("jose-token-not-encrypted", jose.RejectOuterHeader(Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode("{\"alg\":\"RS256\"}") + ".e30.AAAA"));
+        Assert.Equal("jose-token-malformed", jose.RejectOuterHeader("not-a-token"));
+        Assert.Equal("jose-token-malformed", jose.RejectOuterHeader(Microsoft.IdentityModel.Tokens.Base64UrlEncoder.Encode("not-json") + ".AAAA.AAAA.AAAA.AAAA"));
+        Assert.Equal("jose-token-missing", jose.RejectOuterHeader(null));
+        Assert.Equal("jose-token-missing", jose.RejectOuterHeader(" "));
+    }
+
+    [Fact]
+    public void Koherenca_issuance_validation_kap_cdo_kategori_me_klase_dhe_indeks()
+    {
+        var jose = Jose();
+        Assert.Empty(jose.EvaluateCoherence(["RS256"], [("RSA-OAEP", "A256CBC-HS512")]));
+        Assert.Equal(["jose-signature-algorithm-mismatch:signing[1]:PS256"], jose.EvaluateCoherence(["RS256", "PS256"], [("RSA-OAEP", "A256CBC-HS512")]));
+        Assert.Equal(
+            ["jose-key-management-algorithm-mismatch:encryption[0]:A256KW", "jose-content-encryption-algorithm-mismatch:encryption[0]:A128GCM"],
+            jose.EvaluateCoherence(["RS256"], [("A256KW", "A128GCM")]));
+        Assert.Equal(["jose-signature-algorithm-mismatch:signing[0]:none"], jose.EvaluateCoherence([null], [("RSA-OAEP", "A256CBC-HS512")]));
+    }
+
 }

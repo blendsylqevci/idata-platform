@@ -164,6 +164,63 @@ public sealed class IdentityAuthorityBoundaryTests
                 && reference.Type.Contains("OpenIddict", StringComparison.Ordinal)));
     }
 
+    // ═══════ A2 (C1) — startup failure state: API-shape mbi sipërfaqen PUBLIKE ═══════
+
+    /// <summary>
+    /// Gjendja e dështimeve të startup-it NUK është API publike: asnjë tip i
+    /// eksportuar nuk ka mutator `Fail`, asnjë veti publike `Failures` nuk kthen
+    /// listë të ndryshueshme (as `IReadOnlyList` mbi `List`) — vetëm
+    /// `ImmutableArray&lt;string&gt;`; tipi i state-it nuk eksportohet. Zero
+    /// reflection mbi fusha private.
+    /// </summary>
+    [Fact]
+    public void Startup_failure_state_nuk_eshte_public_dhe_snapshot_i_eshte_ImmutableArray()
+    {
+        var assembly = typeof(Idata.Platform.Modules.Identity.Infrastructure.IdentityAuthorityOptions).Assembly;
+        var exported = assembly.GetExportedTypes();
+        Assert.DoesNotContain(exported, type => type.Name.Contains("StartupState", StringComparison.Ordinal));
+        foreach (var type in exported)
+        {
+            Assert.DoesNotContain(type.GetMethods(), method => method.Name == "Fail");
+            foreach (var property in type.GetProperties().Where(property => property.Name == "Failures"))
+            {
+                Assert.Equal(typeof(System.Collections.Immutable.ImmutableArray<string>), property.PropertyType);
+                Assert.Null(property.SetMethod);
+            }
+        }
+
+        // Snapshot-i (jo-publik) ekziston me VETËM `ImmutableArray<string> Failures` pa setter.
+        var snapshot = Assert.Single(assembly.GetTypes(), type => type.Name == "IdentityAuthorityStartupSnapshot");
+        Assert.False(snapshot.IsPublic);
+        var failures = Assert.Single(snapshot.GetProperties(), property => property.Name == "Failures");
+        Assert.Equal(typeof(System.Collections.Immutable.ImmutableArray<string>), failures.PropertyType);
+        Assert.Null(failures.SetMethod);
+    }
+
+    /// <summary>A1 (C1): zero predikat design-time / përjashtim runtime sipas identitetit të procesit.</summary>
+    [Fact]
+    public void Zero_perjashtim_runtime_sipas_identitetit_te_procesit()
+    {
+        var assembly = typeof(Idata.Platform.Modules.Identity.Infrastructure.IdentityAuthorityOptions).Assembly;
+        foreach (var type in assembly.GetTypes())
+        {
+            foreach (var member in type.GetMembers(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly))
+            {
+                Assert.DoesNotContain("DesignTime", member.Name, StringComparison.Ordinal);
+                Assert.DoesNotContain("GetDocument", member.Name, StringComparison.Ordinal);
+            }
+        }
+
+        var members = MemberReferencesByAssembly()[IdentityInfrastructureAssembly];
+        Assert.DoesNotContain(("System.Environment", "GetCommandLineArgs"), members);
+        Assert.DoesNotContain(("System.Environment", "get_CommandLine"), members);
+        Assert.DoesNotContain(("System.Environment", "ProcessPath"), members);
+        Assert.DoesNotContain(("System.Environment", "get_ProcessPath"), members);
+        Assert.DoesNotContain(("System.Diagnostics.Process", "GetCurrentProcess"), members);
+        Assert.DoesNotContain(("System.AppDomain", "get_FriendlyName"), members);
+    }
+
     // ═══════ Neutralitet produkti + zero material sekret ═══════
 
     private static readonly Regex ProductNames = new("PLANET|KABI", RegexOptions.CultureInvariant);

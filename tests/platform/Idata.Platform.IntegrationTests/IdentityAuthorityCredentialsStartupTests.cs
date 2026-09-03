@@ -221,12 +221,28 @@ public sealed class IdentityAuthorityCredentialsStartupTests
         Assert.DoesNotContain("wrong-password", wrongPassword.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>A2 (C1): `signing[0]` valid + `signing[1]` i pangarkueshëm → startup FAIL (state i shtyrë i pandryshueshëm).</summary>
+    [Fact]
+    public void Production_signing0_valid_dhe_signing1_i_pangarkueshem_deshton()
+    {
+        using var signing = SyntheticCertificates.Signing();
+        using var encryption = SyntheticCertificates.Encryption();
+        var failure = AssertStartupFails(Production() with
+        {
+            Signing = [Pfx(signing), ("this-is-not-base64!!", PfxPassphrase)],
+            Encryption = [Pfx(encryption)],
+        }, "persistent-unloadable(", "(signing[1])");
+        Assert.DoesNotContain("signing[0]", failure.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Production_konfigurim_i_munguar_deshton()
         => AssertStartupFails(Production() with { IncludeSection = false },
             "configuration:issuer-missing-or-relative",
             "configuration:audiences-missing",
-            "configuration:allowed-algorithms-missing",
+            "configuration:jose-signature-algorithms-missing",
+            "configuration:jose-key-management-algorithms-missing",
+            "configuration:jose-content-encryption-algorithms-missing",
             "configuration:clock-skew-missing");
 
     [Fact]

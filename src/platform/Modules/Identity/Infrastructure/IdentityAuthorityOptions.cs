@@ -18,8 +18,12 @@ public sealed class IdentityAuthorityOptions
     /// <summary>Audiences/resources të pranuara nga API-ja (validation `aud`).</summary>
     public string[] Audiences { get; set; } = [];
 
-    /// <summary>Allowlist eksplicit i algoritmeve të firmës (p.sh. RS256).</summary>
-    public string[] AllowedAlgorithms { get; set; } = [];
+    /// <summary>
+    /// Tri politikat JOSE të NDARA dhe të DETYRUESHME (`Jose:SignatureAlgorithms`,
+    /// `Jose:KeyManagementAlgorithms`, `Jose:ContentEncryptionAlgorithms`). Emri i
+    /// vjetër `AllowedAlgorithms` NUK ekziston më (zero konfigurim dual, zero fallback).
+    /// </summary>
+    public IdentityAuthorityJoseOptions Jose { get; set; } = new();
 
     /// <summary>Clock skew eksplicit dhe i KUFIZUAR (0..<see cref="IdentityCredentialsPolicy.MaxClockSkewSeconds"/>).</summary>
     public int? ClockSkewSeconds { get; set; }
@@ -68,4 +72,19 @@ public sealed class IdentityPersistentCertificateOptions
     public string? PfxPath { get; set; }
 
     public string? PfxPassword { get; set; }
+}
+
+/// <summary>
+/// Tri allowlist-e EKZAKTE (ordinal) dhe të NDARA për tokenët e aksesit (JWE me JWS
+/// të brendshëm): (1) `alg` i firmës së JWS-së së brendshme; (2) `alg` i
+/// key-management-it të JWE-së së jashtme; (3) `enc` i content-encryption-it të
+/// JWE-së së jashtme. Secila kërkohet eksplicitisht — zero default, zero fallback.
+/// </summary>
+public sealed class IdentityAuthorityJoseOptions
+{
+    public string[] SignatureAlgorithms { get; set; } = [];
+
+    public string[] KeyManagementAlgorithms { get; set; } = [];
+
+    public string[] ContentEncryptionAlgorithms { get; set; } = [];
 }
