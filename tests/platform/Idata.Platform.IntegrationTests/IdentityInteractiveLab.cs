@@ -111,6 +111,12 @@ internal static class InteractiveClient
         using var granted = await DecideAsync(client, fields, InteractiveAuthorizationContract.ApproveValue);
         var code = RedirectParameter(granted, "code");
         Assert.False(string.IsNullOrEmpty(code), $"asnjë kod: status={granted.StatusCode} location={granted.Headers.Location}");
+
+        // C2: `state`-i LEXOHET nga redirect-i real i consent-it dhe krahasohet EKZAKT me
+        // atë të kërkesës — mungesa ose mospërputhja dështon lëshimin (jo input-i i ruajtur).
+        var returnedState = RedirectParameter(granted, "state");
+        Assert.True(returnedState is not null, $"redirect-i pa `state`: location={granted.Headers.Location}");
+        Assert.Equal(state, returnedState);
         return (code!, verifier);
     }
 

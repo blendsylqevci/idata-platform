@@ -36,8 +36,16 @@ public sealed class IdentityInteractiveReliabilityTests
             // kontrolluar (JSON gjenerik), zero token, zero detaj i brendshëm.
             using var during = await InteractiveClient.RedeemAsync(client, clientId, code, verifier);
             Assert.Equal(HttpStatusCode.ServiceUnavailable, during.StatusCode);
+            Assert.Equal("application/json", during.Content.Headers.ContentType?.MediaType);
             var body = await InteractiveClient.BodyAsync(during);
-            Assert.Contains("temporarily_unavailable", body, StringComparison.Ordinal);
+            using (var document = JsonDocument.Parse(body))
+            {
+                // C2: përgjigje JSON e verifikuar SEMANTIKISHT (objekt me `error` ekzakt), jo substring.
+                Assert.Equal(JsonValueKind.Object, document.RootElement.ValueKind);
+                Assert.Equal("temporarily_unavailable", document.RootElement.GetProperty("error").GetString());
+                Assert.False(document.RootElement.TryGetProperty("access_token", out _));
+            }
+
             Assert.DoesNotContain("access_token", body, StringComparison.Ordinal);
             Assert.DoesNotContain("Npgsql", body, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain(lab.Database.DatabaseName, body, StringComparison.Ordinal);
@@ -238,7 +246,17 @@ public sealed class IdentityInteractiveReliabilityTests
             var (_, challenge) = InteractiveClient.CreatePkcePair();
             pendingAuthorize = InteractiveClient.AuthorizationUrl(clientId, challenge, State);
             var (page, fields) = await InteractiveClient.ConsentPageAsync(clientA, pendingAuthorize);
-            page.Dispose();
+            using (page)
+            {
+                // C2 — parakusht REAL: formulari i consent-it ekziston dhe mbart antiforgery
+                // token jo-bosh të lëshuar nga host-i A (jo formular i rindërtuar/bosh).
+                Assert.Equal(HttpStatusCode.OK, page.StatusCode);
+            }
+
+            Assert.True(
+                fields.TryGetValue(InteractiveAuthorizationContract.AntiforgeryFieldName, out var antiforgeryToken)
+                && !string.IsNullOrEmpty(antiforgeryToken),
+                "formulari i consent-it në host-in A nuk mbart antiforgery token");
             pendingConsent = fields;
         }
 
@@ -254,7 +272,9 @@ public sealed class IdentityInteractiveReliabilityTests
 
         using (var stale = await InteractiveClient.DecideAsync(clientB, pendingConsent, InteractiveAuthorizationContract.ApproveValue))
         {
-            Assert.NotEqual(HttpStatusCode.Redirect, stale.StatusCode);
+            // C2: refuzim i KONTROLLUAR (antiforgery i host-it A i palexueshëm me key ring-un
+            // e B-së) → 400 ekzakt, zero kod; kurrë 5xx.
+            Assert.Equal(HttpStatusCode.BadRequest, stale.StatusCode);
             Assert.Null(InteractiveClient.RedirectParameter(stale, "code"));
         }
 
@@ -303,39 +323,63 @@ public sealed class IdentityInteractiveReliabilityTests
             .ToArray();
         try
         {
-            // Çdo flow: sesion i vet, klient i vet, state dhe challenge të vet — të nisura NJËKOHËSISHT.
-            var results = await Task.WhenAll(Enumerable.Range(0, flows).Select(async index =>
+            // (A) FAZA KONKURRUESE (Task.WhenAll): çdo flow me sesion, klient, `state` dhe
+            // challenge të vet — lëshim kodi (state-i i KTHYER krahasohet ekzakt brenda
+            // IssueCodeAsync) dhe përfundim POZITIV me kodin e vet të paprekur.
+            var completed = await Task.WhenAll(Enumerable.Range(0, flows).Select(async index =>
             {
                 var state = $"synthetic-state-{index}";
                 var (code, verifier) = await InteractiveClient.IssueCodeAsync(clients[index], clientIds[index], userName, state);
                 using var redeemed = await InteractiveClient.RedeemAsync(clients[index], clientIds[index], code, verifier);
                 Assert.Equal(HttpStatusCode.OK, redeemed.StatusCode);
-                return (Index: index, Code: code, Verifier: verifier, State: state,
-                    AccessToken: (await InteractiveClient.AccessTokenAsync(redeemed))!);
+                var accessToken = await InteractiveClient.AccessTokenAsync(redeemed);
+                Assert.False(string.IsNullOrEmpty(accessToken), $"flow {index}: access token bosh");
+                return (Index: index, Code: code, State: state, AccessToken: accessToken!);
             }));
 
-            // Ndarja: kode/token unikë; kodi i një flow-i nuk shlyhet me verifier-in e tjetrit.
-            Assert.Equal(flows, results.Select(result => result.Code).Distinct(StringComparer.Ordinal).Count());
-            Assert.Equal(flows, results.Select(result => result.AccessToken).Distinct(StringComparer.Ordinal).Count());
-            using (var cross = await InteractiveClient.RedeemAsync(clients[0], clientIds[0], results[1].Code, results[1].Verifier))
-            {
-                Assert.Equal(HttpStatusCode.BadRequest, cross.StatusCode);
-            }
-
-            // Evidencë e MBIVENDOSJES reale: intervalet e kërkesave të autorizimit/shkëmbimit
-            // të të paktën një çifti flow-esh mbivendosen në kohë (Stopwatch monotonik).
-            var authorityRequests = timings
+            // Snapshot i intervaleve të FAZËS KONKURRUESE — para çdo kërkese tjetër.
+            var concurrentRequests = timings
                 .Select(timing => timing.Intervals
                     .Where(interval => interval.Path.StartsWith("/connect/", StringComparison.Ordinal))
                     .ToArray())
                 .ToArray();
-            Assert.All(authorityRequests, intervals => Assert.NotEmpty(intervals));
+
+            // Ndarja e flow-ve: 4 kode të ndryshëm, 4 state të ndryshëm, 4 token-a jo-boshë të ndryshëm.
+            Assert.Equal(flows, completed.Select(flow => flow.Code).Distinct(StringComparer.Ordinal).Count());
+            Assert.Equal(flows, completed.Select(flow => flow.State).Distinct(StringComparer.Ordinal).Count());
+            Assert.Equal(flows, completed.Select(flow => flow.AccessToken).Distinct(StringComparer.Ordinal).Count());
+
+            // (B) KONTROLLE NEGATIVE të IZOLUARA (kërkesa SEKUENCIALE pas fazës konkurruese),
+            // secila mbi një kod TË RI, të pakonsumuar, të lëshuar nga flow-i përkatës — një
+            // shkak i vetëm i gabuar për çdo rast, kurrë kod i konsumuar më parë.
+
+            // (B1) VETËM verifier-i i gabuar: klienti i vet, redirect-i i vet, përdorim i parë.
+            var verifierCase = await InteractiveClient.IssueCodeAsync(clients[0], clientIds[0], userName, "synthetic-negative-verifier");
+            using (var response = await InteractiveClient.RedeemAsync(
+                clients[0], clientIds[0], verifierCase.Code, InteractiveClient.CreatePkcePair().Verifier))
+            {
+                Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+                Assert.DoesNotContain("access_token", await InteractiveClient.BodyAsync(response), StringComparison.Ordinal);
+            }
+
+            // (B2) VETËM klienti i gabuar: verifier-i i saktë, redirect-i i saktë, përdorim i parë.
+            var clientCase = await InteractiveClient.IssueCodeAsync(clients[1], clientIds[1], userName, "synthetic-negative-client");
+            using (var response = await InteractiveClient.RedeemAsync(
+                clients[1], clientIds[2], clientCase.Code, clientCase.Verifier))
+            {
+                Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+                Assert.DoesNotContain("access_token", await InteractiveClient.BodyAsync(response), StringComparison.Ordinal);
+            }
+
+            // (C) Evidencë e MBIVENDOSJES reale në fazën konkurruese: intervalet e kërkesave
+            // `/connect/*` të të paktën një çifti flow-esh mbivendosen në kohë (Stopwatch monotonik).
+            Assert.All(concurrentRequests, intervals => Assert.NotEmpty(intervals));
             var overlappingPairs = 0;
             for (var a = 0; a < flows; a++)
             {
                 for (var b = a + 1; b < flows; b++)
                 {
-                    if (authorityRequests[a].Any(x => authorityRequests[b].Any(y => RequestTimingHandler.Overlap(x, y))))
+                    if (concurrentRequests[a].Any(x => concurrentRequests[b].Any(y => RequestTimingHandler.Overlap(x, y))))
                     {
                         overlappingPairs++;
                     }
@@ -397,6 +441,8 @@ public sealed class IdentityInteractiveReliabilityTests
         using (var ok = await InteractiveClient.RedeemAsync(client, clientId, fresh, freshVerifier))
         {
             Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+            // C2: rikuperimi prodhon access token REAL jo-bosh (jo vetëm 200).
+            Assert.False(string.IsNullOrEmpty(await InteractiveClient.AccessTokenAsync(ok)), "flow-i pas rikthimit pa access token");
         }
 
         // Gjendja e konsumuar para ndërprerjes NUK ringjallet.
