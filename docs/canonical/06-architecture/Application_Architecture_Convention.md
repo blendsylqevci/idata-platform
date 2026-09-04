@@ -73,7 +73,7 @@ Features/UpdateMembershipRole/
 ## 6. Mediator (i aprovuar nga ADR-029)
 
 - Paketa: **martinothamar/Mediator** (MIT) — **JO LuckyPennySoftware/MediatR** (alternativë e refuzuar; licencim/kosto dhe drejtim jo i pranueshëm për platformën).
-- API e konvencionit: **`IMediator`** (surface i vetëm i lejuar në Presentation).
+- API e konvencionit: **`IMediator`** (surface i vetëm i lejuar në Presentation). *Përjashtim i datuar (04.09.2026, vendim i Pronarit, jo ndryshim rregulli):* endpoint-et ekzistuese login/consent të **B.2b** (`InteractiveAuthorizationEndpoints`) thërrasin direkt `InteractiveSignInHandler`/`InteractiveConsentHandler` — zero refaktor/paketë në C1; AccessControl migron në Increment C; përjashtimi nuk shtrihet te module ose endpoint-e të tjera (receipt: `Identity_Interactive_Authorization_B2b_Record.md` §9.3; backlog: guard i derivuar mbi modulet Presentation me listë kalimtare të datuar).
 - **`Mediator.Abstractions`** referohet aty ku deklarohen messages/handlers (Application).
 - **`Mediator.SourceGenerator`** referohet VETËM në executable/outermost host (`Idata.Platform.Api`) — jo në module.
 - **Lifetime = `Scoped`** për pilotin, sepse handler-at konsumojnë DbContext/UoW me scope kërkese.

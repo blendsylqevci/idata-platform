@@ -275,9 +275,12 @@ internal sealed class OpenIddictAuthorizationProtocolGateway(
 /// <summary>
 /// Validimi i sesionit interaktiv në ÇDO kërkesë: subjekti duhet të ekzistojë
 /// dhe stamp-i i sigurisë i cookie-t duhet të përputhet EKZAKT me atë të
-/// store-it. Ndryshimi i stamp-it (ndryshim kredenciali, revokim) e bën cookie-n
-/// të pavlefshme menjëherë; DB e paarritshme = refuzim fail-closed, kurrë sesion
-/// i pranuar në verbëri.
+/// store-it. Dy klasa TË NDARA (C1): (a) identitet i pavlefshëm (subjekt i
+/// munguar/pa claims, stamp i ndryshuar) → principali refuzohet DHE sesioni
+/// revokohet (sign-out); (b) DB e paarritshme → principali refuzohet VETËM për
+/// këtë kërkesë (fail-closed, kurrë sesion i pranuar në verbëri), pa fshirë
+/// cookie-n — pas rikthimit të DB-së validimi i plotë rifillon në kërkesën e
+/// radhës, dhe një stamp i ndryshuar gjatë ndërprerjes kapet atëherë.
 /// </summary>
 internal sealed class InteractiveSessionCookieEvents(UserManager<UserAccountRecord> userManager)
     : CookieAuthenticationEvents
@@ -305,10 +308,13 @@ internal sealed class InteractiveSessionCookieEvents(UserManager<UserAccountReco
         }
         catch (Exception exception) when (IdentityInteractiveFailure.IsInfrastructure(exception))
         {
-            await RejectAsync(context);
+            // Nuk dihet nëse identiteti është i vlefshëm → asnjë privilegj për këtë
+            // kërkesë; sesioni NUK revokohet mbi një dështim infrastrukture.
+            context.RejectPrincipal();
         }
     }
 
+    /// <summary>Identitet i pavlefshëm: refuzim + revokim i sesionit (cookie-ja fshihet).</summary>
     private static Task RejectAsync(CookieValidatePrincipalContext context)
     {
         context.RejectPrincipal();

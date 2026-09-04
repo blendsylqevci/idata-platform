@@ -77,9 +77,42 @@ internal static class InteractiveClient
     private static readonly Regex HiddenField = new(
         "<input type=\"hidden\" name=\"([^\"]*)\" value=\"([^\"]*)\">", RegexOptions.CultureInvariant);
 
-    /// <summary>Klient HTTPS me cookie container dhe PA ndjekje automatike të redirect-eve.</summary>
-    internal static HttpClient CreateCookieClient(IdentityAuthorityFactory factory)
-        => factory.CreateDefaultClient(new Uri("https://localhost/"), new CookieContainerHandler());
+    /// <summary>
+    /// Klient HTTPS me cookie container dhe PA ndjekje automatike të redirect-eve.
+    /// `cookies` i ndarë lejon të njëjtin sesion mbi host-e të njëpasnjëshëm (restart);
+    /// `timing` regjistron intervalet reale të çdo kërkese (provë concurrency).
+    /// </summary>
+    internal static HttpClient CreateCookieClient(
+        IdentityAuthorityFactory factory, System.Net.CookieContainer? cookies = null, RequestTimingHandler? timing = null)
+    {
+        var handlers = new List<System.Net.Http.DelegatingHandler>();
+        if (timing is not null)
+        {
+            handlers.Add(timing);
+        }
+
+        handlers.Add(cookies is null ? new CookieContainerHandler() : new CookieContainerHandler(cookies));
+        return factory.CreateDefaultClient(new Uri("https://localhost/"), [.. handlers]);
+    }
+
+    /// <summary>Login + consent → kod autorizimi (i lëshuar nga flow-i REAL) dhe verifier-i i tij.</summary>
+    internal static async Task<(string Code, string Verifier)> IssueCodeAsync(
+        HttpClient client, string clientId, string userName, string state)
+    {
+        var (verifier, challenge) = CreatePkcePair();
+        var authorize = AuthorizationUrl(clientId, challenge, state);
+        using (var login = await SignInAsync(client, userName, IdentityInteractiveLab.SyntheticCredential, authorize))
+        {
+            Assert.Equal(System.Net.HttpStatusCode.Redirect, login.StatusCode);
+        }
+
+        var (page, fields) = await ConsentPageAsync(client, authorize);
+        page.Dispose();
+        using var granted = await DecideAsync(client, fields, InteractiveAuthorizationContract.ApproveValue);
+        var code = RedirectParameter(granted, "code");
+        Assert.False(string.IsNullOrEmpty(code), $"asnjë kod: status={granted.StatusCode} location={granted.Headers.Location}");
+        return (code!, verifier);
+    }
 
     internal static (string Verifier, string Challenge) CreatePkcePair()
     {
@@ -243,6 +276,61 @@ internal static class InteractiveClient
         }
 
         return client.SendAsync(request, TestContext.Current.CancellationToken);
+    }
+}
+
+/// <summary>Intervalet REALE (tick-e monotonikë) të kërkesave — evidencë mbivendosjeje, jo vetëm API paralelizimi.</summary>
+internal sealed class RequestTimingHandler : System.Net.Http.DelegatingHandler
+{
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(string Path, long Start, long End)> intervals = new();
+
+    internal IReadOnlyCollection<(string Path, long Start, long End)> Intervals => intervals;
+
+    protected override async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var start = System.Diagnostics.Stopwatch.GetTimestamp();
+        var response = await base.SendAsync(request, cancellationToken);
+        intervals.Enqueue((request.RequestUri?.AbsolutePath ?? string.Empty, start, System.Diagnostics.Stopwatch.GetTimestamp()));
+        return response;
+    }
+
+    internal static bool Overlap((string Path, long Start, long End) a, (string Path, long Start, long End) b)
+        => a.Start < b.End && b.Start < a.End;
+}
+
+/// <summary>
+/// Ndërprerje e PËRKOHSHME e DB-së SINTETIKE të testit (vetëm e saj): refuzim i
+/// lidhjeve të reja + ndërprerje e sesioneve ekzistuese, me rikthim të së NJËJTËS DB
+/// dhe gjendjes së saj — jo DROP, jo DB e re bosh.
+/// </summary>
+internal static class SyntheticOutage
+{
+    internal static async Task SuspendAsync(string databaseName)
+    {
+        Assert.True(SyntheticDatabaseSafety.IsSynthetic(databaseName));
+        await using var connection = new Npgsql.NpgsqlConnection(PlatformTestDatabase.MaintenanceConnectionString());
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await SyntheticDatabaseSafety.AssertMaintenanceAsync(connection);
+        await ExecuteAsync(connection, $"ALTER DATABASE \"{databaseName}\" WITH ALLOW_CONNECTIONS false");
+        await ExecuteAsync(connection,
+            $"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{databaseName}' AND pid <> pg_backend_pid()");
+    }
+
+    internal static async Task ResumeAsync(string databaseName)
+    {
+        Assert.True(SyntheticDatabaseSafety.IsSynthetic(databaseName));
+        await using var connection = new Npgsql.NpgsqlConnection(PlatformTestDatabase.MaintenanceConnectionString());
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+        await SyntheticDatabaseSafety.AssertMaintenanceAsync(connection);
+        await ExecuteAsync(connection, $"ALTER DATABASE \"{databaseName}\" WITH ALLOW_CONNECTIONS true");
+    }
+
+    private static async Task ExecuteAsync(Npgsql.NpgsqlConnection connection, string sql)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
     }
 }
 

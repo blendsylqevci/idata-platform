@@ -2,7 +2,7 @@ using System.Net;
 using System.Text.Json;
 using Idata.Platform.Modules.Identity.Application;
 using Idata.Platform.Modules.Identity.Infrastructure;
-using Npgsql;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
@@ -357,6 +357,13 @@ public sealed class IdentityInteractiveAuthorizationTests
             Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         }
 
+        // Skema DEFAULT (authenticate + challenge) mbetet validimi OpenIddict — jo cookie-ja.
+        var authentication = factory.Services
+            .GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Authentication.AuthenticationOptions>>()
+            .Value;
+        Assert.Equal(OpenIddict.Validation.AspNetCore.OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme, authentication.DefaultAuthenticateScheme);
+        Assert.Equal(OpenIddict.Validation.AspNetCore.OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme, authentication.DefaultChallengeScheme);
+
         // Cookie-ja dërgohet nga container-i; skema default mbetet validimi OpenIddict.
         using var probe = await InteractiveClient.ProtectedAsync(client, accessToken: null);
         Assert.Equal(HttpStatusCode.Unauthorized, probe.StatusCode);
@@ -670,35 +677,91 @@ public sealed class IdentityInteractiveAuthorizationTests
             Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
         }
 
-        await DropDatabaseAsync(lab.Database.DatabaseName);
-
-        // (Reliability #2) Consent me DB të paarritshme → asnjë kod, asnjë faqe consent-i.
-        // Kufiri i protokollit (validimi i klientit nga OpenIddict) dështon i pari:
-        // TestServer e ripropagon përjashtimin e pashërbyer te thirrësi — sjellje e
-        // pranueshme fail-closed, sepse asnjë kod nuk lëshohet.
+        await SyntheticOutage.SuspendAsync(lab.Database.DatabaseName);
         try
         {
-            using var consent = await client.GetAsync(new Uri(authorize, UriKind.Relative), TestContext.Current.CancellationToken);
-            Assert.NotEqual(HttpStatusCode.OK, consent.StatusCode);
-            Assert.DoesNotContain("code=", consent.Headers.Location?.ToString() ?? string.Empty, StringComparison.Ordinal);
+            // (Reliability #2) Consent me DB të paarritshme → 503 i KONTROLLUAR (HTML gjenerik),
+            // zero kod, zero detaj i brendshëm — kufiri i dështimit mbështjell edhe
+            // validimin e klientit nga OpenIddict (jo exception i propaguar te thirrësi).
+            using (var consent = await client.GetAsync(new Uri(authorize, UriKind.Relative), TestContext.Current.CancellationToken))
+            {
+                Assert.Equal(HttpStatusCode.ServiceUnavailable, consent.StatusCode);
+                var body = await InteractiveClient.BodyAsync(consent);
+                Assert.Contains("Temporarily unavailable", body, StringComparison.Ordinal);
+                Assert.DoesNotContain("Npgsql", body, StringComparison.OrdinalIgnoreCase);
+                Assert.DoesNotContain(lab.Database.DatabaseName, body, StringComparison.Ordinal);
+                Assert.Null(InteractiveClient.RedirectParameter(consent, "code"));
+            }
+
+            // (Reliability #1) Login me DB të paarritshme → 503 i kontrolluar, zero cookie.
+            using var login503 = await InteractiveClient.SignInAsync(
+                client, userName, IdentityInteractiveLab.SyntheticCredential);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, login503.StatusCode);
+            Assert.DoesNotContain(
+                InteractiveAuthorizationContract.CookieName,
+                string.Join(" ", login503.Headers.TryGetValues("Set-Cookie", out var values) ? values : []),
+                StringComparison.Ordinal);
         }
-        catch (Exception exception) when (exception is not Xunit.Sdk.XunitException)
+        finally
         {
-            Assert.True(
-                exception is System.Data.Common.DbException
-                    || exception.InnerException is System.Data.Common.DbException
-                    || exception is InvalidOperationException { InnerException: System.Data.Common.DbException },
-                $"dështim jo-infrastrukturor: {exception.GetType().Name}");
+            await SyntheticOutage.ResumeAsync(lab.Database.DatabaseName);
         }
 
-        // (Reliability #1) Login me DB të paarritshme → dështim i kontrolluar, zero cookie.
-        using var login503 = await InteractiveClient.SignInAsync(
-            client, userName, IdentityInteractiveLab.SyntheticCredential);
-        Assert.Equal(HttpStatusCode.ServiceUnavailable, login503.StatusCode);
-        Assert.DoesNotContain(
-            InteractiveAuthorizationContract.CookieName,
-            string.Join(" ", login503.Headers.TryGetValues("Set-Cookie", out var values) ? values : []),
-            StringComparison.Ordinal);
+        // Pas rikthimit të së njëjtës DB sesioni ekzistues vlen sërish (zero gjendje gjysmake).
+        using var recovered = await client.GetAsync(new Uri(authorize, UriKind.Relative), TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, recovered.StatusCode);
+    }
+
+    // ═══════════════ C1 — user-binding i antiforgery-t me sesionin interaktiv ═══════════════
+
+    [Fact]
+    public async Task Formulari_i_consent_it_lidhet_me_identitetin_e_sesionit_dhe_refuzohet_kur_sesioni_ndryshon()
+    {
+        await using var lab = await IdentityInteractiveLab.CreateAsync("b2bbind");
+        await using var factory = lab.Host();
+        using var client = InteractiveClient.CreateCookieClient(factory);
+        var clientId = await SyntheticPrincipals.RegisterPublicCodeClientAsync(factory);
+        var (userA, _) = await SyntheticPrincipals.CreateUserAsync(factory);
+        var (userB, _) = await SyntheticPrincipals.CreateUserAsync(factory);
+        var (_, challenge) = InteractiveClient.CreatePkcePair();
+        var authorize = InteractiveClient.AuthorizationUrl(clientId, challenge, SyntheticState);
+
+        // Formulari i consent-it i marrë nga sesioni i A-së.
+        using (var login = await InteractiveClient.SignInAsync(client, userA, IdentityInteractiveLab.SyntheticCredential, authorize))
+        {
+            Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+        }
+
+        var (page, formOfA) = await InteractiveClient.ConsentPageAsync(client, authorize);
+        page.Dispose();
+
+        // (a) Sesioni i A-së revokohet (stamp) → formulari i A-së nuk përputhet më me
+        //     identitetin aktual (anonim): refuzim, zero kod, zero challenge-redirect me kod.
+        await SyntheticPrincipals.RotateSecurityStampAsync(factory, userA);
+        using (var stale = await InteractiveClient.DecideAsync(client, formOfA, InteractiveAuthorizationContract.ApproveValue))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, stale.StatusCode);
+            Assert.Null(InteractiveClient.RedirectParameter(stale, "code"));
+        }
+
+        // (b) Sesion i RI i B-së në të njëjtin browser → formulari i A-së refuzohet
+        //     (identitet tjetër), ndërsa formulari i vetë B-së kalon.
+        using (var login = await InteractiveClient.SignInAsync(client, userB, IdentityInteractiveLab.SyntheticCredential, authorize))
+        {
+            Assert.Equal(HttpStatusCode.Redirect, login.StatusCode);
+        }
+
+        using (var crossIdentity = await InteractiveClient.DecideAsync(client, formOfA, InteractiveAuthorizationContract.ApproveValue))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, crossIdentity.StatusCode);
+            Assert.Null(InteractiveClient.RedirectParameter(crossIdentity, "code"));
+        }
+
+        var (pageB, formOfB) = await InteractiveClient.ConsentPageAsync(client, authorize);
+        pageB.Dispose();
+        using var granted = await InteractiveClient.DecideAsync(client, formOfB, InteractiveAuthorizationContract.ApproveValue);
+        Assert.Equal(HttpStatusCode.Redirect, granted.StatusCode);
+        Assert.False(string.IsNullOrEmpty(InteractiveClient.RedirectParameter(granted, "code")));
     }
 
     private static async Task<string> BodyOfAsync(HttpClient client, string userName, string credential)
@@ -717,16 +780,5 @@ public sealed class IdentityInteractiveAuthorizationTests
             $"status={response.StatusCode} body={body}");
         Assert.DoesNotContain("access_token", body, StringComparison.Ordinal);
         Assert.Contains("error", body, StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static async Task DropDatabaseAsync(string databaseName)
-    {
-        Assert.True(SyntheticDatabaseSafety.IsSynthetic(databaseName));
-        await using var connection = new NpgsqlConnection(PlatformTestDatabase.MaintenanceConnectionString());
-        await connection.OpenAsync(TestContext.Current.CancellationToken);
-        await SyntheticDatabaseSafety.AssertMaintenanceAsync(connection);
-        await using var command = connection.CreateCommand();
-        command.CommandText = $"DROP DATABASE IF EXISTS \"{databaseName}\" WITH (FORCE)";
-        await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
     }
 }

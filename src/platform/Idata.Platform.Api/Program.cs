@@ -80,9 +80,19 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference(options => options.AddDocument("platform-v1"));
 }
 
+// B.2b C1: kufiri i NGUSHTË i dështimit infrastrukturor për `/connect/*` dhe
+// `/identity/*` — PARA autentikimit, që të mbështjellë edhe përpunimin e
+// protokollit nga OpenIddict (DB e paarritshme → 503 i kontrolluar, zero 500).
+app.UseIdentityInteractionFailureBoundary();
+
 // B.2a: middleware-i REAL i autentikimit/autorizimit — PARA çdo endpoint-i.
 app.UseAuthentication();
 app.UseAuthorization();
+
+// B.2b C1: sesioni interaktiv i validuar bëhet efektiv në HttpContext.User VETËM
+// për login/authorize (jo për token endpoint-in, jo për API-të) — para antiforgery-t,
+// që formulari të lidhet me identitetin e sesionit. Skema default mbetet bearer.
+app.UseIdentityInteractiveSession();
 
 // B.2b: kufijtë e sipërfaqes interaktive — rate limiting i deklaruar per-endpoint
 // dhe antiforgery i detyrueshëm për çdo POST formulari.

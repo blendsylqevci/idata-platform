@@ -171,6 +171,15 @@ public sealed class IdentityAuthorityBoundaryTests
             ("Idata.Platform.Modules.Identity.Presentation.InteractiveAuthorizationEndpoints",
              "MapIdentityInteractiveAuthorization"),
             host);
+
+        // C1: kufiri i dështimit infrastrukturor dhe sesioni interaktiv në HttpContext.User
+        // janë të lidhur realisht te composition root-i (jo deklarativë).
+        foreach (var required in (string[])["UseIdentityInteractionFailureBoundary", "UseIdentityInteractiveSession"])
+        {
+            Assert.Contains(
+                ("Idata.Platform.Modules.Identity.Presentation.InteractiveAuthorizationPipeline", required),
+                host);
+        }
         foreach (var required in (string[])["UseRateLimiter", "UseAntiforgery"])
         {
             Assert.Contains(host, reference => reference.Member == required);

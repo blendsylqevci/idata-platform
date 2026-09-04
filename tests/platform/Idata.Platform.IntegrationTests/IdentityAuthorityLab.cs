@@ -5,6 +5,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Idata.Platform.Modules.Identity.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -136,6 +137,14 @@ public sealed record IdentityAuthorityHostSettings
     /// host-i mban saktësisht grant-et production (authorization_code + PKCE).
     /// </summary>
     public bool EnableProtectedProbe { get; init; }
+
+    /// <summary>
+    /// Test-only (B.2b C1, restart-mid-flow): key ring Data Protection i qëndrueshëm në
+    /// një direktori TË PËRKOHSHME të kontrolluar nga testi — që dy host-e të njëpasnjëshëm
+    /// të ndajnë të njëjtat çelësa (cookie/antiforgery). NUK është vendim production
+    /// për key custody (ADR-025/026 mbeten OPEN); null = key ring efemer i host-it.
+    /// </summary>
+    public string? DataProtectionKeyDirectory { get; init; }
 
     /// <summary>Mbishkrime opsionale të kufijve të interaksionit (B.2b) — null = vlera e paracaktuar e kodit.</summary>
     public int? SessionMinutes { get; init; }
@@ -309,6 +318,14 @@ public sealed class IdentityAuthorityFactory(IdentityAuthorityHostSettings setti
         {
             builder.ConfigureServices(services =>
                 services.AddOpenIddict().AddServer(options => options.AddEphemeralSigningKey()));
+        }
+
+        if (Settings.DataProtectionKeyDirectory is { } keyDirectory)
+        {
+            builder.ConfigureServices(services =>
+                services.AddDataProtection()
+                    .SetApplicationName("idata-synthetic-interactive-restart")
+                    .PersistKeysToFileSystem(new DirectoryInfo(keyDirectory)));
         }
 
         if (Settings.EnableProtectedProbe)
