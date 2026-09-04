@@ -79,17 +79,29 @@ public sealed class IdentityAuthorityBoundaryTests
         (typeof(OpenIddictServerBuilder), "DisableAccessTokenEncryption"),
         (typeof(OpenIddictServerBuilder), "DisableTokenStorage"),
         (typeof(OpenIddictServerAspNetCoreBuilder), "DisableTransportSecurityRequirement"),
-        (typeof(OpenIddictServerAspNetCoreBuilder), "EnableAuthorizationEndpointPassthrough"),
         (typeof(OpenIddictServerAspNetCoreBuilder), "EnableTokenEndpointPassthrough"),
         (typeof(OpenIddictValidationBuilder), "UseIntrospection"),
         (typeof(OpenIddictValidationBuilder), "SetClientId"),
         (typeof(OpenIddictValidationBuilder), "SetClientSecret"),
     ];
 
+    /// <summary>
+    /// B.2b — ZËVENDËSIM I KONTROLLUAR (jo heqje): passthrough-i i endpoint-it të
+    /// AUTORIZIMIT del nga lista "e ndaluar kudo" dhe hyn në listën "vetëm te owner-i
+    /// i aprovuar i interaksionit" (Identity.Infrastructure), sepse login/consent-i
+    /// real kërkon dorëzimin e kërkesës TË VALIDUAR te sipërfaqja jonë. Passthrough-i
+    /// i TOKEN endpoint-it mbetet i ndaluar KUDO: lëshimi i token-ave nuk kalon kurrë
+    /// nga kodi ynë.
+    /// </summary>
+    private static readonly (Type Builder, string Member)[] InteractionOwnerOnlyMembers =
+    [
+        (typeof(OpenIddictServerAspNetCoreBuilder), "EnableAuthorizationEndpointPassthrough"),
+    ];
+
     [Fact]
     public void Lista_e_ndaluar_perputhet_me_API_ne_reale_te_OpenIddict_7_6_0_asnje_hyrje_e_vdekur()
     {
-        foreach (var (builder, member) in ForbiddenBuilderMembers)
+        foreach (var (builder, member) in ForbiddenBuilderMembers.Concat(InteractionOwnerOnlyMembers))
         {
             Assert.True(builder.GetMethods().Any(candidate => candidate.Name == member),
                 $"Anëtari i ndaluar nuk ekziston në API-në reale: {builder.Name}.{member}");
@@ -112,8 +124,83 @@ public sealed class IdentityAuthorityBoundaryTests
                 ForbiddenBuilderMembers.Any(forbidden => forbidden.Member == reference.Member)
                 && reference.Type.StartsWith(DependencyInjectionNamespace, StringComparison.Ordinal)
                 && reference.Type.Contains("OpenIddict", StringComparison.Ordinal));
-            _ = assembly;
+
+            // Passthrough-i i autorizimit lejohet VETËM te owner-i i interaksionit.
+            if (!string.Equals(assembly, IdentityInfrastructureAssembly, StringComparison.Ordinal))
+            {
+                foreach (var (builder, member) in InteractionOwnerOnlyMembers)
+                {
+                    Assert.DoesNotContain((builder.FullName!, member), members);
+                }
+            }
         }
+    }
+
+    /// <summary>Guard-i i zëvendësimit nuk është i vdekur: owner-i i interaksionit e përdor REALISHT.</summary>
+    [Fact]
+    public void Passthrough_i_autorizimit_ekziston_vetem_te_owner_i_i_interaksionit()
+    {
+        var members = MemberReferencesByAssembly()[IdentityInfrastructureAssembly];
+        foreach (var (builder, member) in InteractionOwnerOnlyMembers)
+        {
+            Assert.Contains((builder.FullName!, member), members);
+        }
+    }
+
+    /// <summary>
+    /// B.2b — wiring-u i KËRKUAR i interaksionit te owner-i (login real, session
+    /// cookie e veçantë, antiforgery, rate limiting) dhe te composition root-i
+    /// (regjistrim + middleware + mapping), që asnjë kufi të mos jetë deklarativ.
+    /// </summary>
+    [Fact]
+    public void Owner_i_interaksionit_dhe_composition_root_i_lidhin_kufijte_realisht()
+    {
+        var references = MemberReferencesByAssembly();
+        var owner = references[IdentityInfrastructureAssembly];
+        foreach (var required in (string[])["AddSignInManager", "AddCookie", "AddAntiforgery", "AddRateLimiter"])
+        {
+            Assert.Contains(owner, reference => reference.Member == required);
+        }
+
+        var host = references[ApiAssembly];
+        Assert.Contains(
+            ("Idata.Platform.Modules.Identity.Infrastructure.IdentityInteractiveAuthorizationServiceCollectionExtensions",
+             "AddIdentityInteractiveAuthorization"),
+            host);
+        Assert.Contains(
+            ("Idata.Platform.Modules.Identity.Presentation.InteractiveAuthorizationEndpoints",
+             "MapIdentityInteractiveAuthorization"),
+            host);
+
+        // C1: kufiri i dështimit infrastrukturor dhe sesioni interaktiv në HttpContext.User
+        // janë të lidhur realisht te composition root-i (jo deklarativë).
+        foreach (var required in (string[])["UseIdentityInteractionFailureBoundary", "UseIdentityInteractiveSession"])
+        {
+            Assert.Contains(
+                ("Idata.Platform.Modules.Identity.Presentation.InteractiveAuthorizationPipeline", required),
+                host);
+        }
+        foreach (var required in (string[])["UseRateLimiter", "UseAntiforgery"])
+        {
+            Assert.Contains(host, reference => reference.Member == required);
+        }
+    }
+
+    /// <summary>
+    /// Sipërfaqja interaktive mbetet e NGUSHTË: zero protokoll, zero store, zero
+    /// kriptografi tokenash në assembly-n e Presentation-it.
+    /// </summary>
+    [Fact]
+    public void Presentation_i_interaksionit_nuk_prek_protokollin_as_store_in()
+    {
+        var members = MemberReferencesByAssembly()["Idata.Platform.Modules.Identity.Presentation"];
+        Assert.NotEmpty(members);
+        Assert.DoesNotContain(members, reference =>
+            reference.Type.StartsWith("OpenIddict", StringComparison.Ordinal)
+            || reference.Type.StartsWith("Microsoft.IdentityModel", StringComparison.Ordinal)
+            || reference.Type.StartsWith("Microsoft.AspNetCore.Identity", StringComparison.Ordinal)
+            || reference.Type.StartsWith("Microsoft.Extensions.Identity", StringComparison.Ordinal)
+            || reference.Type.StartsWith("Idata.Platform.Persistence", StringComparison.Ordinal));
     }
 
     // ═══════ Wiring i KËRKUAR (guard-et jo të vdekura) ═══════

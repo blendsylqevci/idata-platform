@@ -1,7 +1,7 @@
 # iData+ — Project Delivery Roadmap, Fazat 1–10
 
 **Status:** canonical / approved (kopja kanonike e roadmap-it — miratuar nga Pronari; merged PR #9, përditësime me PR review)  
-**Data:** 2026-07-07 · **Përditësuar:** 2026-09-03 (PR #31 MERGED, squash `42993f0` — **B.2a = COMPLETED / MERGED**; hapi pasues B.2b = NOT STARTED / NOT AUTHORIZED / SCOPE NOT YET DEFINED; PR #30 MERGED `8d3aa85` — Pre-B2 Increment 2 COMPLETED; **ENG-006 + ENG-008 = CLOSED**; hapi i fundit i mbyllur = **F1 Increment B.2a — Co-located OpenIddict Authority, Credentials and Local Token Validation** (COMPLETED / MERGED — PR #31 squash `42993f0`, 03.09.2026); B.3 = NOT STARTED / BLOCKED; **PLANET-FIRST — ADR-030 ACCEPTED / EFFECTIVE (03.09.2026: Fable → Codex → HG-PR31-MERGE → squash-merge PR #31 `42993f0`), shih §3a**)
+**Data:** 2026-07-07 · **Përditësuar:** 2026-09-04 (**F1 Increment B.2b — Interactive OAuth 2.0 Authorization Code + PKCE = IMPLEMENTED IN BRANCH / PENDING_INDEPENDENT_REVIEW**, branch `feat/f1-b2b-interactive-authorization`, PR OPEN; 2026-09-03: PR #31 MERGED, squash `42993f0` — **B.2a = COMPLETED / MERGED**; hapi pasues B.2b Interactive OAuth 2.0 Authorization Code + PKCE = IMPLEMENTED IN BRANCH / PENDING_INDEPENDENT_REVIEW (branch `feat/f1-b2b-interactive-authorization`, PR OPEN); PR #30 MERGED `8d3aa85` — Pre-B2 Increment 2 COMPLETED; **ENG-006 + ENG-008 = CLOSED**; hapi i fundit i mbyllur = **F1 Increment B.2a — Co-located OpenIddict Authority, Credentials and Local Token Validation** (COMPLETED / MERGED — PR #31 squash `42993f0`, 03.09.2026); B.3 = NOT STARTED / BLOCKED; **PLANET-FIRST — ADR-030 ACCEPTED / EFFECTIVE (03.09.2026: Fable → Codex → HG-PR31-MERGE → squash-merge PR #31 `42993f0`), shih §3a**)
 **Burime kryesore:** SSOT §3/§8/§12, Feature Status Register, Outstanding Confirmations Tracker, ADR Register, 5 PoC Specs, PRO DATA Evidence Closure, KABI Operational Evidence Update, Accountant Confirmation Pack, Increment 1 PR #4/#6, security PR #8  
 **Rregull i hekurt:** ky roadmap **nuk krijon numërim të ri fazash**. Ndjek 1:1 SSOT §3. Nëse ndryshon numërimi, duhet vendim formal në SSOT + Decisions Log.
 
@@ -105,7 +105,7 @@ Ky plan ruan dhjetorin për rehearsal, UAT, trajnim dhe freeze; **CURRENT (ADR-0
 
 **Ky është overlay i rendit të ekzekutimit, JO ndryshim i identitetit, emërtimit apo numërimit të fazave F1–F10.** Sjellja përpara e një capability-slice **nuk** e bën gjithë fazën COMPLETE; faza mbyllet vetëm me kriteret e veta të pranimit.
 
-1. **F1 — shared foundation** (B.2a = COMPLETED / MERGED — PR #31 squash `42993f0`, 03.09.2026; hapi pasues B.2b = NOT STARTED / NOT AUTHORIZED / SCOPE NOT YET DEFINED; pastaj B.3, C, D sipas Convention §15).
+1. **F1 — shared foundation** (B.2a = COMPLETED / MERGED — PR #31 squash `42993f0`, 03.09.2026; hapi pasues B.2b Interactive OAuth 2.0 Authorization Code + PKCE = IMPLEMENTED IN BRANCH / PENDING_INDEPENDENT_REVIEW (branch `feat/f1-b2b-interactive-authorization`, PR OPEN); pastaj B.3, C, D sipas Convention §15).
 2. **F2 — Accounting Core shared** + **vetëm slice-i që kërkon PLANET**.
 3. **F3 — inventar/recetura/COGS shared/PLANET**, slice-i i nevojshëm.
 4. **Capabilities shared Edge/offline/SEF** tërhiqen përpara **vetëm aq sa kërkon PLANET**; kjo **nuk** e mbyll fazën historike KABI (F5) ku ato figurojnë.

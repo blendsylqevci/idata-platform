@@ -29,6 +29,45 @@ public sealed class IdentityAuthorityOptions
     public int? ClockSkewSeconds { get; set; }
 
     public IdentityAuthorityCredentialsOptions Credentials { get; set; } = new();
+
+    /// <summary>Kufijtë e sipërfaqes interaktive (B.2b) — të deklaruar dhe të validuar fail-closed.</summary>
+    public IdentityInteractionOptions Interaction { get; set; } = new();
+}
+
+/// <summary>
+/// Kufijtë EKSPLICITË të interaksionit (login/consent) — vlerat e paracaktuara
+/// janë konstante të deklaruara në kod (jo magji e fshehur) dhe mund të
+/// mbishkruhen nga konfigurimi i jashtëm; çdo mbishkrim jashtë kufijve = startup
+/// FAIL. Nuk ka fallback të heshtur dhe nuk ka kufi të pakufizuar.
+/// </summary>
+public sealed class IdentityInteractionOptions
+{
+    public const int DefaultSessionMinutes = 30;
+    public const int DefaultMaxFailedAccessAttempts = 5;
+    public const int DefaultLockoutMinutes = 15;
+    public const int DefaultLoginPermitLimit = 20;
+    public const int DefaultLoginWindowSeconds = 60;
+
+    public const int MaxSessionMinutes = 1440;
+    public const int MaxLockoutAttempts = 20;
+    public const int MaxLockoutMinutes = 1440;
+    public const int MaxLoginPermitLimit = 1000;
+    public const int MaxLoginWindowSeconds = 3600;
+
+    /// <summary>Jetëgjatësia e session cookie-t interaktive (sliding = OFF).</summary>
+    public int SessionMinutes { get; set; } = DefaultSessionMinutes;
+
+    /// <summary>Tentativa të dështuara para bllokimit të llogarisë.</summary>
+    public int MaxFailedAccessAttempts { get; set; } = DefaultMaxFailedAccessAttempts;
+
+    /// <summary>Kohëzgjatja e bllokimit pas kalimit të pragut.</summary>
+    public int LockoutMinutes { get; set; } = DefaultLockoutMinutes;
+
+    /// <summary>Kërkesa POST login të lejuara për dritare, per burim.</summary>
+    public int LoginPermitLimit { get; set; } = DefaultLoginPermitLimit;
+
+    /// <summary>Gjatësia e dritares fikse të rate-limit-it, në sekonda.</summary>
+    public int LoginWindowSeconds { get; set; } = DefaultLoginWindowSeconds;
 }
 
 /// <summary>Burimet e credentials — persistent (PFX) dhe/ose eksplicite development.</summary>

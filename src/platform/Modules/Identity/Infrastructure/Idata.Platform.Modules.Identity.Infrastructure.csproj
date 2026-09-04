@@ -7,6 +7,7 @@
        ZERO Client, ZERO external IdP, ZERO projection (B.3). Domain/Application
        te modulit vijne kur ekzistojne koncepte reale (ADR-029 §14). -->
   <ItemGroup>
+    <ProjectReference Include="..\Application\Idata.Platform.Modules.Identity.Application.csproj" />
     <ProjectReference Include="..\..\..\Idata.Platform.Persistence\Idata.Platform.Persistence.csproj" />
   </ItemGroup>
   <ItemGroup>

@@ -45,13 +45,17 @@ public sealed class ApiSurfaceTests
                 && !pattern.StartsWith("scalar", StringComparison.Ordinal))
             .ToArray();
 
+        // B.2b: sipërfaqja interaktive e authority-t (login + consent) është pjesë e
+        // route table-it, POR mbetet JASHTË kontratës publike OpenAPI (ExcludeFromDescription).
         Assert.Equal(
             [
                 "api/platform/access-context",
                 "api/platform/memberships/{membershipId:guid}/role",
                 "api/platform/status",
+                "connect/authorize",
+                "identity/login",
             ],
-            functional);
+            functional.Distinct().Order(StringComparer.Ordinal).ToArray());
 
         Assert.Single(patterns, pattern => pattern == "api/platform/status"); // zero duplicate
         Assert.DoesNotContain(patterns, pattern => pattern.Contains("/poc", StringComparison.OrdinalIgnoreCase));

@@ -377,11 +377,19 @@ public sealed class IdentityStoreFoundationTests
             .Select(endpoint => (endpoint.RoutePattern.RawText ?? string.Empty).TrimStart('/'))
             .ToArray();
 
-        Assert.DoesNotContain(patterns, pattern =>
-            pattern.Contains("connect", StringComparison.OrdinalIgnoreCase)
-            || pattern.Contains("identity", StringComparison.OrdinalIgnoreCase)
-            || pattern.Contains("account", StringComparison.OrdinalIgnoreCase)
-            || pattern.Contains("login", StringComparison.OrdinalIgnoreCase)
-            || pattern.Contains("token", StringComparison.OrdinalIgnoreCase));
+        // B.2b (zëvendësim i KONTROLLUAR i pin-it "zero endpoint" të B.1): route table-i
+        // fiton EKZAKTËSISHT sipërfaqen e autorizuar të interaksionit — asgjë tjetër
+        // identity/OIDC (zero account/logout/userinfo/token endpoint i kodit tonë).
+        var identityRoutes = patterns
+            .Where(pattern =>
+                pattern.Contains("connect", StringComparison.OrdinalIgnoreCase)
+                || pattern.Contains("identity", StringComparison.OrdinalIgnoreCase)
+                || pattern.Contains("account", StringComparison.OrdinalIgnoreCase)
+                || pattern.Contains("login", StringComparison.OrdinalIgnoreCase)
+                || pattern.Contains("token", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(["connect/authorize", "identity/login"], identityRoutes);
     }
 }

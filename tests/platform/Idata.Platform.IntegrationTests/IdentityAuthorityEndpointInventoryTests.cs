@@ -63,7 +63,8 @@ public sealed class IdentityAuthorityEndpointInventoryTests
         Assert.Equal([GrantTypes.AuthorizationCode], server.GrantTypes.Order(StringComparer.Ordinal).ToArray());
         Assert.Equal([ResponseTypes.Code], server.ResponseTypes.Order(StringComparer.Ordinal).ToArray());
         Assert.True(server.RequireProofKeyForCodeExchange);
-        Assert.Contains(CodeChallengeMethods.Sha256, server.CodeChallengeMethods);
+        // B.2b: `S256` është metoda E VETME — `plain` u hoq nga seti i serverit.
+        Assert.Equal([CodeChallengeMethods.Sha256], server.CodeChallengeMethods.Order(StringComparer.Ordinal).ToArray());
         Assert.False(server.DisableTokenStorage);
         Assert.False(server.DisableAccessTokenEncryption);
         Assert.False(server.IgnoreEndpointPermissions);
@@ -72,7 +73,9 @@ public sealed class IdentityAuthorityEndpointInventoryTests
         Assert.False(server.EnableDegradedMode);
 
         var aspnet = factory.Services.GetRequiredService<IOptionsMonitor<OpenIddictServerAspNetCoreOptions>>().Get(Options.DefaultName);
-        Assert.False(aspnet.EnableAuthorizationEndpointPassthrough);
+        // B.2b: passthrough VETËM për autorizimin (login/consent i owner-it të aprovuar);
+        // token endpoint-i mbetet tërësisht i OpenIddict-it.
+        Assert.True(aspnet.EnableAuthorizationEndpointPassthrough);
         Assert.False(aspnet.EnableTokenEndpointPassthrough);
         Assert.False(aspnet.DisableTransportSecurityRequirement);
     }

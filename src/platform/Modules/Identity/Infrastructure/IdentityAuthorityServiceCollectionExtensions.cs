@@ -82,24 +82,65 @@ public static class IdentityAuthorityServiceCollectionExtensions
                 options.AllowAuthorizationCodeFlow()
                     .RequireProofKeyForCodeExchange();
 
-                // Zero passthrough: asnjë endpoint OpenIddict nuk i delegohet kodit tonë.
-                options.UseAspNetCore();
+                // B.2b: passthrough VETËM për endpoint-in e autorizimit — kërkesa e
+                // VALIDUAR nga serveri i dorëzohet owner-it të aprovuar të interaksionit
+                // (Identity.Presentation: login/consent). Token endpoint-i mbetet
+                // TËRËSISHT i OpenIddict-it: zero passthrough, zero lëshim nga kodi ynë.
+                options.UseAspNetCore()
+                    .EnableAuthorizationEndpointPassthrough();
 
-                // E2 OPEN — çdo kërkesë autorizimi refuzohet me përgjigje OAuth 2.0
-                // të kontrolluar (jo 500, kurrë kod autorizimi).
-                options.AddEventHandler<OpenIddictServerEvents.HandleAuthorizationRequestContext>(descriptor =>
+                // PKCE me `S256` i DETYRUESHËM: metoda `plain` hiqet nga seti i
+                // serverit — kërkesat me `plain` (ose pa metodë) refuzohen.
+                options.Configure(server => server.CodeChallengeMethods.Remove(OpenIddictConstants.CodeChallengeMethods.Plain));
+
+                // B.2b është VETËM OAuth 2.0: scope-i `openid` (dhe rrjedhimisht ID
+                // token/UserInfo/nonce) refuzohet SHPREHIMISHT në kufirin e protokollit.
+                options.AddEventHandler<OpenIddictServerEvents.ValidateAuthorizationRequestContext>(descriptor =>
                     descriptor.UseInlineHandler(context =>
                     {
-                        context.Reject(
-                            error: OpenIddictConstants.Errors.UnsupportedResponseType,
-                            description: "identity-authority: interactive authorization is not available in this increment.");
+                        if (context.Request.HasScope(OpenIddictConstants.Scopes.OpenId))
+                        {
+                            context.Reject(
+                                error: OpenIddictConstants.Errors.InvalidScope,
+                                description: "The 'openid' scope is not supported by this authority.");
+                        }
+
                         return default;
                     }));
+
+                // Metadata publike nuk premton kurrë aftësi që ky increment nuk i ka:
+                // zero algoritme ID-token, zero `openid` në scope-t e shpallura.
+                options.AddEventHandler<OpenIddictServerEvents.HandleConfigurationRequestContext>(descriptor =>
+                    descriptor.UseInlineHandler(context =>
+                    {
+                        context.IdTokenSigningAlgorithms.Clear();
+                        context.Scopes.Remove(OpenIddictConstants.Scopes.OpenId);
+                        return default;
+                    })
+                    // PAS çdo handler-i default që mbush metadata-n, që heqja të jetë efektive.
+                    .SetOrder(OpenIddictServerHandlers.Discovery.AttachAdditionalMetadata.Descriptor.Order + 1_000));
 
                 if (configured)
                 {
                     options.SetIssuer(new Uri(authority.Issuer!, UriKind.Absolute));
                     RegisterCredentials(options, authority.Credentials, isDevelopment, state);
+
+                    // JOSE mbi stack-un e SERVER-it (B.2b, mbyllje e follow-up-it të B.2a):
+                    // `enc` i JWE-së së jashtme dhe `alg` i firmës së JWS-së së brendshme
+                    // kalojnë nga i njëjti validator REAL që përdor validimi i aksesit.
+                    options.Configure(server =>
+                    {
+                        server.TokenValidationParameters.ValidAlgorithms = null;
+                        server.TokenValidationParameters.AlgorithmValidator = jose.ValidateAlgorithm;
+                    });
+
+                    // Header-i i JASHTËM (`alg`/`enc`) i ÇDO artefakti të mbrojtur që
+                    // konsumon `/connect/token` (kodet e autorizimit) kontrollohet PARA
+                    // çdo unwrap-i të CEK-ut — IdentityModel nuk e validon kurrë `alg`-un
+                    // e jashtëm. Refuzim OAuth `invalid_grant`, kurrë 500, kurrë token.
+                    options.AddEventHandler<OpenIddictServerEvents.ValidateTokenContext>(descriptor =>
+                        descriptor.UseInlineHandler(context => jose.ValidateServerOuterHeader(context))
+                            .SetOrder(OpenIddictServerHandlers.Protection.ValidateIdentityModelToken.Descriptor.Order - 500));
                 }
             })
             .AddValidation(options =>
@@ -368,6 +409,38 @@ public static class IdentityAuthorityServiceCollectionExtensions
             errors.Add("clock-skew-out-of-bounds");
         }
 
+        // B.2b: kufijtë e interaksionit kanë vlera të paracaktuara TË DEKLARUARA
+        // (konstante), por çdo mbishkrim nga konfigurimi validohet fail-closed —
+        // zero kufi i pakufizuar, zero çaktivizim i lockout-it/rate-limit-it.
+        var interaction = options.Interaction;
+        if (interaction.SessionMinutes < 1 || interaction.SessionMinutes > IdentityInteractionOptions.MaxSessionMinutes)
+        {
+            errors.Add("interaction-session-minutes-out-of-bounds");
+        }
+
+        if (interaction.MaxFailedAccessAttempts < 1
+            || interaction.MaxFailedAccessAttempts > IdentityInteractionOptions.MaxLockoutAttempts)
+        {
+            errors.Add("interaction-lockout-attempts-out-of-bounds");
+        }
+
+        if (interaction.LockoutMinutes < 1 || interaction.LockoutMinutes > IdentityInteractionOptions.MaxLockoutMinutes)
+        {
+            errors.Add("interaction-lockout-minutes-out-of-bounds");
+        }
+
+        if (interaction.LoginPermitLimit < 1
+            || interaction.LoginPermitLimit > IdentityInteractionOptions.MaxLoginPermitLimit)
+        {
+            errors.Add("interaction-login-permit-limit-out-of-bounds");
+        }
+
+        if (interaction.LoginWindowSeconds < 1
+            || interaction.LoginWindowSeconds > IdentityInteractionOptions.MaxLoginWindowSeconds)
+        {
+            errors.Add("interaction-login-window-seconds-out-of-bounds");
+        }
+
         return errors;
     }
 }
@@ -509,6 +582,28 @@ public sealed class IdentityJosePolicy
             context.Reject(
                 error: OpenIddictConstants.Errors.InvalidToken,
                 description: "The specified token is invalid.");
+        }
+
+        return default;
+    }
+
+    /// <summary>
+    /// I njëjti gate mbi stack-un e SERVER-it (artefaktet e mbrojtura që konsumon
+    /// `/connect/token`): refuzim OAuth `invalid_grant` para çdo dekriptimi, kurrë
+    /// 500, kurrë token — asnjë klasë refuzimi nuk del jashtë.
+    /// </summary>
+    internal ValueTask ValidateServerOuterHeader(OpenIddictServerEvents.ValidateTokenContext context)
+    {
+        if (context.IsRejected)
+        {
+            return default;
+        }
+
+        if (RejectOuterHeader(context.Token) is not null)
+        {
+            context.Reject(
+                error: OpenIddictConstants.Errors.InvalidGrant,
+                description: "The specified grant is invalid.");
         }
 
         return default;

@@ -135,6 +135,7 @@
 **Risqet:** mediator shton një indirection (kufizohet me allowlist §8 të Convention-it) · migrimi C i AccessControl mund të prekë teste (politika: baseline i plotë GREEN, ndryshime vetëm mekanike, çdo devijim semantik = flamur) · Scoped lifetime kërkon kujdes në background workers (vendoset per-host në Increment A).
 **Rendi i implementimit:** **A** schema-free pilot (PlatformStatus) → **B** identity foundation (ADR-028) → **C** AccessControl migration → **D** module të reja — secili me PR/CI/review/Human Gate; detajet = Convention §15.
 **Specifikimi subordinate:** `docs/canonical/06-architecture/Application_Architecture_Convention.md` — specifikimi normativ i detajuar; SSOT/Roadmap/INDEX janë vetëm consumers/pointers.
+**Anotim i datuar 04.09.2026 (pa rishkrim të vendimit) — përjashtim i kufizuar për B.2b:** “Për B.2b autorizohet përjashtim i kufizuar nga kërkesa IMediator, vetëm për endpoint-et ekzistuese login/consent. Zero refaktor dhe zero paketë në C1. ADR-029 mbetet në fuqi; migrimi i AccessControl mbetet Increment C. Përjashtimi nuk autorizon të njëjtin model për module të tjera.” — receipt te `Identity_Interactive_Authorization_B2b_Record.md` §9.3; rregulli i përgjithshëm `IMediator` i pandryshuar.
 **Pronari:** Pronari + Tech + PM. **Afati:** effective vetëm pas Human Gate + merge; implementimi nis me Increment A me goal/prompt të ri.
 ---
 
