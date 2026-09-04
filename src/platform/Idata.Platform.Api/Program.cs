@@ -2,6 +2,7 @@ using Idata.Platform.Modules.AccessControl.Application;
 using Idata.Platform.Modules.AccessControl.Infrastructure;
 using Idata.Platform.Modules.AccessControl.Presentation;
 using Idata.Platform.Modules.Identity.Infrastructure;
+using Idata.Platform.Modules.Identity.Presentation;
 using Idata.Platform.Modules.PlatformStatus.Application;
 using Idata.Platform.Modules.PlatformStatus.Application.Features.GetPlatformStatus;
 using Idata.Platform.Modules.PlatformStatus.Infrastructure;
@@ -46,8 +47,15 @@ builder.Services.AddIdentityStoreFoundation();
 // Identity.Infrastructure; host-i nuk referon asnjë tip OpenIddict): Server
 // (issuer/endpoint-e/PKCE, credentials FAIL-CLOSED nga konfigurimi i jashtëm)
 // + Validation lokale (UseLocalServer) + skema default = handler-i i validimit.
-// Zero login/consent UI (E2 OPEN), zero projection (B.3), zero flow biznesi.
+// Zero projection (B.3), zero flow biznesi.
 builder.Services.AddIdentityAuthority(builder.Configuration, builder.Environment);
+
+// ADR-028 Increment B.2b — interaksioni REAL i authority-t (owner i wiring-ut =
+// Identity.Infrastructure): login me ASP.NET Core Identity, session cookie e
+// VEÇANTË (jo skema default e API-së), consent eksplicit, antiforgery dhe rate
+// limiting. Vetëm OAuth 2.0 Authorization Code + PKCE: zero `openid`, zero ID
+// token, zero UserInfo, zero refresh/logout, zero MFA (mbeten OPEN).
+builder.Services.AddIdentityInteractiveAuthorization(builder.Configuration);
 
 // AccessControl (F1.1) — provider-neutral: autoriteti i autorizimit tenant mbetet
 // DB-backed deny-by-default; principal-i vjen VETËM nga handler-i i validimit
@@ -76,8 +84,14 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 
+// B.2b: kufijtë e sipërfaqes interaktive — rate limiting i deklaruar per-endpoint
+// dhe antiforgery i detyrueshëm për çdo POST formulari.
+app.UseRateLimiter();
+app.UseAntiforgery();
+
 app.MapControllers();
 app.MapAccessControl();
+app.MapIdentityInteractiveAuthorization();
 
 app.Run();
 

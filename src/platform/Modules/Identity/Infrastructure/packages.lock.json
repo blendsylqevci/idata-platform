@@ -308,6 +308,9 @@
           "OpenIddict.Abstractions": "7.6.0"
         }
       },
+      "idata.platform.modules.identity.application": {
+        "type": "Project"
+      },
       "idata.platform.persistence": {
         "type": "Project",
         "dependencies": {

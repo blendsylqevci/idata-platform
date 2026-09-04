@@ -132,6 +132,23 @@ public sealed record IdentityAuthorityHostSettings
     public bool EnableTestIssuance { get; init; }
 
     /// <summary>
+    /// Test-only (B.2b): VETËM probe-i `[Authorize]` — pa asnjë grant shtesë, pra
+    /// host-i mban saktësisht grant-et production (authorization_code + PKCE).
+    /// </summary>
+    public bool EnableProtectedProbe { get; init; }
+
+    /// <summary>Mbishkrime opsionale të kufijve të interaksionit (B.2b) — null = vlera e paracaktuar e kodit.</summary>
+    public int? SessionMinutes { get; init; }
+
+    public int? MaxFailedAccessAttempts { get; init; }
+
+    public int? LockoutMinutes { get; init; }
+
+    public int? LoginPermitLimit { get; init; }
+
+    public int? LoginWindowSeconds { get; init; }
+
+    /// <summary>
     /// Test-only: shton një çelës EPHEMERAL firmë JASHTË konfigurimit (si një
     /// regjistrim i tretë) — provon që policy-ja vlerësohet mbi credentials
     /// REALE të OpenIddict, jo vetëm mbi konfigurim.
@@ -174,6 +191,17 @@ public sealed record IdentityAuthorityHostSettings
         if (ClockSkewSeconds is not null)
         {
             values[prefix + "ClockSkewSeconds"] = ClockSkewSeconds.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        foreach (var (name, value) in ((string Name, int? Value)[])
+            [("SessionMinutes", SessionMinutes), ("MaxFailedAccessAttempts", MaxFailedAccessAttempts),
+             ("LockoutMinutes", LockoutMinutes), ("LoginPermitLimit", LoginPermitLimit),
+             ("LoginWindowSeconds", LoginWindowSeconds)])
+        {
+            if (value is not null)
+            {
+                values[$"{prefix}Interaction:{name}"] = value.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
         }
 
         if (DevelopmentSigning is not null)
@@ -281,6 +309,12 @@ public sealed class IdentityAuthorityFactory(IdentityAuthorityHostSettings setti
         {
             builder.ConfigureServices(services =>
                 services.AddOpenIddict().AddServer(options => options.AddEphemeralSigningKey()));
+        }
+
+        if (Settings.EnableProtectedProbe)
+        {
+            builder.ConfigureServices(services =>
+                services.AddControllers().AddApplicationPart(typeof(IdentityAuthorityProbeController).Assembly));
         }
 
         if (!Settings.EnableTestIssuance)

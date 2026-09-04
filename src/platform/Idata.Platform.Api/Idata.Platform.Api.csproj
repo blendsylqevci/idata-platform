@@ -5,7 +5,9 @@
     <ProjectReference Include="..\Modules\AccessControl\Application\Idata.Platform.Modules.AccessControl.Application.csproj" />
     <ProjectReference Include="..\Modules\AccessControl\Infrastructure\Idata.Platform.Modules.AccessControl.Infrastructure.csproj" />
     <ProjectReference Include="..\Modules\AccessControl\Presentation\Idata.Platform.Modules.AccessControl.Presentation.csproj" />
+    <ProjectReference Include="..\Modules\Identity\Application\Idata.Platform.Modules.Identity.Application.csproj" />
     <ProjectReference Include="..\Modules\Identity\Infrastructure\Idata.Platform.Modules.Identity.Infrastructure.csproj" />
+    <ProjectReference Include="..\Modules\Identity\Presentation\Idata.Platform.Modules.Identity.Presentation.csproj" />
     <ProjectReference Include="..\Modules\PlatformStatus\Application\Idata.Platform.Modules.PlatformStatus.Application.csproj" />
     <ProjectReference Include="..\Modules\PlatformStatus\Infrastructure\Idata.Platform.Modules.PlatformStatus.Infrastructure.csproj" />
     <ProjectReference Include="..\Modules\PlatformStatus\Presentation\Idata.Platform.Modules.PlatformStatus.Presentation.csproj" />

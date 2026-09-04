@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Identity Application (ADR-028/029, Increment B.2b): use-cases + porte
+       NEUTRALE për interaksionin login/consent. Zero ASP.NET Core, zero
+       OpenIddict, zero ASP.NET Core Identity, zero Persistence, zero Mediator:
+       kjo shtresë nuk njeh as transport, as provider, as store. Identity NUK ka
+       projekt Domain — koncepte reale domain-i nuk ekzistojnë ende (ADR-029 §14:
+       zero projekt ceremonial). -->
+</Project>

@@ -52,8 +52,12 @@ public sealed class DependencyDirectionTests
         ByCanonicalPath("src/platform/Modules/AccessControl/Infrastructure/Idata.Platform.Modules.AccessControl.Infrastructure.csproj");
     private static readonly Assembly AcPresentation =
         ByCanonicalPath("src/platform/Modules/AccessControl/Presentation/Idata.Platform.Modules.AccessControl.Presentation.csproj");
+    private static readonly Assembly IdentityApplication =
+        ByCanonicalPath("src/platform/Modules/Identity/Application/Idata.Platform.Modules.Identity.Application.csproj");
     private static readonly Assembly IdentityInfrastructure =
         ByCanonicalPath("src/platform/Modules/Identity/Infrastructure/Idata.Platform.Modules.Identity.Infrastructure.csproj");
+    private static readonly Assembly IdentityPresentation =
+        ByCanonicalPath("src/platform/Modules/Identity/Presentation/Idata.Platform.Modules.Identity.Presentation.csproj");
     private static readonly Assembly Persistence =
         ByCanonicalPath("src/platform/Idata.Platform.Persistence/Idata.Platform.Persistence.csproj");
     private static readonly Assembly DbMigrator =
@@ -125,7 +129,8 @@ public sealed class DependencyDirectionTests
         var namedFieldNames = ((Assembly[])
             [PsDomain, PsApplication, PsInfrastructure, PsPresentation,
              AcDomain, AcApplication, AcInfrastructure, AcPresentation,
-             IdentityInfrastructure, Persistence, DbMigrator, ApiHost])
+             IdentityApplication, IdentityInfrastructure, IdentityPresentation,
+             Persistence, DbMigrator, ApiHost])
             .Select(assembly => assembly.GetName().Name ?? string.Empty)
             .Order(StringComparer.Ordinal).ToArray();
         Assert.Equal(evaluatedNames, namedFieldNames);
@@ -179,6 +184,10 @@ public sealed class DependencyDirectionTests
         Assert.Equal(["Idata.Platform.Modules.PlatformStatus.Domain"], DirectPlatformReferencesOf(PsApplication));
         Assert.All(DirectPlatformReferencesOf(AcApplication),
             name => Assert.Equal("Idata.Platform.Modules.AccessControl.Domain", name));
+
+        // Identity NUK ka Domain (ADR-029 §14) → Application-i i tij nuk referon
+        // asnjë assembly platforme: use-case/porte tërësisht neutrale.
+        Assert.Empty(DirectPlatformReferencesOf(IdentityApplication));
     }
 
     [Fact]
@@ -188,11 +197,11 @@ public sealed class DependencyDirectionTests
             ["Idata.Platform.Modules.PlatformStatus.Application", "Idata.Platform.Modules.PlatformStatus.Domain", "Idata.Platform.Persistence"]));
         Assert.All(DirectPlatformReferencesOf(AcInfrastructure), name => Assert.Contains(name, (string[])
             ["Idata.Platform.Modules.AccessControl.Application", "Idata.Platform.Modules.AccessControl.Domain", "Idata.Platform.Persistence"]));
-        // Identity (B.1): Infrastructure = wiring i store foundation-it mbi
-        // Persistence (storage mapping owner); Domain/Application vijnë me
-        // konceptet reale të B.2/B.3 — pa projekte bosh (ADR-029 §14).
+        // Identity (B.1 + B.2b): Infrastructure = wiring i store-it/protokollit mbi
+        // Persistence (storage mapping owner) + implementimi i porteve neutrale të
+        // Application-it (login/consent). Domain nuk ekziston (ADR-029 §14).
         Assert.All(DirectPlatformReferencesOf(IdentityInfrastructure), name => Assert.Contains(name, (string[])
-            ["Idata.Platform.Persistence"]));
+            ["Idata.Platform.Persistence", "Idata.Platform.Modules.Identity.Application"]));
     }
 
     [Fact]
@@ -222,10 +231,13 @@ public sealed class DependencyDirectionTests
                     || name.Contains(".Identity.", StringComparison.Ordinal));
         }
 
-        // Identity (B.1) nuk arrin ASNJË modul tjetër — as direkt, as transitiv.
-        Assert.DoesNotContain(TransitivePlatformClosureOf(IdentityInfrastructure),
-            name => name.Contains(".AccessControl.", StringComparison.Ordinal)
-                || name.Contains(".PlatformStatus.", StringComparison.Ordinal));
+        // Identity (B.1 + B.2b) nuk arrin ASNJË modul tjetër — as direkt, as transitiv.
+        foreach (var assembly in (Assembly[])[IdentityApplication, IdentityInfrastructure, IdentityPresentation])
+        {
+            Assert.DoesNotContain(TransitivePlatformClosureOf(assembly),
+                name => name.Contains(".AccessControl.", StringComparison.Ordinal)
+                    || name.Contains(".PlatformStatus.", StringComparison.Ordinal));
+        }
     }
 
     [Fact]
@@ -235,6 +247,11 @@ public sealed class DependencyDirectionTests
             ["Idata.Platform.Modules.PlatformStatus.Application", "Idata.Platform.Modules.PlatformStatus.Domain"]));
         Assert.All(DirectPlatformReferencesOf(AcPresentation), name => Assert.Contains(name, (string[])
             ["Idata.Platform.Modules.AccessControl.Application", "Idata.Platform.Modules.AccessControl.Domain"]));
+
+        // B.2b: sipërfaqja interaktive varet VETËM nga Application-i i modulit —
+        // zero Persistence, zero protokoll, zero store.
+        Assert.All(DirectPlatformReferencesOf(IdentityPresentation), name => Assert.Contains(name, (string[])
+            ["Idata.Platform.Modules.Identity.Application"]));
     }
 
     [Fact]
@@ -243,7 +260,7 @@ public sealed class DependencyDirectionTests
         foreach (var assembly in (Assembly[])[
             PsDomain, PsApplication, PsInfrastructure, PsPresentation,
             AcDomain, AcApplication, AcInfrastructure, AcPresentation,
-            IdentityInfrastructure, Persistence])
+            IdentityApplication, IdentityInfrastructure, IdentityPresentation, Persistence])
         {
             Assert.DoesNotContain(TransitivePlatformClosureOf(assembly),
                 name => name is "Idata.Platform.Api" or "Idata.Platform.DbMigrator");
@@ -1295,8 +1312,12 @@ public sealed class DependencyDirectionTests
              "OpenIddict.EntityFrameworkCore.Models"];
         // B.2a (zëvendësim i KONTROLLUAR, ADR-028 §7): assemblies të PROTOKOLLIT —
         // të lejuara VETËM te owner-i i protokollit (Identity.Infrastructure).
+        // B.2b (zëvendësim i KONTROLLUAR, ADR-028 §7): sipërfaqja sign-in e ASP.NET
+        // Core Identity (`SignInManager`) autorizohet VETËM te owner-i i protokollit/
+        // interaksionit. `Microsoft.AspNetCore.Identity.UI` mbetet e NDALUAR kudo.
         string[] approvedProtocolAssemblies =
-            ["OpenIddict.Server",
+            ["Microsoft.AspNetCore.Identity",
+             "OpenIddict.Server",
              "OpenIddict.Server.AspNetCore",
              "OpenIddict.Validation",
              "OpenIddict.Validation.AspNetCore",
@@ -1337,7 +1358,8 @@ public sealed class DependencyDirectionTests
 
         // Allowlist-i i protokollit nuk është i vdekur: bërthama referohet REALISHT.
         foreach (var required in (string[])
-            ["OpenIddict.Server", "OpenIddict.Validation", "OpenIddict.Validation.ServerIntegration",
+            ["Microsoft.AspNetCore.Identity",
+             "OpenIddict.Server", "OpenIddict.Validation", "OpenIddict.Validation.ServerIntegration",
              "OpenIddict.Validation.AspNetCore", "OpenIddict.Server.AspNetCore"])
         {
             Assert.Contains(required, protocolReferencedByOwner);

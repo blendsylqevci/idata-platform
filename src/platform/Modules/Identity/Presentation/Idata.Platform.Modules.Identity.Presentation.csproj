@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Identity Presentation (B.2b): sipërfaqe interaksioni MINIMALE,
+       server-rendered dhe first-party për authority-n (login + consent).
+       Varet VETËM nga Application (+ framework-u ASP.NET Core) — zero paketë e
+       jashtme, zero OpenIddict, zero ASP.NET Core Identity, zero Persistence,
+       zero credential/store/rregull biznesi. Nuk është UI produkti, nuk është
+       BFF dhe nuk zëvendëson aplikacionet Angular/POS/mobile. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Application\Idata.Platform.Modules.Identity.Application.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+</Project>

@@ -420,7 +420,9 @@
           "Idata.Platform.Modules.AccessControl.Application": "[1.0.0, )",
           "Idata.Platform.Modules.AccessControl.Infrastructure": "[1.0.0, )",
           "Idata.Platform.Modules.AccessControl.Presentation": "[1.0.0, )",
+          "Idata.Platform.Modules.Identity.Application": "[1.0.0, )",
           "Idata.Platform.Modules.Identity.Infrastructure": "[1.0.0, )",
+          "Idata.Platform.Modules.Identity.Presentation": "[1.0.0, )",
           "Idata.Platform.Modules.PlatformStatus.Application": "[1.0.0, )",
           "Idata.Platform.Modules.PlatformStatus.Infrastructure": "[1.0.0, )",
           "Idata.Platform.Modules.PlatformStatus.Presentation": "[1.0.0, )",
@@ -463,15 +465,25 @@
           "Idata.Platform.Modules.AccessControl.Domain": "[1.0.0, )"
         }
       },
+      "idata.platform.modules.identity.application": {
+        "type": "Project"
+      },
       "idata.platform.modules.identity.infrastructure": {
         "type": "Project",
         "dependencies": {
+          "Idata.Platform.Modules.Identity.Application": "[1.0.0, )",
           "Idata.Platform.Persistence": "[1.0.0, )",
           "Microsoft.AspNetCore.Identity.EntityFrameworkCore": "[10.0.10, )",
           "OpenIddict.EntityFrameworkCore": "[7.6.0, )",
           "OpenIddict.Server.AspNetCore": "[7.6.0, )",
           "OpenIddict.Validation.AspNetCore": "[7.6.0, )",
           "OpenIddict.Validation.ServerIntegration": "[7.6.0, )"
+        }
+      },
+      "idata.platform.modules.identity.presentation": {
+        "type": "Project",
+        "dependencies": {
+          "Idata.Platform.Modules.Identity.Application": "[1.0.0, )"
         }
       },
       "idata.platform.modules.platformstatus.application": {

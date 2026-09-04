@@ -550,13 +550,17 @@ public sealed class IdentityAuthorityValidationTests
             + "&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256";
         using (var response = await client.GetAsync(new Uri(authorize, UriKind.Relative), TestContext.Current.CancellationToken))
         {
-            // Refuzim OAuth i kontrolluar: redirect me error, KURRË `code=`.
+            // B.2b (zëvendësim i KONTROLLUAR i pin-it fail-closed të B.2a): kërkesa e
+            // vlefshme nuk refuzohet më me `unsupported_response_type`, por ridrejtohet
+            // te login-i interaktiv — invarianti mbetet i njëjti: KURRË `code=` pa
+            // autentikim dhe pa consent.
             Assert.True(HttpStatusCode.Redirect == response.StatusCode,
                 $"status={response.StatusCode} body={await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)}{Environment.NewLine}{factory.DumpLogs()}");
             var location = response.Headers.Location?.ToString() ?? string.Empty;
-            Assert.StartsWith(redirectUri, location, StringComparison.Ordinal);
-            Assert.Contains("error=unsupported_response_type", location, StringComparison.Ordinal);
+            Assert.Contains("/identity/login", location, StringComparison.Ordinal);
+            Assert.Contains("returnUrl", location, StringComparison.Ordinal);
             Assert.DoesNotContain("code=", location, StringComparison.Ordinal);
+            Assert.DoesNotContain("access_token", location, StringComparison.Ordinal);
         }
 
         // Grant-et e ndaluara: password/implicit/refresh → unsupported_grant_type.
