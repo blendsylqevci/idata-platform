@@ -5,7 +5,7 @@
 - **`ENG-006` = CLOSED / COMPLETED / MERGED** — kufi **SIGURIE**.
 - **`ENG-008` = CLOSED / COMPLETED / MERGED** — kufi **BESUESHMËRIE / evidence-harness**; **NUK është bypass production i provuar**.
 
-**Pointer post-merge (02.09.2026):** hapi aktual = **F1 Increment B.2a — Co-located OpenIddict Authority, Credentials and Local Token Validation** (**IMPLEMENTED IN BRANCH / PENDING_INDEPENDENT_REVIEW**, PR OPEN; Record i vet: `Identity_Authority_Credentials_Validation_B2a_Record.md`); rendi i delivery-t = PLANET-FIRST (ADR-030 PROPOSED); shared core product-neutral. **Dispozicioni i Pronarit (Human Gate i PR #30)** për devijimin procedural C4 §0.5 (§4d) dhe zgjerimin procedural 2→3 file të C6 (§4e): **`RECORDED / ZERO PRECEDENT / NOT A GENERAL WAIVER`** — nuk është precedent dhe nuk u ratifikua nga builder-i. **Kufiri CURRENT i threat model-it të harness-it = PM_REVIEW_PROTOCOL §8 (formulimi FINAL, owner-directed 02.09.2026)** — shih §4f: formulimi i C7 = HISTORICAL/SUPERSEDED.
+**Pointer post-merge (02.09.2026):** hapi i fundit i mbyllur = **F1 Increment B.2a — Co-located OpenIddict Authority, Credentials and Local Token Validation** (**COMPLETED / MERGED** — PR #31 squash `42993f0`, 03.09.2026; Record i vet: `Identity_Authority_Credentials_Validation_B2a_Record.md`); rendi i delivery-t = PLANET-FIRST (ADR-030 ACCEPTED / EFFECTIVE); shared core product-neutral. **Dispozicioni i Pronarit (Human Gate i PR #30)** për devijimin procedural C4 §0.5 (§4d) dhe zgjerimin procedural 2→3 file të C6 (§4e): **`RECORDED / ZERO PRECEDENT / NOT A GENERAL WAIVER`** — nuk është precedent dhe nuk u ratifikua nga builder-i. **Kufiri CURRENT i threat model-it të harness-it = PM_REVIEW_PROTOCOL §8 (formulimi FINAL, owner-directed 02.09.2026)** — shih §4f: formulimi i C7 = HISTORICAL/SUPERSEDED.
 
 *(Historik: statusi i branch-it para merge-it ishte IMPLEMENTED / PENDING_INDEPENDENT_REVIEW — mbyllja kërkoi Fable delta-review → Codex review → Human Gate i Pronarit → merge.)*
 **Autoriteti:** `ENG-006` (Tracker, 29.07.2026) + `ENG-008` (Tracker, 02.08.2026) + ADR-028/ADR-029.
@@ -478,6 +478,6 @@ Hiqen file-at e rinj të testeve (`CatalogGenerationStabilityTests.cs`, `Dynamic
 - **`ADR-026` = OPEN**; **DB-level isolation = NOT IMPLEMENTED**; policy/analyzer **≠** DB-level isolation.
 - `ADR-025`/`ADR-027` OPEN · `ENG-004` fallback AKTIV · `ENG-005` OPEN.
 - **Follow-up:** reflection i kodit të gjeneruar brenda assembly-ve (§4).
-- **B.2 = ACTIVE / NOT COMPLETE (B.2a CURRENT); B.3 = NOT STARTED / BLOCKED**; Step B/C, SEF/ATK, PREFLIGHT, Tier 2 = NO-GO; **production Go = BLOCKED**.
+- **B.2 = ACTIVE / NOT COMPLETE (B.2a = COMPLETED / MERGED, PR #31 `42993f0`; B.2b NOT STARTED / NOT AUTHORIZED / SCOPE NOT YET DEFINED); B.3 = NOT STARTED / BLOCKED**; Step B/C, SEF/ATK, PREFLIGHT, Tier 2 = NO-GO; **production Go = BLOCKED**.
 
 **Radha (e ekzekutuar):** Fable delta-review → Codex PM/architecture/security review → Human Gate i Pronarit → **merge `8d3aa85` (02.09.2026)** → hapi pasues me goal/prompt të ri = **B.2a** (PLANET-first rebaseline docs-first + OpenIddict authority co-located).
