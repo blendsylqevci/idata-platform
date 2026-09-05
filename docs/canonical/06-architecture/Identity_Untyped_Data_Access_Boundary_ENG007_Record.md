@@ -4,6 +4,8 @@
 **Autoriteti:** `ENG-007` (Tracker, regjistruar 01.08.2026 me PR #28 correction R4) + ADR-028/`Identity_Authority_Store_Decision.md` + ADR-029/`Application_Architecture_Convention.md`.
 **Data:** 02.08.2026 · **Increment:** Pre-B2 Increment 1 — architecture-policy VETËM.
 
+**Pointer CURRENT (05.09.2026):** ENG-006/008 = **CLOSED / COMPLETED / MERGED** (PR #30, merge commit `8d3aa85`, 02.09.2026 — `Identity_Dynamic_Reflection_Boundary_ENG006_Record.md`); B.2b — Interactive OAuth 2.0 Authorization Code + PKCE = **COMPLETED / MERGED** (PR #33, squash `a6cc98c`, 05.09.2026 — `Identity_Interactive_Authorization_B2b_Record.md` §11). Gjendja aktuale referohet te `docs/INDEX.md` / SSOT dhe Record-i B.2b §11. Pointer-i i datuar 03.08.2026 më sipër përshkruan gjendjen e atëhershme (jo të sotmen) dhe mbetet, bashkë me gjithë evidencën ekzistuese, i paprekur. Zero ndryshim në scope apo garancitë e ENG-007.
+
 ---
 
 ## 1. Çfarë ËSHTË ky increment — dhe çfarë NUK është
