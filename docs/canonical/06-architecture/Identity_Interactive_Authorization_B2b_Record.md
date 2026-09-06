@@ -4,6 +4,7 @@
 **Data:** 04.09.2026 (v1) · **closure post-merge:** 05.09.2026 (§11) · **Pronësia:** Tech (builder: Claude Code) · **Autoriteti normativ:** ADR-028 (ACCEPTED / EFFECTIVE) + ADR-029 (Application Architecture Convention) + `Identity_Authority_Store_Decision.md` §9
 **Lidhje:** `Identity_Authority_Credentials_Validation_B2a_Record.md` (B.2a — authority/credentials/validim lokal) · `Identity_Store_Foundation_B1_Record.md` (B.1 store) · `Reliability_Gate.md` (§3 matrica 8-skenarëshe, §4 kolonat e detyrueshme) · `../../PM_REVIEW_PROTOCOL.md` v2.6 §5 (scope historik B.2b = v2.5; scope-i aktual = status-sync post-merge) + §8 · `../00-ssot/iData_Plus_SSOT.md` v2.40
 **Kufiri i privatësisë:** vetëm fixtures SINTETIKË të gjeneruar në runtime; zero përdorues/klient/kredencial real; zero material sekret në repo; zero kredencial, token, kod ose cookie në log/output.
+**Pointer i datuar (06.09.2026 — insertion-only):** B.2b mbetet **COMPLETED / MERGED** (PR #33 squash `a6cc98c`); deklarimet e mëparshme të këtij Record-i (header, §11.6) se asnjë B.2c/increment tjetër nuk shpallet CURRENT apo i autorizuar përshkruajnë gjendjen në datën e closure-it (05.09.2026) dhe **zëvendësohen** nga scope-i i ri **F1 Increment B.2c — OIDC Authorization Code Sign-in, provider-side = IMPLEMENTED IN BRANCH / PENDING_INDEPENDENT_REVIEW** (branch `codex/f1-b2c-oidc-signin`, PR OPEN; Record: `Identity_Oidc_Code_SignIn_B2c_Record.md`), pa pretenduar përfundim. Teksti ekzistues, përfshirë §§1–11, i paprekur byte-for-byte.
 
 ---
 
