@@ -1,10 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Identity Presentation (B.2b + B.2c): sipërfaqe interaksioni MINIMALE,
-       server-rendered dhe first-party për authority-n (login + consent) + thin
-       controller-i i UserInfo (IMediator). Varet VETËM nga Application (+
-       framework-u ASP.NET Core + Mediator.Abstractions) — zero OpenIddict, zero
-       ASP.NET Core Identity, zero Persistence, zero credential/store/rregull biznesi. Nuk është UI produkti, nuk është
-       BFF dhe nuk zëvendëson aplikacionet Angular/POS/mobile. -->
+  <!-- Identity Presentation (B.2b + B.2c): siperfaqe interaksioni MINIMALE, server-rendered dhe first-party per authority-n (login + consent). -->
+  <!-- B.2c shton thin controller-in e UserInfo (IMediator). Varet VETEM nga Application (+ framework-u ASP.NET Core + Mediator.Abstractions). -->
+  <!-- Zero OpenIddict, zero ASP.NET Core Identity, zero Persistence, zero credential/store/rregull biznesi. -->
+  <!-- Nuk eshte UI produkti, nuk eshte BFF dhe nuk zevendeson aplikacionet Angular/POS/mobile. -->
   <ItemGroup>
     <ProjectReference Include="..\Application\Idata.Platform.Modules.Identity.Application.csproj" />
   </ItemGroup>
@@ -12,8 +10,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
-    <!-- ADR-029 (B.2c): IMediator = surface i vetëm i lejuar i controller-it
-         UserInfo. Pin-i EKZISTUES 3.0.2 (CPM); zero paketë tjetër. -->
+    <!-- ADR-029 (B.2c): IMediator = surface i vetem i lejuar i controller-it UserInfo; pin-i EKZISTUES 3.0.2 (CPM), zero paketa tjeter. -->
     <PackageReference Include="Mediator.Abstractions" />
   </ItemGroup>
 </Project>
