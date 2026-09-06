@@ -547,8 +547,15 @@ public sealed class IdentityInteractiveAuthorizationTests
 
     // ═══════════════ 16 · 20 · 21 · 22 — inventari, `openid` dhe kërkesat e keqformuara ═══════════════
 
+    /// <summary>
+    /// B.2c — ZËVENDËSIM I KONTROLLUAR (jo heqje) i testit të B.2b “Openid_refuzohet…”:
+    /// refuzimi i qëllimshëm i `openid` u zëvendësua me profilin OIDC (prova pozitive te
+    /// `IdentityOidcSignInTests`). Këtu mbetet inventari i SINQERTË: OAuth-only pa `openid`
+    /// i pandryshuar (zero ID token); metadata shpall VETËM aftësitë e implementuara
+    /// (openid, ID token, UserInfo) dhe asnjë grant/endpoint tjetër.
+    /// </summary>
     [Fact]
-    public async Task Openid_refuzohet_dhe_inventari_nuk_premton_asnje_aftesi_OIDC()
+    public async Task Inventari_publik_premton_vetem_aftesite_e_implementuara_dhe_OAuth_only_mbetet_pa_ID_token()
     {
         await using var lab = await IdentityInteractiveLab.CreateAsync("b2boidc");
         await using var factory = lab.Host();
@@ -563,19 +570,25 @@ public sealed class IdentityInteractiveAuthorizationTests
             Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         }
 
-        // (21) `openid` nuk është i autorizuar për asnjë klient → zero kod.
-        using (var openid = await client.GetAsync(
-            new Uri(InteractiveClient.AuthorizationUrl(clientId, challenge, SyntheticState, Scopes.OpenId), UriKind.Relative),
-            TestContext.Current.CancellationToken))
+        // (21) OAuth-only (pa `openid`) mbetet i pandryshuar: flow-i i plotë deri te redirect-i
+        // real jep KOD, asnjë `id_token` dhe asnjë `access_token` në fragment (response_type=code).
+        var authorizeUrl = InteractiveClient.AuthorizationUrl(clientId, challenge, SyntheticState);
+        var (consentPage, consentFields) = await InteractiveClient.ConsentPageAsync(client, authorizeUrl);
+        Assert.Equal(HttpStatusCode.OK, consentPage.StatusCode);
+        consentPage.Dispose();
+        using (var granted = await InteractiveClient.DecideAsync(
+            client, consentFields, InteractiveAuthorizationContract.ApproveValue))
         {
-            Assert.NotEqual(HttpStatusCode.InternalServerError, openid.StatusCode);
-            Assert.NotEqual(HttpStatusCode.OK, openid.StatusCode);
-            var location = openid.Headers.Location?.ToString() ?? string.Empty;
-            Assert.DoesNotContain("code=", location, StringComparison.Ordinal);
+            Assert.Equal(HttpStatusCode.Redirect, granted.StatusCode);
+            var location = granted.Headers.Location?.ToString() ?? string.Empty;
+            Assert.Contains("code=", location, StringComparison.Ordinal);
             Assert.DoesNotContain("id_token", location, StringComparison.Ordinal);
+            Assert.DoesNotContain("access_token", location, StringComparison.Ordinal);
+            Assert.Equal(SyntheticState, InteractiveClient.RedirectParameter(granted, "state"));
         }
 
-        // (22) Metadata publike nuk premton ID token/UserInfo/refresh/logout.
+        // (22) Metadata publike premton VETËM aftësitë e implementuara (B.2c: openid, ID token,
+        // UserInfo) — asnjë refresh/logout/introspection/revocation/device.
         var discovery = await client.GetStringAsync(
             new Uri("/.well-known/openid-configuration", UriKind.Relative), TestContext.Current.CancellationToken);
         using (var document = JsonDocument.Parse(discovery))
@@ -588,17 +601,16 @@ public sealed class IdentityInteractiveAuthorizationTests
                 [ResponseTypes.Code],
                 root.GetProperty("response_types_supported").EnumerateArray().Select(item => item.GetString()!).ToArray());
             foreach (var absent in (string[])
-                ["userinfo_endpoint", "end_session_endpoint", "id_token_signing_alg_values_supported",
-                 "introspection_endpoint", "revocation_endpoint", "device_authorization_endpoint"])
+                ["end_session_endpoint", "introspection_endpoint", "revocation_endpoint",
+                 "device_authorization_endpoint", "pushed_authorization_request_endpoint"])
             {
                 Assert.False(root.TryGetProperty(absent, out _), $"discovery premton `{absent}`");
             }
 
-            if (root.TryGetProperty("scopes_supported", out var scopes))
-            {
-                Assert.DoesNotContain(
-                    Scopes.OpenId, scopes.EnumerateArray().Select(item => item.GetString()!).ToArray());
-            }
+            Assert.EndsWith("/connect/userinfo", root.GetProperty("userinfo_endpoint").GetString(), StringComparison.Ordinal);
+            Assert.NotEmpty(root.GetProperty("id_token_signing_alg_values_supported").EnumerateArray());
+            Assert.Contains(Scopes.OpenId, root.GetProperty("scopes_supported").EnumerateArray().Select(item => item.GetString()!));
+            Assert.DoesNotContain(Scopes.OfflineAccess, root.GetProperty("scopes_supported").EnumerateArray().Select(item => item.GetString()!));
         }
 
         // (16) Grant-et e ndaluara mbeten të refuzuara edhe pas aktivizimit të flow-it interaktiv.

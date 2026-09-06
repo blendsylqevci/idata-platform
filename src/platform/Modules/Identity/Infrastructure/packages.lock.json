@@ -309,7 +309,10 @@
         }
       },
       "idata.platform.modules.identity.application": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Mediator.Abstractions": "[3.0.2, )"
+        }
       },
       "idata.platform.persistence": {
         "type": "Project",
@@ -320,6 +323,15 @@
           "Npgsql": "[10.0.3, )",
           "Npgsql.EntityFrameworkCore.PostgreSQL": "[10.0.3, )",
           "OpenIddict.EntityFrameworkCore": "[7.6.0, )"
+        }
+      },
+      "Mediator.Abstractions": {
+        "type": "CentralTransitive",
+        "requested": "[3.0.2, )",
+        "resolved": "3.0.2",
+        "contentHash": "TytjnyN8gLObZBxkM7HHPFJF3LHtk6Y8mHW56ONuXRuVEK6Fmed3f0z79H9TpmoZQP2zQAIS4/0O9R2w0v02qw==",
+        "dependencies": {
+          "Microsoft.Extensions.DependencyInjection.Abstractions": "8.0.0"
         }
       },
       "Microsoft.EntityFrameworkCore": {

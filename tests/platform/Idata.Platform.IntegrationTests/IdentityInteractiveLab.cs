@@ -97,10 +97,12 @@ internal static class InteractiveClient
 
     /// <summary>Login + consent → kod autorizimi (i lëshuar nga flow-i REAL) dhe verifier-i i tij.</summary>
     internal static async Task<(string Code, string Verifier)> IssueCodeAsync(
-        HttpClient client, string clientId, string userName, string state)
+        HttpClient client, string clientId, string userName, string state,
+        string? scope = null, string? nonce = null)
     {
         var (verifier, challenge) = CreatePkcePair();
-        var authorize = AuthorizationUrl(clientId, challenge, state);
+        // B.2c: `scope` (p.sh. `openid`) dhe `nonce` opsionale — signatura ekzistuese e pandryshuar.
+        var authorize = AuthorizationUrl(clientId, challenge, state, scope, nonce: nonce);
         using (var login = await SignInAsync(client, userName, IdentityInteractiveLab.SyntheticCredential, authorize))
         {
             Assert.Equal(System.Net.HttpStatusCode.Redirect, login.StatusCode);
@@ -129,7 +131,7 @@ internal static class InteractiveClient
 
     internal static string AuthorizationUrl(
         string clientId, string? challenge, string state, string? scope = null,
-        string? redirectUri = null, string challengeMethod = "S256")
+        string? redirectUri = null, string challengeMethod = "S256", string? nonce = null)
     {
         var query = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
@@ -147,6 +149,11 @@ internal static class InteractiveClient
         if (scope is not null)
         {
             query["scope"] = scope;
+        }
+
+        if (nonce is not null)
+        {
+            query["nonce"] = nonce; // OIDC Core §3.1.2.1 — vetëm kur konsumatori e dërgon
         }
 
         return QueryHelpers.AddQueryString("/" + InteractiveAuthorizationContract.AuthorizationPath, query);
@@ -283,6 +290,42 @@ internal static class InteractiveClient
 
         return client.SendAsync(request, TestContext.Current.CancellationToken);
     }
+
+    /// <summary>B.2c: `id_token` nga përgjigjja e token endpoint-it (null kur mungon).</summary>
+    internal static async Task<string?> IdTokenAsync(HttpResponseMessage response)
+    {
+        var body = await BodyAsync(response);
+        using var document = System.Text.Json.JsonDocument.Parse(body);
+        return document.RootElement.TryGetProperty("id_token", out var token) ? token.GetString() : null;
+    }
+
+    /// <summary>
+    /// B.2c: kërkesë UserInfo (OIDC Core §5.3.1) me bearer opsional; `query` dhe `form`
+    /// shërbejnë VETËM për të provuar se parametrat nuk zgjedhin subjekt tjetër.
+    /// </summary>
+    internal static Task<HttpResponseMessage> UserInfoAsync(
+        HttpClient client, string? accessToken, HttpMethod? method = null,
+        string? query = null, IReadOnlyDictionary<string, string>? form = null)
+    {
+        var path = "/" + UserInfoContract.Path + (query is null ? string.Empty : "?" + query);
+        var request = new HttpRequestMessage(method ?? HttpMethod.Get, new Uri(path, UriKind.Relative));
+        if (accessToken is not null)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        }
+
+        if (form is not null)
+        {
+            request.Content = new FormUrlEncodedContent(form);
+        }
+        else if (request.Method == HttpMethod.Post)
+        {
+            // OIDC Core §5.3.1: POST me `application/x-www-form-urlencoded` (trup i zbrazët; token-i në header).
+            request.Content = new FormUrlEncodedContent(new Dictionary<string, string>(StringComparer.Ordinal));
+        }
+
+        return client.SendAsync(request, TestContext.Current.CancellationToken);
+    }
 }
 
 /// <summary>Intervalet REALE (tick-e monotonikë) të kërkesave — evidencë mbivendosjeje, jo vetëm API paralelizimi.</summary>
@@ -358,7 +401,7 @@ internal static class SyntheticPrincipals
 
     internal static async Task<string> RegisterPublicCodeClientAsync(
         IdentityAuthorityFactory factory, string? redirectUri = null, bool withScope = true,
-        string? displayName = null, bool requirePkceAtClient = true)
+        string? displayName = null, bool requirePkceAtClient = true, bool withOpenId = false)
     {
         await EnsureScopeAsync(factory, IdentityInteractiveLab.SyntheticScope);
         var clientId = $"synthetic-interactive-{Guid.NewGuid():N}";
@@ -388,8 +431,69 @@ internal static class SyntheticPrincipals
             descriptor.Permissions.Add(Permissions.Prefixes.Scope + IdentityInteractiveLab.SyntheticScope);
         }
 
+        if (withOpenId)
+        {
+            // B.2c: klient OIDC — leja e scope-it `openid` (OIDC Core §3.1.2.1).
+            descriptor.Permissions.Add(Permissions.Prefixes.Scope + Scopes.OpenId);
+        }
+
         await applications.CreateAsync(descriptor, TestContext.Current.CancellationToken);
         return clientId;
+    }
+
+    /// <summary>B.2c: skadon çdo ACCESS token të subjektit (vetëm DB sintetike) — kthen numrin e prekur.</summary>
+    internal static async Task<int> ExpireAccessTokensAsync(IdentityAuthorityFactory factory, string subject)
+    {
+        using var scope = factory.Services.CreateScope();
+        var tokens = scope.ServiceProvider.GetRequiredService<IOpenIddictTokenManager>();
+        var entries = new List<object>();
+        await foreach (var entry in tokens.FindBySubjectAsync(subject, TestContext.Current.CancellationToken))
+        {
+            var type = await tokens.GetTypeAsync(entry, TestContext.Current.CancellationToken);
+            if (type is TokenTypeHints.AccessToken or TokenTypeIdentifiers.AccessToken)
+            {
+                entries.Add(entry);
+            }
+        }
+
+        foreach (var entry in entries)
+        {
+            var descriptor = new OpenIddictTokenDescriptor();
+            await tokens.PopulateAsync(descriptor, entry, TestContext.Current.CancellationToken);
+            descriptor.ExpirationDate = DateTimeOffset.UtcNow.AddMinutes(-30);
+            await tokens.UpdateAsync(entry, descriptor, TestContext.Current.CancellationToken);
+        }
+
+        return entries.Count;
+    }
+
+    /// <summary>B.2c: revokon çdo ACCESS token të subjektit (vetëm DB sintetike) — kthen numrin e revokuar dhe llojet e vëzhguara.</summary>
+    internal static async Task<(int Revoked, string ObservedTypes)> RevokeAccessTokensAsync(IdentityAuthorityFactory factory, string subject)
+    {
+        using var scope = factory.Services.CreateScope();
+        var tokens = scope.ServiceProvider.GetRequiredService<IOpenIddictTokenManager>();
+        var entries = new List<object>();
+        var observed = new List<string>();
+        await foreach (var entry in tokens.FindBySubjectAsync(subject, TestContext.Current.CancellationToken))
+        {
+            var type = await tokens.GetTypeAsync(entry, TestContext.Current.CancellationToken) ?? "(null)";
+            observed.Add(type);
+            if (type is TokenTypeHints.AccessToken or TokenTypeIdentifiers.AccessToken)
+            {
+                entries.Add(entry);
+            }
+        }
+
+        var revoked = 0;
+        foreach (var entry in entries)
+        {
+            if (await tokens.TryRevokeAsync(entry, TestContext.Current.CancellationToken))
+            {
+                revoked++;
+            }
+        }
+
+        return (revoked, string.Join(",", observed));
     }
 
     internal static async Task<(string UserName, Guid Id)> CreateUserAsync(

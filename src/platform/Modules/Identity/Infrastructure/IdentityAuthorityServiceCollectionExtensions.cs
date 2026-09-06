@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using Idata.Platform.Modules.Identity.Application;
 using OpenIddict.Abstractions;
 using OpenIddict.Server;
 using OpenIddict.Validation;
@@ -75,7 +76,10 @@ public static class IdentityAuthorityServiceCollectionExtensions
             .AddServer(options =>
             {
                 options.SetAuthorizationEndpointUris(AuthorizationEndpointPath)
-                    .SetTokenEndpointUris(TokenEndpointPath);
+                    .SetTokenEndpointUris(TokenEndpointPath)
+                    // B.2c: endpoint-i i VETËM i ri — UserInfo (OIDC Core §5.3); rruga vjen
+                    // nga kontrata neutrale e Application-it (e njëjta për controller-in).
+                    .SetUserInfoEndpointUris(UserInfoContract.Path);
 
                 // Flow-i target i ADR-028 §4: Authorization Code + PKCE i DETYRUESHËM.
                 // Interaktiviteti (login/consent) = E2 OPEN → handler fail-closed më poshtë.
@@ -87,38 +91,21 @@ public static class IdentityAuthorityServiceCollectionExtensions
                 // (Identity.Presentation: login/consent). Token endpoint-i mbetet
                 // TËRËSISHT i OpenIddict-it: zero passthrough, zero lëshim nga kodi ynë.
                 options.UseAspNetCore()
-                    .EnableAuthorizationEndpointPassthrough();
+                    .EnableAuthorizationEndpointPassthrough()
+                    // B.2c: passthrough i UserInfo VETËM te ky owner — OpenIddict validon
+                    // access token-in (bearer) PARA se kërkesa të arrijë thin controller-in.
+                    .EnableUserInfoEndpointPassthrough();
 
                 // PKCE me `S256` i DETYRUESHËM: metoda `plain` hiqet nga seti i
                 // serverit — kërkesat me `plain` (ose pa metodë) refuzohen.
                 options.Configure(server => server.CodeChallengeMethods.Remove(OpenIddictConstants.CodeChallengeMethods.Plain));
 
-                // B.2b është VETËM OAuth 2.0: scope-i `openid` (dhe rrjedhimisht ID
-                // token/UserInfo/nonce) refuzohet SHPREHIMISHT në kufirin e protokollit.
-                options.AddEventHandler<OpenIddictServerEvents.ValidateAuthorizationRequestContext>(descriptor =>
-                    descriptor.UseInlineHandler(context =>
-                    {
-                        if (context.Request.HasScope(OpenIddictConstants.Scopes.OpenId))
-                        {
-                            context.Reject(
-                                error: OpenIddictConstants.Errors.InvalidScope,
-                                description: "The 'openid' scope is not supported by this authority.");
-                        }
-
-                        return default;
-                    }));
-
-                // Metadata publike nuk premton kurrë aftësi që ky increment nuk i ka:
-                // zero algoritme ID-token, zero `openid` në scope-t e shpallura.
-                options.AddEventHandler<OpenIddictServerEvents.HandleConfigurationRequestContext>(descriptor =>
-                    descriptor.UseInlineHandler(context =>
-                    {
-                        context.IdTokenSigningAlgorithms.Clear();
-                        context.Scopes.Remove(OpenIddictConstants.Scopes.OpenId);
-                        return default;
-                    })
-                    // PAS çdo handler-i default që mbush metadata-n, që heqja të jetë efektive.
-                    .SetOrder(OpenIddictServerHandlers.Discovery.AttachAdditionalMetadata.Descriptor.Order + 1_000));
+                // B.2c: profili OIDC Authorization Code + PKCE (provider-side). Refuzimi i
+                // qëllimshëm i B.2b për `openid` dhe pastrimi i metadata-s u HOQËN (zëvendësim
+                // i kontrolluar me provë pozitive OIDC): `openid` → ID token i nënshkruar me
+                // credentials REALE (aud = client_id; `nonce` i kërkesës i lidhur nga OpenIddict),
+                // discovery/JWKS shpallin VETËM aftësitë reale (openid, algoritmet e ID token-it,
+                // UserInfo). Grants/endpoint-e të tjera mbeten të paregjistruara (fail-closed).
 
                 if (configured)
                 {
@@ -135,9 +122,10 @@ public static class IdentityAuthorityServiceCollectionExtensions
                     });
 
                     // Header-i i JASHTËM (`alg`/`enc`) i ÇDO artefakti të mbrojtur që
-                    // konsumon `/connect/token` (kodet e autorizimit) kontrollohet PARA
-                    // çdo unwrap-i të CEK-ut — IdentityModel nuk e validon kurrë `alg`-un
-                    // e jashtëm. Refuzim OAuth `invalid_grant`, kurrë 500, kurrë token.
+                    // konsumon serveri (kodet e autorizimit te `/connect/token`; B.2c: access
+                    // token-i bearer te `/connect/userinfo`) kontrollohet PARA çdo unwrap-i të
+                    // CEK-ut — IdentityModel nuk e validon kurrë `alg`-un e jashtëm. Refuzim
+                    // OAuth sipas endpoint-it (`invalid_grant` / `invalid_token`), kurrë 500.
                     options.AddEventHandler<OpenIddictServerEvents.ValidateTokenContext>(descriptor =>
                         descriptor.UseInlineHandler(context => jose.ValidateServerOuterHeader(context))
                             .SetOrder(OpenIddictServerHandlers.Protection.ValidateIdentityModelToken.Descriptor.Order - 500));
@@ -588,9 +576,11 @@ public sealed class IdentityJosePolicy
     }
 
     /// <summary>
-    /// I njëjti gate mbi stack-un e SERVER-it (artefaktet e mbrojtura që konsumon
-    /// `/connect/token`): refuzim OAuth `invalid_grant` para çdo dekriptimi, kurrë
-    /// 500, kurrë token — asnjë klasë refuzimi nuk del jashtë.
+    /// I njëjti gate mbi stack-un e SERVER-it (çdo artefakt i mbrojtur që konsumon
+    /// serveri): refuzim para çdo dekriptimi, kurrë 500, kurrë token — asnjë klasë
+    /// refuzimi nuk del jashtë. B.2c: gabimi është i SAKTË sipas endpoint-it dhe
+    /// artefaktit — `invalid_grant` te token endpoint-i (kodi i autorizimit),
+    /// `invalid_token` te UserInfo (bearer access token); kontrollet JOSE janë identike.
     /// </summary>
     internal ValueTask ValidateServerOuterHeader(OpenIddictServerEvents.ValidateTokenContext context)
     {
@@ -601,9 +591,18 @@ public sealed class IdentityJosePolicy
 
         if (RejectOuterHeader(context.Token) is not null)
         {
-            context.Reject(
-                error: OpenIddictConstants.Errors.InvalidGrant,
-                description: "The specified grant is invalid.");
+            if (context.EndpointType == OpenIddictServerEndpointType.UserInfo)
+            {
+                context.Reject(
+                    error: OpenIddictConstants.Errors.InvalidToken,
+                    description: "The specified token is invalid.");
+            }
+            else
+            {
+                context.Reject(
+                    error: OpenIddictConstants.Errors.InvalidGrant,
+                    description: "The specified grant is invalid.");
+            }
         }
 
         return default;

@@ -33,8 +33,9 @@ namespace Idata.Platform.Modules.Identity.Infrastructure;
 ///    e login-it, të dyja me kufij të konfigurueshëm;
 ///  - adapterat e porteve të Application-it: verifikuesi i kredencialeve dhe
 ///    kufiri i protokollit OAuth 2.0 (kod autorizimi / refuzim `access_denied`).
-/// Product-neutral: zero client/audience/scope/rol specifik produkti; zero
-/// `openid`, ID token, UserInfo ose logout në këtë increment.
+/// Product-neutral: zero client/audience/scope/rol specifik produkti. **B.2c:**
+/// `sub` shkon edhe te ID token-i dhe regjistrohet adapter-i i portit UserInfo
+/// (principal VETËM nga skema e serverit OpenIddict); zero logout/refresh/MFA.
 /// </summary>
 public static class IdentityInteractiveAuthorizationServiceCollectionExtensions
 {
@@ -61,6 +62,8 @@ public static class IdentityInteractiveAuthorizationServiceCollectionExtensions
         services.AddHttpContextAccessor();
         services.AddScoped<IInteractiveCredentialsVerifier, IdentityInteractiveCredentialsVerifier>();
         services.AddScoped<IAuthorizationProtocolGateway, OpenIddictAuthorizationProtocolGateway>();
+        // B.2c: porti neutral i UserInfo — principal-i VETËM nga skema e serverit OpenIddict.
+        services.AddScoped<IUserInfoSubjectResolver, OpenIddictUserInfoSubjectResolver>();
         services.AddScoped<InteractiveSignInHandler>();
         services.AddScoped<InteractiveConsentHandler>();
 
@@ -232,9 +235,11 @@ internal sealed class OpenIddictAuthorizationProtocolGateway(
         // nga konfigurimi i jashtëm (zero audience e sajuar në kod).
         identity.SetScopes(request.GetScopes());
         identity.SetResources(options.CurrentValue.Audiences);
+        // B.2c: subjekti shkon edhe te ID token-i (OIDC Core §2 — `sub` i detyrueshëm);
+        // asnjë claim tjetër nuk lëshohet (zero profile/email/stamp/rol/tenant).
         identity.SetDestinations(static claim => claim.Type switch
         {
-            Claims.Subject => [Destinations.AccessToken],
+            Claims.Subject => [Destinations.AccessToken, Destinations.IdentityToken],
             _ => [],
         });
 

@@ -1,6 +1,7 @@
 using Idata.Platform.Modules.AccessControl.Application;
 using Idata.Platform.Modules.AccessControl.Infrastructure;
 using Idata.Platform.Modules.AccessControl.Presentation;
+using Idata.Platform.Modules.Identity.Application.Features.GetUserInfo;
 using Idata.Platform.Modules.Identity.Infrastructure;
 using Idata.Platform.Modules.Identity.Presentation;
 using Idata.Platform.Modules.PlatformStatus.Application;
@@ -28,11 +29,12 @@ builder.Services.AddSingleton<IDatabaseReadinessProbe>(
 
 // ADR-029: mediator-i (martinothamar/Mediator) me lifetime SCOPED eksplicit —
 // handler-at konsumojnë porte/DbContext me scope kërkese; pa u mbështetur te
-// default-i Singleton. Zero pipeline behaviors në këtë pilot.
+// default-i Singleton. Zero pipeline behaviors. Assemblies: PlatformStatus (pilot)
+// + Identity.Application (B.2c: query/handler i UserInfo) — asnjë modul tjetër.
 builder.Services.AddMediator(options =>
 {
     options.ServiceLifetime = ServiceLifetime.Scoped;
-    options.Assemblies = [typeof(GetPlatformStatusQuery).Assembly];
+    options.Assemblies = [typeof(GetPlatformStatusQuery).Assembly, typeof(GetUserInfoQuery).Assembly];
 });
 
 // ADR-029: thin Controllers (PlatformStatus pilot); minimal API-t e
@@ -53,8 +55,9 @@ builder.Services.AddIdentityAuthority(builder.Configuration, builder.Environment
 // ADR-028 Increment B.2b — interaksioni REAL i authority-t (owner i wiring-ut =
 // Identity.Infrastructure): login me ASP.NET Core Identity, session cookie e
 // VEÇANTË (jo skema default e API-së), consent eksplicit, antiforgery dhe rate
-// limiting. Vetëm OAuth 2.0 Authorization Code + PKCE: zero `openid`, zero ID
-// token, zero UserInfo, zero refresh/logout, zero MFA (mbeten OPEN).
+// limiting. B.2c: profil OIDC Authorization Code + PKCE (provider-side) — `openid`,
+// ID token, nonce dhe UserInfo minimal (thin controller → IMediator → port neutral);
+// zero refresh/logout/MFA/recovery, zero Angular/BFF (mbeten OPEN).
 builder.Services.AddIdentityInteractiveAuthorization(builder.Configuration);
 
 // AccessControl (F1.1) — provider-neutral: autoriteti i autorizimit tenant mbetet
