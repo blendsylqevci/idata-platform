@@ -1,144 +1,134 @@
 using System.Collections.Immutable;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Idata.Platform.Modules.Identity.Infrastructure;
 
 /// <summary>
-/// Politikë e KUFIZUAR e log-eve për sipërfaqen e protokollit Identity (B.2c — correction C1).
+/// Politikë e KUFIZUAR e log-eve për sipërfaqen e protokollit Identity (B.2c — correction C1,
+/// e ridizajnuar në correction C2).
 ///
-/// **Çfarë është:** **SUPPRESSION e EVENT-EVE** (jo redaktim, jo maskim) — çdo event nën nivelin e
-/// ruajtur të kategorive të bibliotekës së protokollit nuk lëshohet fare drejt asnjë sink-u të
-/// konfiguruar. Arsyeja: ato kategori emetojnë dump-e të PLOTA kërkese/përgjigjeje të protokollit
-/// (p.sh. kërkesa e token-it me `code_verifier` dhe `code`), ndërsa redaktimi i bibliotekës nuk i
-/// mbulon të gjithë parametrat.
+/// **Çfarë është:** një DYSHEME <see cref="MinimumRetainedLevel"/> (SUPPRESSION e event-eve nën
+/// `Warning`, jo redaktim, jo maskim) VETËM për kategoritë e mbrojtura
+/// (<see cref="ProtectedCategoryPrefixes"/>):
+///  - `OpenIddict*` — biblioteka e protokollit emeton dump-e të plota kërkese në `Information`
+///    (p.sh. kërkesa e token-it me `code_verifier`), dhe redaktimi i saj nuk e mbulon atë parametër;
+///  - `Microsoft.AspNetCore.Hosting.Diagnostics` — host-i logon në `Information` rreshtat
+///    `Request starting …{QueryString}` (EventId 1) dhe `Request finished …{QueryString}` (EventId 2),
+///    pra URL-në e PLOTË të çdo kërkese PARA se protokolli ta refuzojë; një kredencial i vendosur
+///    nga klienti në URL do të shkruhej te sink-et e host-it edhe kur kërkesa refuzohet me 400.
+///    Të dy event-et janë të mbrojtura nga `IsEnabled(Information)` në thirrës (ASP.NET Core 10.0.10,
+///    `HostingApplicationDiagnostics`), prandaj me dyshemenë as objekti i state-it nuk krijohet.
+///    **Trade-off i deklaruar:** humbet telemetria e përmbledhjes së kërkesave (request summary) e
+///    kësaj kategorie, si dhe event-i `Information` i kërkesave të patrajtuara (EventId 16, vetëm path);
+///    event-et e saj `Warning`/`Critical` ruhen (sipas burimit të pinuar kategoria nuk emeton asnjë
+///    event `Warning+` per-request — vetëm në startup).
 ///
-/// **Si imponohet (determinist, jo shpresë):** rregullat e filtrit vlerësohen me përparësi
-/// (a) provider-specific mbi provider-agnostic, pastaj (b) kategoria më e gjatë, pastaj (c) rregulli
-/// i shtuar më vonë. Prandaj politika (1) HEQ çdo rregull ekzistues që prek kategoritë e mbrojtura —
-/// për çdo provider, përfshirë rregullat me wildcard `*` që mund t'i prekin — dhe (2) shton rregullin
-/// autoritativ provider-agnostic PLUS një rregull për SECILIN provider që ka rregulla në konfigurimin
-/// efektiv, që asnjë rregull provider-specific me kategori më të shkurtër (p.sh. `null`) të mos e
-/// mposhtë. Ekzekutohet si <c>PostConfigure</c>, pra PAS çdo <c>Configure</c> (appsettings,
-/// `SetMinimumLevel`, `AddFilter`).
+/// **Si imponohet (mbi semantikën e pinuar të `LoggerRuleSelector`, .NET 10.0.10):** përzgjedhja e
+/// rregullit efektiv për (provider, kategori) varet VETËM nga (`ProviderName`, `CategoryName`, pozicioni
+/// në listë): provider-specific mbi provider-agnostic, pastaj kategoria më e gjatë, pastaj rregulli i
+/// shtuar më vonë; rregulli fitues jep NJËKOHËSISHT nivelin dhe callback-un e filtrit (niveli
+/// kontrollohet i pari, pastaj filtri). Politika NUK heq, NUK riorganizon dhe NUK ndryshon nivelin e
+/// asnjë rregulli; ajo:
+///  (1) mbështjell ÇDO rregull ekzistues NË VEND — i njëjti provider, e njëjta kategori, i njëjti nivel,
+///      i njëjti pozicion (pra e NJËJTA përparësi) — duke i shtuar filtrit të tij dyshemenë: për një
+///      kategori të mbrojtur event-i kalon vetëm nëse niveli ≥ `Warning` DHE filtri origjinal (nëse ka)
+///      e lejon; për çdo kategori tjetër filtri i mbështjellë kthen saktësisht atë që kthente më parë;
+///  (2) fut TË PARIN një rregull ekuivalent me rastin “asnjë rregull nuk përputhet” (kategori `null`,
+///      niveli = `MinLevel`, vetëm dyshemeja), që çdo rregull `Default` i operatorit — i shtuar më vonë —
+///      ta mposhtë sipas rendit normal, dhe që dyshemeja të vlejë edhe kur operatori s'ka asnjë rregull.
+/// Ekzekutohet si <c>PostConfigure</c>, pra PAS `appsettings`/`SetMinimumLevel`/`AddFilter` (të gjitha
+/// `Configure`), dhe ri-aplikohet mbi çdo instancë të re të opsioneve (reload i konfigurimit).
 ///
-/// **Nuk e zbut një politikë më strikte:** niveli i ruajtur është MAKSIMUMI midis
-/// <see cref="MinimumRetainedLevel"/>, nivelit më strikt të rregullave të hequra për këto kategori
-/// dhe default-it global (rregulli me kategori `null`) — pra një operator që ka vendosur `Error`
-/// ose `None` nuk zbutet në `Warning`.
+/// **Invariantet që rrjedhin nga ndërtimi (jo nga një maksimum global):**
+///  - jashtë kategorive të mbrojtura vendimi efektiv është IDENTIK për çdo (provider, kategori, nivel):
+///    pragjet, callback-et e filtrit dhe përparësia e rregullave ruhen — asnjë rregull i përbashkët
+///    (p.sh. `Microsoft.AspNetCore`, `*`, `Microsoft.AspNetCore.Hosting.*`) nuk hiqet dhe nuk preket;
+///  - brenda kategorive të mbrojtura politika VETËM kufizon event-et nën `Warning`: nuk riaktivizon
+///    asnjë event që operatori e kishte ndaluar (`Error`/`None` mbeten `Error`/`None`) dhe nuk transferon
+///    kufizimin e një provider-i/kategorie te një tjetër, sepse asnjë nivel nuk llogaritet as transferohet
+///    mes provider-ëve/kategorish — i vetmi nivel i kopjuar është `MinLevel` efektiv, në rregullin fallback
+///    (i ri-lexuar në çdo instancë të re të opsioneve).
 ///
 /// **Kufijtë e DEKLARUAR (jo garanci universale):**
-///  - ÇDO <c>PostConfigure&lt;LoggerFilterOptions&gt;</c> i regjistruar PAS kësaj politike që shton një
-///    rregull me kategori të barabartë ose më të gjatë (ose provider-specific) e mposht atë — rendi i
-///    regjistrimit vendos; kjo politikë nuk pretendon të jetë e fundit;
-///  - mbulon VETËM prefiksin e kategorive <see cref="SuppressedCategoryPrefixes"/>. Nuk preken:
-///    hosting/request diagnostics (rreshti standard `Request starting … {QueryString}` — një kredencial
-///    i vendosur nga klienti në URL logohet nga host-i PARA se protokolli ta refuzojë; prandaj B.2c C1
-///    e kufizon transportin e UserInfo te `Authorization: Bearer`, shih <see cref="UserInfoTransportGuard"/>),
-///    EF Core command logging, ASP.NET Core Identity/Authentication/DataProtection dhe kategoritë e aplikacionit;
-///  - reverse proxy-t dhe sink-et e jashtme mbeten jashtë kufirit të provuar;
-///  - telemetria e dobishme RUHET: `Warning`/`Error`/`Critical` (përfshirë paralajmërimin e kufirit të
-///    dështimit infrastrukturor) vazhdojnë të lëshohen. *(Efekt anësor i pranuar: log-et `Debug`/`Information`
-///    të bibliotekës nuk dalin as në diagnostikë.)*
+///  - një <c>PostConfigure&lt;LoggerFilterOptions&gt;</c> i regjistruar PAS kësaj politike që SHTON rregulla
+///    të pambështjella mund ta anashkalojë, dhe një që NDRYSHON `MinLevel` (jo rregullat) nuk reflektohet
+///    në rregullin fallback (rendi i regjistrimit vendos); konfigurimi normal i mbështetur (`appsettings`,
+///    `AddFilter`, `SetMinimumLevel`, seksione per-provider, wildcard nga kodi ose nga konfigurimi) është
+///    fazë `Configure` dhe nuk e anashkalon;
+///  - dyshemeja vepron PARA shkrimit VETËM te sink-et e regjistruara përmes `ILoggerFactory`; kod që
+///    zëvendëson infrastrukturën e log-eve pas saj (fabrikë tjetër logger-ësh, sink-e që nuk kalojnë nga
+///    filtri i saj) është jashtë kufirit;
+///  - mbulohen VETËM dy prefikset e mësipërme; çdo kategori tjetër ruan sjelljen e vet (p.sh.
+///    `Microsoft.AspNetCore.Http.Result.RedirectResult` logon URL-në e destinacionit të redirect-eve në
+///    `Information` — regjistruar si follow-up, jashtë këtij zarfi);
+///  - reverse proxy-t, ingress-i dhe platformat e jashtme të log-eve nuk certifikohen këtu.
 /// </summary>
 internal static class IdentityProtocolLoggingPolicy
 {
-    /// <summary>Kategoritë e bibliotekës së protokollit që emetojnë dump-e kërkese/përgjigjeje.</summary>
-    internal static readonly ImmutableArray<string> SuppressedCategoryPrefixes = ["OpenIddict"];
+    /// <summary>Prefikset e kategorive të mbrojtura (përputhje prefiksi, case-insensitive si te framework-u).</summary>
+    internal static readonly ImmutableArray<string> ProtectedCategoryPrefixes =
+        ["OpenIddict", "Microsoft.AspNetCore.Hosting.Diagnostics"];
 
-    /// <summary>Niveli më i ulët që MBETET i lejuar për ato kategori (kufi i poshtëm, jo i sipërm).</summary>
+    /// <summary>Niveli më i ulët që MBETET i lejuar për kategoritë e mbrojtura (dysheme, jo mbivendosje).</summary>
     internal const LogLevel MinimumRetainedLevel = LogLevel.Warning;
 
     internal static IServiceCollection AddIdentityProtocolLoggingPolicy(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
         services.AddLogging();
-        services.AddSingleton<IPostConfigureOptions<LoggerFilterOptions>, Applier>();
+        // Një regjistrim i vetëm (idempotent ndaj thirrjeve të përsëritura të composition root-it);
+        // `Apply` është gjithsesi idempotente semantikisht mbi të njëjtën instancë.
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IPostConfigureOptions<LoggerFilterOptions>, Applier>());
         return services;
     }
 
-    /// <summary>Zbatimi i politikës mbi opsionet REALE të filtrit (i testueshëm i izoluar).</summary>
+    /// <summary>Zbatimi i politikës mbi opsionet REALE të filtrit (provuar përmes host-it real; testet nuk shohin tipat `internal`).</summary>
     internal static void Apply(LoggerFilterOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
 
-        // (0) Provider-at që kanë rregulla në konfigurimin efektiv — një rregull provider-specific
-        // me kategori `null` do ta mposhtte një rregull provider-agnostic me kategori të gjatë.
-        var providers = options.Rules
-            .Select(rule => rule.ProviderName)
-            .Where(name => !string.IsNullOrEmpty(name))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-
-        // (1) Niveli i ruajtur nuk e ZBUT një politikë ekzistuese më strikte: merret maksimumi midis
-        // kufirit tonë, rregullave të mbrojtura që po hiqen dhe default-it global (kategori `null`).
-        var retained = MinimumRetainedLevel;
-        foreach (var rule in options.Rules)
+        // (1) Mbështjellje NË VEND: provider/kategori/nivel/pozicion të pandryshuar → përparësi e pandryshuar.
+        for (var index = 0; index < options.Rules.Count; index++)
         {
-            if (rule.LogLevel is { } level && level > retained
-                && (IsProtectedRuleCategory(rule.CategoryName) || rule.CategoryName is null))
-            {
-                retained = level;
-            }
+            var rule = options.Rules[index];
+            options.Rules[index] = new LoggerFilterRule(rule.ProviderName, rule.CategoryName, rule.LogLevel, WithFloor(rule.Filter));
         }
 
-        if (options.MinLevel > retained)
-        {
-            retained = options.MinLevel;
-        }
-
-        // (2) Hiq çdo rregull që prek kategoritë e mbrojtura (çdo provider, çdo nivel, përfshirë wildcard).
-        for (var index = options.Rules.Count - 1; index >= 0; index--)
-        {
-            if (IsProtectedRuleCategory(options.Rules[index].CategoryName))
-            {
-                options.Rules.RemoveAt(index);
-            }
-        }
-
-        // (3) Rregulli autoritativ + një rregull për secilin provider ekzistues.
-        foreach (var prefix in SuppressedCategoryPrefixes)
-        {
-            options.Rules.Add(new LoggerFilterRule(null, prefix, retained, null));
-            foreach (var provider in providers)
-            {
-                options.Rules.Add(new LoggerFilterRule(provider, prefix, retained, null));
-            }
-        }
+        // (2) Ekuivalenti i rastit "asnjë rregull nuk përputhet" (MinLevel, pa filtër) + dyshemeja, I PARI
+        //     në listë: çdo rregull `Default` i operatorit (i shtuar më vonë) e mposht sipas rendit normal.
+        options.Rules.Insert(0, new LoggerFilterRule(null, null, options.MinLevel, WithFloor(null)));
     }
 
-    /// <summary>A i përket kategoria e KËRKESËS sipërfaqes së mbrojtur (pa wildcard)?</summary>
+    /// <summary>A i përket kategoria e një logger-i sipërfaqes së mbrojtur? (loop pa closure — thirret në çdo `IsEnabled` nën `Warning`)</summary>
     internal static bool IsProtectedCategory(string? category)
-        => category is not null
-           && SuppressedCategoryPrefixes.Any(prefix => category.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+    {
+        if (category is null)
+        {
+            return false;
+        }
+
+        foreach (var prefix in ProtectedCategoryPrefixes)
+        {
+            if (category.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
-    /// A mund ta prekë kategoria e një RREGULLI sipërfaqen e mbrojtur? Trajton edhe semantikën
-    /// `*` të framework-ut (prefiks/suffiks) dhe është KONSERVATIVE: nëse rregulli mund të përputhet
-    /// me një kategori të mbrojtur, ai hiqet.
+    /// Dyshemeja e kombinuar me filtrin origjinal: për kategori të mbrojtur kërkon nivel ≥ `Warning`;
+    /// për çdo kategori tjetër është identike me filtrin origjinal (ose `true` kur ai mungon).
     /// </summary>
-    internal static bool IsProtectedRuleCategory(string? ruleCategory)
-    {
-        if (ruleCategory is null)
-        {
-            return false; // rregulli global mbetet — nuk është i yni për ta hequr.
-        }
-
-        var wildcard = ruleCategory.IndexOf('*', StringComparison.Ordinal);
-        if (wildcard < 0)
-        {
-            return SuppressedCategoryPrefixes.Any(prefix =>
-                ruleCategory.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                || prefix.StartsWith(ruleCategory, StringComparison.OrdinalIgnoreCase));
-        }
-
-        var head = ruleCategory[..wildcard];
-        return SuppressedCategoryPrefixes.Any(prefix =>
-            head.Length == 0
-            || prefix.StartsWith(head, StringComparison.OrdinalIgnoreCase)
-            || head.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-    }
+    internal static Func<string?, string?, LogLevel, bool> WithFloor(Func<string?, string?, LogLevel, bool>? inner)
+        => (provider, category, level)
+            => (level >= MinimumRetainedLevel || !IsProtectedCategory(category))
+               && (inner is null || inner(provider, category, level));
 
     private sealed class Applier : IPostConfigureOptions<LoggerFilterOptions>
     {

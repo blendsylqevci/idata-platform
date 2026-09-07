@@ -168,16 +168,21 @@ public sealed record IdentityAuthorityHostSettings
     public bool DiagnosticLogging { get; init; }
 
     /// <summary>
-    /// B.2c C1: kapje PASIVE e log-eve mbi konfigurimin REAL production — NUK ndryshon asnjë
-    /// prag/filtër. Ndarë qëllimisht nga <see cref="DiagnosticLogging"/> (që ul pragjet), sepse
-    /// provë privatësie mbi një konfigurim të ndryshuar nuk provon asgjë për production-in.
+    /// B.2c C1/C2: kapje PASIVE e log-eve mbi konfigurimin REAL të filtrit — NUK ndryshon asnjë
+    /// prag/filtër. C2: me DALJE TË KONTROLLUARA — provider-at e zakonshëm të daljes (Console/Debug/
+    /// EventSource) hiqen VETËM në host-in e testit dhe zëvendësohen nga dy sink-e në memorie
+    /// (<see cref="PrimaryCapturingLoggerProvider"/>, <see cref="SecondaryCapturingLoggerProvider"/>),
+    /// që asnjë material i flow-it të mos arrijë kurrë stdout/CI edhe në rast dështimi të politikës.
+    /// Izolimi i destinacionit nuk ndryshon asgjë nga ajo që collector-i pohon: rregullat e filtrit
+    /// mbeten të njëjtat dhe sink-et janë pasive (`IsEnabled` = `true`). Ndarë qëllimisht nga
+    /// <see cref="DiagnosticLogging"/> (që ul pragjet).
     /// </summary>
     public bool CaptureLogs { get; init; }
 
     /// <summary>
-    /// TEST-ONLY (kontroll RED i §2): rikthen `Information` për kategoritë e protokollit PAS
-    /// politikës production, që të provohet se collector-i do ta kishte kapur materialin nëse
-    /// politika nuk do të ekzistonte. Zero ndikim në production (override i regjistruar vetëm këtu).
+    /// TEST-ONLY (kontroll RED, C2): HEQ regjistrimin e politikës production të log-eve nga host-i i
+    /// testit — kundërfakti “host pa politikë”. Përdoret VETËM me canary të padëmshëm dhe kërkesa pa
+    /// material autentikimi; asnjë flow me token nuk ekzekutohet në një host të tillë.
     /// </summary>
     public bool DisableProtocolLoggingPolicy { get; init; }
 
@@ -185,14 +190,12 @@ public sealed record IdentityAuthorityHostSettings
     public SyntheticPersistenceFault? PersistenceFault { get; init; }
 
     /// <summary>
-    /// TEST-ONLY (C1 §2): mbjell rregulla filtri KONKURRUESE para politikës (provider-agnostic
-    /// global, provider-SPECIFIC me kategori `null`, kategori më e gjatë dhe wildcard) — që
-    /// determinizmi i politikës ndaj përparësisë reale të rregullave të provohet mbi host-in REAL.
+    /// TEST-ONLY (C2 §3): mbjellje SINTETIKE e konfigurimit të log-eve të operatorit PARA politikës —
+    /// konfigurim në memorie (`Logging:…` përmes host settings, përfshirë seksione per-provider sipas
+    /// alias-it dhe kategori wildcard) dhe/ose kod (`AddFilter`, përfshirë `AddFilter&lt;TProvider&gt;`).
+    /// Zero file konfigurimi production.
     /// </summary>
-    public bool SeedCompetingLogRules { get; init; }
-
-    /// <summary>TEST-ONLY (C1 §2): mbjell një politikë EKZISTUESE më strikte (`Error`) për kategoritë e protokollit.</summary>
-    public bool SeedStricterLogRule { get; init; }
+    public Action<IWebHostBuilder>? LoggingSeed { get; init; }
 
     public IReadOnlyDictionary<string, string?> ToHostConfiguration()
     {
@@ -266,15 +269,96 @@ public sealed record IdentityAuthorityHostSettings
     }
 }
 
-/// <summary>TEST-ONLY (C1 §2): tip marker për një rregull filtri provider-SPECIFIC.</summary>
-public sealed class CapturingLoggerProviderMarker : Microsoft.Extensions.Logging.ILoggerProvider
+/// <summary>
+/// TEST-ONLY (C2 §3): provider REAL kapjeje — bazë e përbashkët për dy tipa të dallueshëm, secili me
+/// alias të vetin, që rregullat provider-specific (nga konfigurimi sipas alias-it ose nga kodi sipas
+/// tipit të plotë) të provohen mbi provider-a të REGJISTRUAR dhe të PËRDORUR realisht — jo mbi një
+/// marker që kthen `NullLogger`. Vëzhgues PASIV: `IsEnabled` kthen gjithmonë `true`, pra vendimin e
+/// merr filtri EFEKTIV i host-it për KËTË provider. Kapen ÇDO kategori dhe të GJITHA sipërfaqet që një
+/// sink real do të shkruante: mesazhi i formatuar, structured state, scopes dhe exception-i (tip,
+/// mesazh, stack — VETËM i jashtëm; inner exceptions nuk mbulohen dhe kjo deklarohet).
+/// </summary>
+public abstract class CapturingLoggerProviderBase(System.Collections.Concurrent.ConcurrentQueue<CapturedLogRecord> sink)
+    : Microsoft.Extensions.Logging.ILoggerProvider, Microsoft.Extensions.Logging.ISupportExternalScope
 {
+    private Microsoft.Extensions.Logging.IExternalScopeProvider? scopes;
+
+    /// <summary>Kategoritë për të cilat fabrika e host-it e ka konsultuar këtë provider (provë regjistrimi/përdorimi).</summary>
+    public System.Collections.Concurrent.ConcurrentQueue<string> ConsultedCategories { get; } = new();
+
+    public void SetScopeProvider(Microsoft.Extensions.Logging.IExternalScopeProvider scopeProvider)
+        => scopes = scopeProvider;
+
     public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName)
-        => Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+    {
+        ConsultedCategories.Enqueue(categoryName);
+        return new CapturingLogger(categoryName, sink, () => scopes);
+    }
 
     public void Dispose()
     {
     }
+
+    private sealed class CapturingLogger(
+        string category,
+        System.Collections.Concurrent.ConcurrentQueue<CapturedLogRecord> sink,
+        Func<Microsoft.Extensions.Logging.IExternalScopeProvider?> scopeProvider)
+        : Microsoft.Extensions.Logging.ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId,
+            TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            var structured = state is IReadOnlyList<KeyValuePair<string, object?>> values
+                ? string.Join(" | ", values.Select(pair => $"{pair.Key}={pair.Value}"))
+                : state?.ToString() ?? string.Empty;
+
+            var scopes = new System.Text.StringBuilder();
+            scopeProvider()?.ForEachScope(
+                (scope, builder) =>
+                {
+                    if (scope is IReadOnlyList<KeyValuePair<string, object?>> pairs)
+                    {
+                        builder.Append(string.Join(" | ", pairs.Select(pair => $"{pair.Key}={pair.Value}")));
+                    }
+                    else
+                    {
+                        builder.Append(scope);
+                    }
+
+                    builder.Append(" ;; ");
+                },
+                scopes);
+
+            sink.Enqueue(new CapturedLogRecord(
+                category,
+                logLevel.ToString(),
+                eventId.Id,
+                formatter(state, exception),
+                structured,
+                scopes.ToString(),
+                exception is null ? string.Empty : exception.GetType().FullName + ": " + exception.Message + " | " + exception.StackTrace));
+        }
+    }
+}
+
+/// <summary>Provider-i PARËSOR i kapjes (alias `SyntheticPrimary`) — sink-u i pohimeve të privatësisë.</summary>
+[Microsoft.Extensions.Logging.ProviderAlias(Alias)]
+public sealed class PrimaryCapturingLoggerProvider(System.Collections.Concurrent.ConcurrentQueue<CapturedLogRecord> sink)
+    : CapturingLoggerProviderBase(sink)
+{
+    public const string Alias = "SyntheticPrimary";
+}
+
+/// <summary>Provider-i DYTËSOR i kapjes (alias `SyntheticSecondary`) — për rregulla provider-specific dhe kufizime të ndryshme per-provider.</summary>
+[Microsoft.Extensions.Logging.ProviderAlias(Alias)]
+public sealed class SecondaryCapturingLoggerProvider(System.Collections.Concurrent.ConcurrentQueue<CapturedLogRecord> sink)
+    : CapturingLoggerProviderBase(sink)
+{
+    public const string Alias = "SyntheticSecondary";
 }
 
 /// <summary>
@@ -402,78 +486,25 @@ public sealed class IdentityAuthorityFactory(IdentityAuthorityHostSettings setti
             + $"Audiences=[{string.Join(",", options.Audiences)}] Signing={options.SigningCredentials.Count} Encryption={options.EncryptionCredentials.Count}";
     }
 
-    /// <summary>Log-et e kapura PASIVISHT (vetëm me <c>CaptureLogs</c>) — mbi konfigurimin real.</summary>
+    /// <summary>Log-et e kapura PASIVISHT nga provider-i PARËSOR (vetëm me <c>CaptureLogs</c>) — mbi konfigurimin real të filtrit.</summary>
     public System.Collections.Concurrent.ConcurrentQueue<CapturedLogRecord> Captured { get; } = new();
 
-    /// <summary>Numëron rekordet e kapura që përmbajnë vlerën, PA e kthyer kurrë vlerën vetë.</summary>
+    /// <summary>Log-et e kapura PASIVISHT nga provider-i DYTËSOR (vetëm me <c>CaptureLogs</c>).</summary>
+    public System.Collections.Concurrent.ConcurrentQueue<CapturedLogRecord> CapturedSecondary { get; } = new();
+
+    /// <summary>Provider-i parësor i regjistruar (për provën se u konsultua realisht nga fabrika e host-it).</summary>
+    public PrimaryCapturingLoggerProvider? PrimaryProvider { get; private set; }
+
+    /// <summary>Provider-i dytësor i regjistruar.</summary>
+    public SecondaryCapturingLoggerProvider? SecondaryProvider { get; private set; }
+
+    /// <summary>Numëron rekordet e kapura (parësor) që përmbajnë vlerën, PA e kthyer kurrë vlerën vetë.</summary>
     public CapturedLogRecord[] CapturedContaining(string value)
         => [.. Captured.Where(record => record.Contains(value))];
 
-    private sealed class CapturingLoggerProvider(System.Collections.Concurrent.ConcurrentQueue<CapturedLogRecord> sink)
-        : Microsoft.Extensions.Logging.ILoggerProvider, Microsoft.Extensions.Logging.ISupportExternalScope
-    {
-        private Microsoft.Extensions.Logging.IExternalScopeProvider? scopes;
-
-        public void SetScopeProvider(Microsoft.Extensions.Logging.IExternalScopeProvider scopeProvider)
-            => scopes = scopeProvider;
-
-        public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName)
-            => new CapturingLogger(categoryName, sink, () => scopes);
-
-        public void Dispose()
-        {
-        }
-
-        /// <summary>
-        /// Vëzhgues PASIV: `IsEnabled` kthen gjithmonë `true`, pra VENDIMIN e merr filtri EFEKTIV i
-        /// host-it (pikërisht ajo që duhet provuar). Kapen ÇDO kategori dhe të GJITHA sipërfaqet që
-        /// një sink real do të shkruante: mesazhi i formatuar, structured state, scopes dhe exception.
-        /// </summary>
-        private sealed class CapturingLogger(
-            string category,
-            System.Collections.Concurrent.ConcurrentQueue<CapturedLogRecord> sink,
-            Func<Microsoft.Extensions.Logging.IExternalScopeProvider?> scopeProvider)
-            : Microsoft.Extensions.Logging.ILogger
-        {
-            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
-
-            public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
-
-            public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId,
-                TState state, Exception? exception, Func<TState, Exception?, string> formatter)
-            {
-                var structured = state is IReadOnlyList<KeyValuePair<string, object?>> values
-                    ? string.Join(" | ", values.Select(pair => $"{pair.Key}={pair.Value}"))
-                    : state?.ToString() ?? string.Empty;
-
-                var scopes = new System.Text.StringBuilder();
-                scopeProvider()?.ForEachScope(
-                    (scope, builder) =>
-                    {
-                        if (scope is IReadOnlyList<KeyValuePair<string, object?>> pairs)
-                        {
-                            builder.Append(string.Join(" | ", pairs.Select(pair => $"{pair.Key}={pair.Value}")));
-                        }
-                        else
-                        {
-                            builder.Append(scope);
-                        }
-
-                        builder.Append(" ;; ");
-                    },
-                    scopes);
-
-                sink.Enqueue(new CapturedLogRecord(
-                    category,
-                    logLevel.ToString(),
-                    eventId.Id,
-                    formatter(state, exception),
-                    structured,
-                    scopes.ToString(),
-                    exception is null ? string.Empty : exception.GetType().FullName + ": " + exception.Message + " | " + exception.StackTrace));
-            }
-        }
-    }
+    /// <summary>Numëron rekordet e kapura (dytësor) që përmbajnë vlerën, PA e kthyer kurrë vlerën vetë.</summary>
+    public CapturedLogRecord[] CapturedSecondaryContaining(string value)
+        => [.. CapturedSecondary.Where(record => record.Contains(value))];
 
     private sealed class CollectingLoggerProvider(System.Collections.Concurrent.ConcurrentQueue<string> sink)
         : Microsoft.Extensions.Logging.ILoggerProvider
@@ -521,43 +552,41 @@ public sealed class IdentityAuthorityFactory(IdentityAuthorityHostSettings setti
                 services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(new CollectingLoggerProvider(Logs)));
         }
 
+        // C2 §3: mbjellja e konfigurimit të operatorit (config në memorie / `AddFilter`) — të gjitha
+        // regjistrohen si `Configure`, pra ekzekutohen PARA `PostConfigure`-it të politikës.
+        Settings.LoggingSeed?.Invoke(builder);
+
         if (Settings.CaptureLogs)
         {
-            // Vëzhgues PASIV: asnjë ndryshim pragu/filtri — vetëm një provider shtesë.
-            builder.ConfigureServices(services =>
-                services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(new CapturingLoggerProvider(Captured)));
-        }
-
-        if (Settings.SeedCompetingLogRules)
-        {
-            // `AddFilter` regjistrohet si `Configure`, pra EKZEKUTOHET PARA `PostConfigure`-it të
-            // politikës — pikërisht rasti që politika duhet ta mposhtë.
+            // Vëzhgues PASIVË me DALJE TË KONTROLLUARA: provider-at e zakonshëm të daljes hiqen VETËM
+            // në host-in e testit (zero material në stdout/CI edhe në dështim), asnjë ndryshim
+            // pragu/filtri; dy provider-a REALË të dallueshëm, secili me sink-un e vet.
             builder.ConfigureLogging(logging =>
             {
-                Microsoft.Extensions.Logging.FilterLoggingBuilderExtensions.AddFilter(logging, (string?)null, Microsoft.Extensions.Logging.LogLevel.Trace);
-                Microsoft.Extensions.Logging.FilterLoggingBuilderExtensions.AddFilter(logging, "OpenIddict", Microsoft.Extensions.Logging.LogLevel.Trace);
-                Microsoft.Extensions.Logging.FilterLoggingBuilderExtensions.AddFilter(logging, "OpenIddict.Server.OpenIddictServerDispatcher", Microsoft.Extensions.Logging.LogLevel.Debug);
-                Microsoft.Extensions.Logging.FilterLoggingBuilderExtensions.AddFilter(logging, "OpenIdd*Dispatcher", Microsoft.Extensions.Logging.LogLevel.Trace);
-                // Rregull provider-SPECIFIC me kategori `null`: pa mbrojtjen per-provider të
-                // politikës, ky do t'i mposhtte rregullat provider-agnostic.
-                Microsoft.Extensions.Logging.FilterLoggingBuilderExtensions.AddFilter<CapturingLoggerProviderMarker>(logging, null, Microsoft.Extensions.Logging.LogLevel.Trace);
+                // Ekuivalenti i `ClearProviders()` + `AddProvider(...)` (tipi i extension-eve është i paqartë mes dy assembly-ve).
+                Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions
+                    .RemoveAll<Microsoft.Extensions.Logging.ILoggerProvider>(logging.Services);
+                PrimaryProvider = new PrimaryCapturingLoggerProvider(Captured);
+                SecondaryProvider = new SecondaryCapturingLoggerProvider(CapturedSecondary);
+                logging.Services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(PrimaryProvider);
+                logging.Services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(SecondaryProvider);
             });
-        }
-
-        if (Settings.SeedStricterLogRule)
-        {
-            builder.ConfigureLogging(logging =>
-                Microsoft.Extensions.Logging.FilterLoggingBuilderExtensions.AddFilter(logging, "OpenIddict", Microsoft.Extensions.Logging.LogLevel.Error));
         }
 
         if (Settings.DisableProtocolLoggingPolicy)
         {
-            // TEST-ONLY: `ConfigureServices` i WebApplicationFactory-t ekzekutohet PAS Program.cs,
-            // prandaj ky `PostConfigure` regjistrohet i fundit dhe e mposht rregullin e politikës
-            // (rregull me të njëjtën kategori, i shtuar më vonë, fiton).
-            builder.ConfigureServices(services => services.PostConfigure<Microsoft.Extensions.Logging.LoggerFilterOptions>(
-                options => options.Rules.Add(new Microsoft.Extensions.Logging.LoggerFilterRule(
-                    null, "OpenIddict", Microsoft.Extensions.Logging.LogLevel.Information, null))));
+            // TEST-ONLY (kontroll RED): kundërfakti "host pa politikë" — hiqet regjistrimi i
+            // `PostConfigure`-it të politikës production (identifikuar sipas tipit të vet; parakushti
+            // pohon se ishte i instaluar). Asnjë rregull nuk shtohet dhe asnjë prag nuk ndryshohet.
+            builder.ConfigureServices(services =>
+            {
+                var policy = services
+                    .Where(descriptor => descriptor.ServiceType == typeof(Microsoft.Extensions.Options.IPostConfigureOptions<Microsoft.Extensions.Logging.LoggerFilterOptions>)
+                        && descriptor.ImplementationType?.FullName?.Contains("IdentityProtocolLoggingPolicy", StringComparison.Ordinal) == true)
+                    .ToArray();
+                Assert.True(policy.Length == 1, $"politika e log-eve nuk ishte e instaluar saktësisht një herë (gjetur {policy.Length})");
+                services.Remove(policy[0]);
+            });
         }
 
         if (Settings.PersistenceFault is { } fault)

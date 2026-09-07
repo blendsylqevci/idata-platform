@@ -341,6 +341,34 @@ internal static class InteractiveClient
 
         return client.SendAsync(request, TestContext.Current.CancellationToken);
     }
+
+    /// <summary>
+    /// C2 §5: kërkesë UserInfo me header-a `Authorization` BRUTO — një hyrje për çdo vlerë header-i
+    /// (të përsëritur, skema të përziera) ose një vlerë e vetme e bashkuar me presje — pa asnjë
+    /// validim nga klienti, që pipeline-i real të shohë përfaqësimin e vërtetë të header-ave.
+    /// </summary>
+    internal static Task<HttpResponseMessage> UserInfoRawAsync(
+        HttpClient client, HttpMethod method, IReadOnlyList<string> authorizationValues,
+        string? query = null, IReadOnlyDictionary<string, string>? form = null)
+    {
+        var path = "/" + UserInfoContract.Path + (query is null ? string.Empty : "?" + query);
+        var request = new HttpRequestMessage(method, new Uri(path, UriKind.Relative));
+        if (authorizationValues.Count > 0)
+        {
+            Assert.True(request.Headers.TryAddWithoutValidation("Authorization", authorizationValues), "header-i Authorization nuk u shtua");
+        }
+
+        if (form is not null)
+        {
+            request.Content = new FormUrlEncodedContent(form);
+        }
+        else if (method == HttpMethod.Post)
+        {
+            request.Content = new FormUrlEncodedContent(new Dictionary<string, string>(StringComparer.Ordinal));
+        }
+
+        return client.SendAsync(request, TestContext.Current.CancellationToken);
+    }
 }
 
 /// <summary>Intervalet REALE (tick-e monotonikë) të kërkesave — evidencë mbivendosjeje, jo vetëm API paralelizimi.</summary>

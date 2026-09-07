@@ -11,6 +11,7 @@ using Idata.Platform.Modules.Identity.Application;
 using Microsoft.AspNetCore;
 using OpenIddict.Abstractions;
 using OpenIddict.Server;
+using OpenIddict.Server.AspNetCore;
 using OpenIddict.Validation;
 using OpenIddict.Validation.AspNetCore;
 
@@ -73,9 +74,10 @@ public static class IdentityAuthorityServiceCollectionExtensions
 
         services.TryAddSingleton(TimeProvider.System);
 
-        // B.2c C1: politika e KUFIZUAR e log-eve të protokollit (SUPPRESSION e event-eve nën
-        // `Warning` për kategoritë e bibliotekës) — regjistrohet PARA wiring-ut, imponohet si
-        // `PostConfigure` mbi konfigurimin efektiv. Telemetria `Warning+` mbetet e paprekur.
+        // B.2c C1/C2: politika e KUFIZUAR e log-eve — dysheme `Warning` (SUPPRESSION e event-eve
+        // nën të) VETËM për kategoritë `OpenIddict*` dhe `Microsoft.AspNetCore.Hosting.Diagnostics`,
+        // e imponuar si `PostConfigure` mbi konfigurimin efektiv pa hequr/ndryshuar asnjë rregull të
+        // operatorit. Regjistrohet PARA wiring-ut; telemetria `Warning+` mbetet e paprekur.
         services.AddIdentityProtocolLoggingPolicy();
 
         services.AddOpenIddict()
@@ -102,16 +104,27 @@ public static class IdentityAuthorityServiceCollectionExtensions
                     // access token-in (bearer) PARA se kërkesa të arrijë thin controller-in.
                     .EnableUserInfoEndpointPassthrough();
 
-                // B.2c C1: transport header-only për UserInfo — prania e `access_token` në
-                // query/form refuzohet me `invalid_request` PARA validimit të parametrit dhe
-                // para autentikimit (rendi derivohet nga descriptor-i REAL i bibliotekës).
+                // B.2c C1/C2: transport header-only për UserInfo — prania e `access_token` në
+                // query/form DHE (C2) header `Authorization` i përsëritur / i bashkuar / me skema
+                // të përziera refuzohen me `invalid_request` PARA validimit të parametrit dhe para
+                // autentikimit (rendi derivohet nga descriptor-i REAL i bibliotekës). Lexohen
+                // kanalet ORIGJINALE të kërkesës HTTP (vlerat e header-it para bashkimit).
                 options.AddEventHandler<OpenIddictServerEvents.ValidateUserInfoRequestContext>(descriptor =>
                     descriptor.UseInlineHandler(context =>
                     {
                         var request = context.Transaction.GetHttpRequest();
                         if (request is null)
                         {
-                            return default; // transport jo-HTTP: asnjë kanal query/form për t'u lexuar.
+                            return default; // transport jo-HTTP: asnjë kanal header/query/form për t'u lexuar.
+                        }
+
+                        var shape = UserInfoTransportGuard.ClassifyAuthorizationHeader(request.Headers.Authorization.ToArray());
+                        if (shape == AuthorizationHeaderShape.Ambiguous)
+                        {
+                            context.Reject(
+                                error: OpenIddictConstants.Errors.InvalidRequest,
+                                description: "The authorization header must carry exactly one bearer credential.");
+                            return default;
                         }
 
                         var inQuery = request.Query.ContainsKey(UserInfoTransportGuard.ForbiddenParameter);
@@ -127,6 +140,16 @@ public static class IdentityAuthorityServiceCollectionExtensions
                         return default;
                     })
                     .SetOrder(OpenIddictServerHandlers.UserInfo.ValidateAccessTokenParameter.Descriptor.Order - 1));
+
+                // B.2c C2: çdo refuzim i UserInfo që përfundon në pipeline-in e SERVER-it (para
+                // passthrough-it: 400 për transport të paqartë/të ndaluar ose metodë, 401 për kredencial
+                // të munguar/të pavlefshëm) merr `Cache-Control: no-store` / `Pragma: no-cache` (+ `Expires`)
+                // përmes handler-it STANDARD të OpenIddict, i cili në 7.6.0 nuk regjistrohet për UserInfo.
+                // Rendi i tij (AttachHttpResponseCode + 1000) paraprin `ProcessChallengeErrorResponse`, ku
+                // dërgimi i gabimit përfundon. Përgjigjet 200 dhe 403 (`insufficient_scope`) vijnë nga
+                // controller-i pas passthrough-it, që i vendos vetë këta header-a.
+                options.AddEventHandler(
+                    OpenIddictServerAspNetCoreHandlers.AttachCacheControlHeader<OpenIddictServerEvents.ApplyUserInfoResponseContext>.Descriptor);
 
                 // PKCE me `S256` i DETYRUESHËM: metoda `plain` hiqet nga seti i
                 // serverit — kërkesat me `plain` (ose pa metodë) refuzohen.
