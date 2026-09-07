@@ -669,7 +669,10 @@
         }
       },
       "idata.platform.modules.identity.application": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "Mediator.Abstractions": "[3.0.2, )"
+        }
       },
       "idata.platform.modules.identity.infrastructure": {
         "type": "Project",
@@ -686,7 +689,8 @@
       "idata.platform.modules.identity.presentation": {
         "type": "Project",
         "dependencies": {
-          "Idata.Platform.Modules.Identity.Application": "[1.0.0, )"
+          "Idata.Platform.Modules.Identity.Application": "[1.0.0, )",
+          "Mediator.Abstractions": "[3.0.2, )"
         }
       },
       "idata.platform.modules.platformstatus.application": {

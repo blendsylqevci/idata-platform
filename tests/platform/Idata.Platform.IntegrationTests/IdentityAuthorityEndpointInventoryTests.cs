@@ -16,8 +16,8 @@ namespace Idata.Platform.IntegrationTests;
 /// `ApiSurfaceTests`) dhe (b) konfigurimi i endpoint-eve OpenIddict (middleware,
 /// JO `RouteEndpoint`). Këtu provohet (b) ekzaktësisht mbi host-in PRODUCTION
 /// (pa asnjë shtesë test-only): vetëm `connect/authorize` + `connect/token` +
-/// metadata publike default e OpenIddict (discovery + JWKS); vetëm
-/// Authorization Code + PKCE; zero introspection/revocation/userinfo/logout/
+/// `connect/userinfo` (B.2c) + metadata publike default e OpenIddict (discovery +
+/// JWKS); vetëm Authorization Code + PKCE; zero introspection/revocation/logout/
 /// device/PAR; matrica HTTP method/path: endpoint-et e synuara refuzojnë
 /// fail-closed (kurrë 404, kurrë 200 për kërkesa invalide), të pasynuarat = 404.
 /// </summary>
@@ -45,6 +45,8 @@ public sealed class IdentityAuthorityEndpointInventoryTests
         var server = factory.Services.GetRequiredService<IOptionsMonitor<OpenIddictServerOptions>>().Get(Options.DefaultName);
         Assert.Equal(["connect/authorize"], Paths(server.AuthorizationEndpointUris));
         Assert.Equal(["connect/token"], Paths(server.TokenEndpointUris));
+        // B.2c: endpoint-i i VETËM i ri — UserInfo (rruga nga kontrata neutrale e Application-it).
+        Assert.Equal([Idata.Platform.Modules.Identity.Application.UserInfoContract.Path], Paths(server.UserInfoEndpointUris));
 
         // Metadata publike default e OpenIddict (dokumentuar, jo e shtuar nga ne).
         Assert.Equal([".well-known/oauth-authorization-server", ".well-known/openid-configuration"], Paths(server.ConfigurationEndpointUris));
@@ -53,7 +55,6 @@ public sealed class IdentityAuthorityEndpointInventoryTests
         // ZERO endpoint tjetër.
         Assert.Empty(server.IntrospectionEndpointUris);
         Assert.Empty(server.RevocationEndpointUris);
-        Assert.Empty(server.UserInfoEndpointUris);
         Assert.Empty(server.EndSessionEndpointUris);
         Assert.Empty(server.DeviceAuthorizationEndpointUris);
         Assert.Empty(server.EndUserVerificationEndpointUris);
@@ -74,9 +75,13 @@ public sealed class IdentityAuthorityEndpointInventoryTests
 
         var aspnet = factory.Services.GetRequiredService<IOptionsMonitor<OpenIddictServerAspNetCoreOptions>>().Get(Options.DefaultName);
         // B.2b: passthrough VETËM për autorizimin (login/consent i owner-it të aprovuar);
-        // token endpoint-i mbetet tërësisht i OpenIddict-it.
+        // B.2c: + UserInfo (thin controller pas validimit të bearer-it nga OpenIddict);
+        // token endpoint-i mbetet tërësisht i OpenIddict-it (passthrough i NDALUAR kudo).
         Assert.True(aspnet.EnableAuthorizationEndpointPassthrough);
+        Assert.True(aspnet.EnableUserInfoEndpointPassthrough);
         Assert.False(aspnet.EnableTokenEndpointPassthrough);
+        Assert.False(aspnet.EnableEndSessionEndpointPassthrough);
+        Assert.False(aspnet.EnableEndUserVerificationEndpointPassthrough);
         Assert.False(aspnet.DisableTransportSecurityRequirement);
     }
 
@@ -89,6 +94,10 @@ public sealed class IdentityAuthorityEndpointInventoryTests
     [InlineData("POST", "/connect/authorize")]
     [InlineData("PUT", "/connect/authorize")]
     [InlineData("DELETE", "/connect/authorize")]
+    [InlineData("GET", "/connect/userinfo")]
+    [InlineData("POST", "/connect/userinfo")]
+    [InlineData("PUT", "/connect/userinfo")]
+    [InlineData("DELETE", "/connect/userinfo")]
     public async Task Endpointet_e_synuara_ekzistojne_dhe_refuzojne_fail_closed_kerkesat_invalide(string method, string path)
     {
         using var signing = SyntheticCertificates.Signing();
@@ -106,14 +115,39 @@ public sealed class IdentityAuthorityEndpointInventoryTests
         Assert.NotEqual(HttpStatusCode.NotFound, response.StatusCode);
         Assert.NotEqual(HttpStatusCode.OK, response.StatusCode);
         Assert.NotEqual(HttpStatusCode.InternalServerError, response.StatusCode);
-        Assert.Contains(response.StatusCode, (HttpStatusCode[])[HttpStatusCode.BadRequest, HttpStatusCode.MethodNotAllowed, HttpStatusCode.Redirect]);
+        // B.2c: VETËM UserInfo lejon 401 (RFC 6750, bearer i munguar) dhe mbart `error` në
+        // `WWW-Authenticate`; token/authorize mbeten EKZAKTËSISHT me kontratën e B.2b.
+        var isUserInfo = path.Equals("/connect/userinfo", StringComparison.Ordinal);
+        Assert.Contains(response.StatusCode, isUserInfo
+            ? (HttpStatusCode[])[HttpStatusCode.BadRequest, HttpStatusCode.MethodNotAllowed, HttpStatusCode.Unauthorized]
+            : (HttpStatusCode[])[HttpStatusCode.BadRequest, HttpStatusCode.MethodNotAllowed, HttpStatusCode.Redirect]);
+
         if (response.StatusCode == HttpStatusCode.BadRequest)
         {
-            // Token endpoint: JSON OAuth error; authorization endpoint pa redirect_uri të
-            // validuar: përgjigje lokale gabimi (jo JSON) — të dyja mbartin `error`, kurrë `code=`.
             var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-            Assert.Contains("error", body, StringComparison.OrdinalIgnoreCase);
+            if (isUserInfo)
+            {
+                // Gabimi bearer mbartet në `WWW-Authenticate` (RFC 6750 §3), trupi mbetet bosh.
+                Assert.Contains("error", response.Headers.WwwAuthenticate.ToString(), StringComparison.OrdinalIgnoreCase);
+            }
+            else
+            {
+                // Token endpoint: JSON OAuth error; authorization endpoint pa redirect_uri të
+                // validuar: përgjigje lokale gabimi (jo JSON) — të dyja mbartin `error` në TRUP.
+                Assert.Contains("error", body, StringComparison.OrdinalIgnoreCase);
+            }
+
             Assert.DoesNotContain("code=", body, StringComparison.Ordinal);
+        }
+        else if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            // RFC 6750 §3: kërkesa PA asnjë kredencial merr challenge-in bazë `Bearer` PA kod
+            // gabimi (kodi `invalid_token` shfaqet vetëm kur dërgohet token i pavlefshëm —
+            // provuar te `IdentityOidcSignInTests`). Kurrë trup me subjekt.
+            Assert.True(isUserInfo, "vetëm UserInfo lejon 401 në këtë matricë");
+            Assert.NotEmpty(response.Headers.WwwAuthenticate);
+            Assert.Contains("Bearer", response.Headers.WwwAuthenticate.ToString(), StringComparison.Ordinal);
+            Assert.DoesNotContain("\"sub\"", await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
         }
     }
 
@@ -121,8 +155,6 @@ public sealed class IdentityAuthorityEndpointInventoryTests
     [InlineData("GET", "/connect/introspect")]
     [InlineData("POST", "/connect/introspect")]
     [InlineData("POST", "/connect/revoke")]
-    [InlineData("GET", "/connect/userinfo")]
-    [InlineData("POST", "/connect/userinfo")]
     [InlineData("GET", "/connect/logout")]
     [InlineData("GET", "/connect/endsession")]
     [InlineData("POST", "/connect/device")]
@@ -162,7 +194,12 @@ public sealed class IdentityAuthorityEndpointInventoryTests
             Assert.Equal([GrantTypes.AuthorizationCode], root.GetProperty("grant_types_supported").EnumerateArray().Select(e => e.GetString()!).ToArray());
             Assert.Equal([ResponseTypes.Code], root.GetProperty("response_types_supported").EnumerateArray().Select(e => e.GetString()!).ToArray());
             Assert.Contains(CodeChallengeMethods.Sha256, root.GetProperty("code_challenge_methods_supported").EnumerateArray().Select(e => e.GetString()!));
-            foreach (var absent in (string[])["introspection_endpoint", "revocation_endpoint", "userinfo_endpoint", "end_session_endpoint", "device_authorization_endpoint", "pushed_authorization_request_endpoint"])
+            // B.2c: `userinfo_endpoint` tani është REAL (i shpallur dhe i shërbyer); `openid` +
+            // algoritmet e ID token-it shpallen — provohen te `IdentityOidcSignInTests`.
+            Assert.EndsWith("/connect/userinfo", root.GetProperty("userinfo_endpoint").GetString(), StringComparison.Ordinal);
+            Assert.Contains(Scopes.OpenId, root.GetProperty("scopes_supported").EnumerateArray().Select(e => e.GetString()!));
+            Assert.NotEmpty(root.GetProperty("id_token_signing_alg_values_supported").EnumerateArray());
+            foreach (var absent in (string[])["introspection_endpoint", "revocation_endpoint", "end_session_endpoint", "device_authorization_endpoint", "pushed_authorization_request_endpoint"])
             {
                 Assert.False(root.TryGetProperty(absent, out _), $"discovery ekspozon endpoint të pasynuar: {absent}");
             }

@@ -47,12 +47,15 @@ public sealed class ApiSurfaceTests
 
         // B.2b: sipërfaqja interaktive e authority-t (login + consent) është pjesë e
         // route table-it, POR mbetet JASHTË kontratës publike OpenAPI (ExcludeFromDescription).
+        // B.2c: UserInfo = thin controller MVC (passthrough i OpenIddict) — endpoint protokolli,
+        // JASHTË `platform-v1` (ApiExplorerSettings IgnoreApi), i pranishëm në discovery.
         Assert.Equal(
             [
                 "api/platform/access-context",
                 "api/platform/memberships/{membershipId:guid}/role",
                 "api/platform/status",
                 "connect/authorize",
+                "connect/userinfo",
                 "identity/login",
             ],
             functional.Distinct().Order(StringComparer.Ordinal).ToArray());

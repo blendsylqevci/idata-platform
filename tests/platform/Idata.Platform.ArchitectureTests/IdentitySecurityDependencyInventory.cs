@@ -203,12 +203,17 @@ internal static class IdentitySecurityDependencyInventory
             },
             ["src/platform/Modules/AccessControl/Presentation/Idata.Platform.Modules.AccessControl.Presentation.csproj"]
                 = new Dictionary<string, string>(StringComparer.Ordinal),
-            // B.2b: Identity Application/Presentation — zero PackageReference direkt
-            // (Application pa varësi; Presentation vetëm me FrameworkReference).
-            ["src/platform/Modules/Identity/Application/Idata.Platform.Modules.Identity.Application.csproj"]
-                = new Dictionary<string, string>(StringComparer.Ordinal),
-            ["src/platform/Modules/Identity/Presentation/Idata.Platform.Modules.Identity.Presentation.csproj"]
-                = new Dictionary<string, string>(StringComparer.Ordinal),
+            // B.2b: Identity Application/Presentation pa PackageReference direkt;
+            // B.2c: + Mediator.Abstractions 3.0.2 (pin-i EKZISTUES CPM) për query/handler dhe
+            // thin controller-in e UserInfo — asnjë paketë tjetër.
+            ["src/platform/Modules/Identity/Application/Idata.Platform.Modules.Identity.Application.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Mediator.Abstractions"] = "3.0.2",
+            },
+            ["src/platform/Modules/Identity/Presentation/Idata.Platform.Modules.Identity.Presentation.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Mediator.Abstractions"] = "3.0.2",
+            },
             ["src/platform/Modules/Identity/Infrastructure/Idata.Platform.Modules.Identity.Infrastructure.csproj"] = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["Microsoft.AspNetCore.Identity.EntityFrameworkCore"] = "10.0.10",

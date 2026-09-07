@@ -96,6 +96,10 @@ public sealed class IdentityAuthorityBoundaryTests
     private static readonly (Type Builder, string Member)[] InteractionOwnerOnlyMembers =
     [
         (typeof(OpenIddictServerAspNetCoreBuilder), "EnableAuthorizationEndpointPassthrough"),
+        // B.2c: passthrough-i i UserInfo VETËM te owner-i (thin controller pas validimit
+        // të bearer-it nga OpenIddict); token endpoint passthrough mbetet i NDALUAR kudo.
+        (typeof(OpenIddictServerAspNetCoreBuilder), "EnableUserInfoEndpointPassthrough"),
+        (typeof(OpenIddictServerBuilder), "SetUserInfoEndpointUris"),
     ];
 
     [Fact]

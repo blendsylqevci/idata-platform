@@ -57,9 +57,13 @@ public sealed class ConventionEnforcementTests
     [Fact]
     public void Mediator_Abstractions_vetem_ne_projektet_e_aprovuara()
     {
+        // B.2c: ZËVENDËSIM I KONTROLLUAR — Identity Application/Presentation hyjnë në listën e
+        // aprovuar (query/handler + thin controller i UserInfo); SourceGenerator mbetet vetëm në host.
         string[] approvedSuffixes =
             [Path.Combine("Application", "Idata.Platform.Modules.PlatformStatus.Application.csproj"),
-             Path.Combine("Presentation", "Idata.Platform.Modules.PlatformStatus.Presentation.csproj")];
+             Path.Combine("Presentation", "Idata.Platform.Modules.PlatformStatus.Presentation.csproj"),
+             Path.Combine("Application", "Idata.Platform.Modules.Identity.Application.csproj"),
+             Path.Combine("Presentation", "Idata.Platform.Modules.Identity.Presentation.csproj")];
         foreach (var project in AllProjectFiles())
         {
             if (File.ReadAllText(project).Contains("\"Mediator.Abstractions\"", StringComparison.Ordinal))
@@ -1570,12 +1574,16 @@ public sealed class ConventionEnforcementTests
         }
     }
 
-    [Fact]
-    public void Controller_i_hollte_merr_vetem_IMediator_dhe_trashegon_bazen_module_local()
+    [Theory]
+    [InlineData("Idata.Platform.Modules.PlatformStatus.Presentation",
+        "Idata.Platform.Modules.PlatformStatus.Presentation.Controllers.PlatformStatusController")]
+    // B.2c: thin controller-i i UserInfo ndjek TË NJËJTIN pattern (vetëm IMediator, bazë module-local).
+    [InlineData("Idata.Platform.Modules.Identity.Presentation",
+        "Idata.Platform.Modules.Identity.Presentation.Controllers.UserInfoController")]
+    public void Controller_i_hollte_merr_vetem_IMediator_dhe_trashegon_bazen_module_local(string assemblyName, string controllerName)
     {
-        var presentation = LoadVerifiedByName("Idata.Platform.Modules.PlatformStatus.Presentation");
-        var controller = presentation.GetType(
-            "Idata.Platform.Modules.PlatformStatus.Presentation.Controllers.PlatformStatusController");
+        var presentation = LoadVerifiedByName(assemblyName);
+        var controller = presentation.GetType(controllerName);
         Assert.NotNull(controller);
 
         var constructor = Assert.Single(controller.GetConstructors());
@@ -1584,31 +1592,42 @@ public sealed class ConventionEnforcementTests
 
         var baseType = controller.BaseType;
         Assert.NotNull(baseType);
-        Assert.Equal(
-            "Idata.Platform.Modules.PlatformStatus.Presentation.Controllers.BaseApiController",
-            baseType.FullName);
+        Assert.Equal($"{assemblyName}.Controllers.BaseApiController", baseType.FullName);
         Assert.Same(presentation, baseType.Assembly); // module-local, JO shared
 
-        // Zero fusha të tipeve infra: probe/DbContext/UoW në controller.
+        // Zero fusha të tipeve infra: probe/DbContext/UoW/store/protokoll në controller.
         foreach (var field in controller.GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public))
         {
             var name = field.FieldType.FullName ?? string.Empty;
             Assert.DoesNotContain("ReadinessProbe", name, StringComparison.Ordinal);
             Assert.DoesNotContain("DbContext", name, StringComparison.Ordinal);
             Assert.DoesNotContain("UnitOfWork", name, StringComparison.Ordinal);
+            Assert.DoesNotContain("OpenIddict", name, StringComparison.Ordinal);
+            Assert.DoesNotContain("UserManager", name, StringComparison.Ordinal);
         }
     }
 
+    /// <summary>
+    /// B.2c: ZËVENDËSIM I KONTROLLUAR — dy owner-a MODULE-LOCAL (PlatformStatus + Identity),
+    /// secili me bazën e vet; zero shared framework/BuildingBlocks (Increment C decision gate).
+    /// </summary>
     [Fact]
-    public void BaseApiController_ekziston_vetem_ne_PlatformStatus_Presentation()
+    public void BaseApiController_ekziston_vetem_module_local_ne_PlatformStatus_dhe_Identity_Presentation()
     {
         var owners = PlatformAssemblies()
             .SelectMany(assembly => assembly.GetTypes())
             .Where(type => type.Name == "BaseApiController")
             .Select(type => type.Assembly.GetName().Name ?? string.Empty)
             .Distinct()
+            .Order(StringComparer.Ordinal)
             .ToArray();
-        Assert.Equal(["Idata.Platform.Modules.PlatformStatus.Presentation"], owners);
+        Assert.Equal(
+            ["Idata.Platform.Modules.Identity.Presentation", "Idata.Platform.Modules.PlatformStatus.Presentation"],
+            owners);
+
+        // Asnjë bazë nuk trashëgon nga tjetra dhe asnjëra nuk është publike jashtë modulit të vet si shared type.
+        var bases = PlatformAssemblies().SelectMany(assembly => assembly.GetTypes()).Where(type => type.Name == "BaseApiController").ToArray();
+        Assert.All(bases, type => Assert.Equal("Microsoft.AspNetCore.Mvc.ControllerBase", type.BaseType?.FullName));
     }
 
     [Fact]

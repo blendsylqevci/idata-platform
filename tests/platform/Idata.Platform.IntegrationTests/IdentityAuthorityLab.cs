@@ -167,6 +167,36 @@ public sealed record IdentityAuthorityHostSettings
     /// <summary>Test-only: log Debug për OpenIddict/Authentication (diagnostikë lokale).</summary>
     public bool DiagnosticLogging { get; init; }
 
+    /// <summary>
+    /// B.2c C1/C2: kapje PASIVE e log-eve mbi konfigurimin REAL të filtrit — NUK ndryshon asnjë
+    /// prag/filtër. C2: me DALJE TË KONTROLLUARA — provider-at e zakonshëm të daljes (Console/Debug/
+    /// EventSource) hiqen VETËM në host-in e testit dhe zëvendësohen nga dy sink-e në memorie
+    /// (<see cref="PrimaryCapturingLoggerProvider"/>, <see cref="SecondaryCapturingLoggerProvider"/>),
+    /// që asnjë material i flow-it të mos arrijë kurrë stdout/CI edhe në rast dështimi të politikës.
+    /// Izolimi i destinacionit nuk ndryshon asgjë nga ajo që collector-i pohon: rregullat e filtrit
+    /// mbeten të njëjtat dhe sink-et janë pasive (`IsEnabled` = `true`). Ndarë qëllimisht nga
+    /// <see cref="DiagnosticLogging"/> (që ul pragjet).
+    /// </summary>
+    public bool CaptureLogs { get; init; }
+
+    /// <summary>
+    /// TEST-ONLY (kontroll RED, C2): HEQ regjistrimin e politikës production të log-eve nga host-i i
+    /// testit — kundërfakti “host pa politikë”. Përdoret VETËM me canary të padëmshëm dhe kërkesa pa
+    /// material autentikimi; asnjë flow me token nuk ekzekutohet në një host të tillë.
+    /// </summary>
+    public bool DisableProtocolLoggingPolicy { get; init; }
+
+    /// <summary>TEST-ONLY (§5): injektim i një dështimi DB në pikën REALE të persistencës (SaveChanges).</summary>
+    public SyntheticPersistenceFault? PersistenceFault { get; init; }
+
+    /// <summary>
+    /// TEST-ONLY (C2 §3): mbjellje SINTETIKE e konfigurimit të log-eve të operatorit PARA politikës —
+    /// konfigurim në memorie (`Logging:…` përmes host settings, përfshirë seksione per-provider sipas
+    /// alias-it dhe kategori wildcard) dhe/ose kod (`AddFilter`, përfshirë `AddFilter&lt;TProvider&gt;`).
+    /// Zero file konfigurimi production.
+    /// </summary>
+    public Action<IWebHostBuilder>? LoggingSeed { get; init; }
+
     public IReadOnlyDictionary<string, string?> ToHostConfiguration()
     {
         var values = new Dictionary<string, string?>(StringComparer.Ordinal);
@@ -240,6 +270,194 @@ public sealed record IdentityAuthorityHostSettings
 }
 
 /// <summary>
+/// TEST-ONLY (C2 §3): provider REAL kapjeje — bazë e përbashkët për dy tipa të dallueshëm, secili me
+/// alias të vetin, që rregullat provider-specific (nga konfigurimi sipas alias-it ose nga kodi sipas
+/// tipit të plotë) të provohen mbi provider-a të REGJISTRUAR dhe të PËRDORUR realisht — jo mbi një
+/// marker që kthen `NullLogger`. Vëzhgues PASIV: `IsEnabled` kthen gjithmonë `true`, pra vendimin e
+/// merr filtri EFEKTIV i host-it për KËTË provider. Kapen ÇDO kategori dhe të GJITHA sipërfaqet që një
+/// sink real do të shkruante: mesazhi i formatuar, structured state, scopes dhe exception-i (tip,
+/// mesazh, stack — VETËM i jashtëm; inner exceptions nuk mbulohen dhe kjo deklarohet).
+/// </summary>
+public abstract class CapturingLoggerProviderBase(System.Collections.Concurrent.ConcurrentQueue<CapturedLogRecord> sink)
+    : Microsoft.Extensions.Logging.ILoggerProvider, Microsoft.Extensions.Logging.ISupportExternalScope
+{
+    private Microsoft.Extensions.Logging.IExternalScopeProvider? scopes;
+
+    /// <summary>Kategoritë për të cilat fabrika e host-it e ka konsultuar këtë provider (provë regjistrimi/përdorimi).</summary>
+    public System.Collections.Concurrent.ConcurrentQueue<string> ConsultedCategories { get; } = new();
+
+    public void SetScopeProvider(Microsoft.Extensions.Logging.IExternalScopeProvider scopeProvider)
+        => scopes = scopeProvider;
+
+    public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName)
+    {
+        ConsultedCategories.Enqueue(categoryName);
+        return new CapturingLogger(categoryName, sink, () => scopes);
+    }
+
+    public void Dispose()
+    {
+    }
+
+    private sealed class CapturingLogger(
+        string category,
+        System.Collections.Concurrent.ConcurrentQueue<CapturedLogRecord> sink,
+        Func<Microsoft.Extensions.Logging.IExternalScopeProvider?> scopeProvider)
+        : Microsoft.Extensions.Logging.ILogger
+    {
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId,
+            TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            var structured = state is IReadOnlyList<KeyValuePair<string, object?>> values
+                ? string.Join(" | ", values.Select(pair => $"{pair.Key}={pair.Value}"))
+                : state?.ToString() ?? string.Empty;
+
+            var scopes = new System.Text.StringBuilder();
+            scopeProvider()?.ForEachScope(
+                (scope, builder) =>
+                {
+                    if (scope is IReadOnlyList<KeyValuePair<string, object?>> pairs)
+                    {
+                        builder.Append(string.Join(" | ", pairs.Select(pair => $"{pair.Key}={pair.Value}")));
+                    }
+                    else
+                    {
+                        builder.Append(scope);
+                    }
+
+                    builder.Append(" ;; ");
+                },
+                scopes);
+
+            sink.Enqueue(new CapturedLogRecord(
+                category,
+                logLevel.ToString(),
+                eventId.Id,
+                formatter(state, exception),
+                structured,
+                scopes.ToString(),
+                exception is null ? string.Empty : exception.GetType().FullName + ": " + exception.Message + " | " + exception.StackTrace));
+        }
+    }
+}
+
+/// <summary>Provider-i PARËSOR i kapjes (alias `SyntheticPrimary`) — sink-u i pohimeve të privatësisë.</summary>
+[Microsoft.Extensions.Logging.ProviderAlias(Alias)]
+public sealed class PrimaryCapturingLoggerProvider(System.Collections.Concurrent.ConcurrentQueue<CapturedLogRecord> sink)
+    : CapturingLoggerProviderBase(sink)
+{
+    public const string Alias = "SyntheticPrimary";
+}
+
+/// <summary>Provider-i DYTËSOR i kapjes (alias `SyntheticSecondary`) — për rregulla provider-specific dhe kufizime të ndryshme per-provider.</summary>
+[Microsoft.Extensions.Logging.ProviderAlias(Alias)]
+public sealed class SecondaryCapturingLoggerProvider(System.Collections.Concurrent.ConcurrentQueue<CapturedLogRecord> sink)
+    : CapturingLoggerProviderBase(sink)
+{
+    public const string Alias = "SyntheticSecondary";
+}
+
+/// <summary>
+/// B.2c C1 — një rekord log-u i kapur PASIVISHT me TË GJITHA sipërfaqet që një sink real do të
+/// shkruante. `Contains` kërkon vlerën në secilën prej tyre; asnjë metodë nuk e kthen vlerën.
+/// </summary>
+public sealed record CapturedLogRecord(
+    string Category, string Level, int EventId, string Message, string State, string Scopes, string Exception)
+{
+    public bool Contains(string value)
+        => !string.IsNullOrEmpty(value)
+           && (Message.Contains(value, StringComparison.Ordinal)
+               || State.Contains(value, StringComparison.Ordinal)
+               || Scopes.Contains(value, StringComparison.Ordinal)
+               || Exception.Contains(value, StringComparison.Ordinal));
+
+    /// <summary>Etiketë e PASTRUAR për raportim dështimi — kurrë përmbajtje, kurrë vlerë sekreti.</summary>
+    public string SafeLocator => $"{Category}#{EventId}[{Level}]";
+}
+
+/// <summary>
+/// TEST-ONLY (§5): fault i armatosur i persistencës. Nuk mbush disk real dhe nuk prek DB të
+/// përbashkët — simulon KLASËN e gabimit (dështim shkrimi/kapaciteti) në pikën REALE ku
+/// OpenIddict persiston kodin/token-in, dhe regjistron nëse u aktivizua vërtet.
+/// </summary>
+public sealed class SyntheticPersistenceFault
+{
+    private int armed;
+    private int fired;
+
+    /// <summary>Vetëm shkrimet që përfshijnë një entitet me këtë fragment tipi dështojnë.</summary>
+    public string EntityTypeFragment { get; init; } = "Token";
+
+    /// <summary>Gjendjet e prekura: `Added` = krijim (issuance), `Modified` = përditësim (redeem).</summary>
+    public Microsoft.EntityFrameworkCore.EntityState[] States { get; init; } =
+        [Microsoft.EntityFrameworkCore.EntityState.Added, Microsoft.EntityFrameworkCore.EntityState.Modified];
+
+    public bool Fired => Volatile.Read(ref fired) > 0;
+
+    public void Arm() => Volatile.Write(ref armed, 1);
+
+    public void Disarm() => Volatile.Write(ref armed, 0);
+
+    internal bool ShouldFail(bool matchesEntity)
+    {
+        if (Volatile.Read(ref armed) == 0 || !matchesEntity)
+        {
+            return false;
+        }
+
+        Interlocked.Increment(ref fired);
+        return true;
+    }
+}
+
+/// <summary>Exception sintetik i klasës `DbException` — klasifikohet si dështim infrastrukture.</summary>
+public sealed class SyntheticPersistenceException(string message) : System.Data.Common.DbException(message);
+
+/// <summary>Interceptor EF Core TEST-ONLY mbi `SaveChanges` — pika REALE e persistencës.</summary>
+public sealed class SyntheticPersistenceFaultInterceptor(SyntheticPersistenceFault fault)
+    : Microsoft.EntityFrameworkCore.Diagnostics.SaveChangesInterceptor
+{
+    public override ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>> SavingChangesAsync(
+        Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData,
+        Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
+        CancellationToken cancellationToken = default)
+    {
+        Fail(eventData);
+        return base.SavingChangesAsync(eventData, result, cancellationToken);
+    }
+
+    public override Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> SavingChanges(
+        Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData,
+        Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result)
+    {
+        Fail(eventData);
+        return base.SavingChanges(eventData, result);
+    }
+
+    private void Fail(Microsoft.EntityFrameworkCore.Diagnostics.DbContextEventData eventData)
+    {
+        var entries = eventData.Context?.ChangeTracker.Entries().ToArray() ?? [];
+        var matches = entries.Any(entry =>
+            fault.States.Contains(entry.State)
+            && (entry.Entity.GetType().Name.Contains(fault.EntityTypeFragment, StringComparison.OrdinalIgnoreCase)
+                || entry.Metadata.Name.Contains(fault.EntityTypeFragment, StringComparison.OrdinalIgnoreCase)));
+
+        if (fault.ShouldFail(matches))
+        {
+            // `DbUpdateException` me `DbException` të brendshme = i njëjti klasifikim infrastrukture
+            // si ndërprerja reale e DB-së (kurrë 500 i papritur).
+            throw new Microsoft.EntityFrameworkCore.DbUpdateException(
+                "synthetic persistence fault (test-only)",
+                new SyntheticPersistenceException("synthetic write failure (test-only)"));
+        }
+    }
+}
+
+/// <summary>
 /// Host i testit mbi `Program`-in REAL: konfigurimi identity jepet si host
 /// settings (WebApplicationFactory i kalon si args → të dukshme te
 /// `builder.Configuration` në kohën e regjistrimit), environment-i eksplicit.
@@ -267,6 +485,26 @@ public sealed class IdentityAuthorityFactory(IdentityAuthorityHostSettings setti
             + $"ValidTypes=[{string.Join(",", parameters.ValidTypes ?? [])}] Issuer={options.Issuer} "
             + $"Audiences=[{string.Join(",", options.Audiences)}] Signing={options.SigningCredentials.Count} Encryption={options.EncryptionCredentials.Count}";
     }
+
+    /// <summary>Log-et e kapura PASIVISHT nga provider-i PARËSOR (vetëm me <c>CaptureLogs</c>) — mbi konfigurimin real të filtrit.</summary>
+    public System.Collections.Concurrent.ConcurrentQueue<CapturedLogRecord> Captured { get; } = new();
+
+    /// <summary>Log-et e kapura PASIVISHT nga provider-i DYTËSOR (vetëm me <c>CaptureLogs</c>).</summary>
+    public System.Collections.Concurrent.ConcurrentQueue<CapturedLogRecord> CapturedSecondary { get; } = new();
+
+    /// <summary>Provider-i parësor i regjistruar (për provën se u konsultua realisht nga fabrika e host-it).</summary>
+    public PrimaryCapturingLoggerProvider? PrimaryProvider { get; private set; }
+
+    /// <summary>Provider-i dytësor i regjistruar.</summary>
+    public SecondaryCapturingLoggerProvider? SecondaryProvider { get; private set; }
+
+    /// <summary>Numëron rekordet e kapura (parësor) që përmbajnë vlerën, PA e kthyer kurrë vlerën vetë.</summary>
+    public CapturedLogRecord[] CapturedContaining(string value)
+        => [.. Captured.Where(record => record.Contains(value))];
+
+    /// <summary>Numëron rekordet e kapura (dytësor) që përmbajnë vlerën, PA e kthyer kurrë vlerën vetë.</summary>
+    public CapturedLogRecord[] CapturedSecondaryContaining(string value)
+        => [.. CapturedSecondary.Where(record => record.Contains(value))];
 
     private sealed class CollectingLoggerProvider(System.Collections.Concurrent.ConcurrentQueue<string> sink)
         : Microsoft.Extensions.Logging.ILoggerProvider
@@ -312,6 +550,68 @@ public sealed class IdentityAuthorityFactory(IdentityAuthorityHostSettings setti
             builder.UseSetting("Logging:LogLevel:Microsoft.AspNetCore.Authentication", "Debug");
             builder.ConfigureServices(services =>
                 services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(new CollectingLoggerProvider(Logs)));
+        }
+
+        // C2 §3: mbjellja e konfigurimit të operatorit (config në memorie / `AddFilter`) — të gjitha
+        // regjistrohen si `Configure`, pra ekzekutohen PARA `PostConfigure`-it të politikës.
+        Settings.LoggingSeed?.Invoke(builder);
+
+        if (Settings.CaptureLogs)
+        {
+            // Vëzhgues PASIVË me DALJE TË KONTROLLUARA: provider-at e zakonshëm të daljes hiqen VETËM
+            // në host-in e testit (zero material në stdout/CI edhe në dështim), asnjë ndryshim
+            // pragu/filtri; dy provider-a REALË të dallueshëm, secili me sink-un e vet.
+            builder.ConfigureLogging(logging =>
+            {
+                // Ekuivalenti i `ClearProviders()` + `AddProvider(...)` (tipi i extension-eve është i paqartë mes dy assembly-ve).
+                Microsoft.Extensions.DependencyInjection.Extensions.ServiceCollectionDescriptorExtensions
+                    .RemoveAll<Microsoft.Extensions.Logging.ILoggerProvider>(logging.Services);
+                PrimaryProvider = new PrimaryCapturingLoggerProvider(Captured);
+                SecondaryProvider = new SecondaryCapturingLoggerProvider(CapturedSecondary);
+                logging.Services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(PrimaryProvider);
+                logging.Services.AddSingleton<Microsoft.Extensions.Logging.ILoggerProvider>(SecondaryProvider);
+            });
+        }
+
+        if (Settings.DisableProtocolLoggingPolicy)
+        {
+            // TEST-ONLY (kontroll RED): kundërfakti "host pa politikë" — hiqet regjistrimi i
+            // `PostConfigure`-it të politikës production (identifikuar sipas tipit të vet; parakushti
+            // pohon se ishte i instaluar). Asnjë rregull nuk shtohet dhe asnjë prag nuk ndryshohet.
+            builder.ConfigureServices(services =>
+            {
+                var policy = services
+                    .Where(descriptor => descriptor.ServiceType == typeof(Microsoft.Extensions.Options.IPostConfigureOptions<Microsoft.Extensions.Logging.LoggerFilterOptions>)
+                        && descriptor.ImplementationType?.FullName?.Contains("IdentityProtocolLoggingPolicy", StringComparison.Ordinal) == true)
+                    .ToArray();
+                Assert.True(policy.Length == 1, $"politika e log-eve nuk ishte e instaluar saktësisht një herë (gjetur {policy.Length})");
+                services.Remove(policy[0]);
+            });
+        }
+
+        if (Settings.PersistenceFault is { } fault)
+        {
+            // TEST-ONLY (§5): interceptor EF Core mbi pikën REALE të persistencës që konsumon
+            // OpenIddict (`SaveChanges` i `PlatformDbContext`) — zero seam production. Regjistrohet
+            // DETERMINISHT duke rindërtuar `DbContextOptions` ekzistuese (zbulimi nga DI nuk është
+            // i garantuar për këtë wiring), duke ruajtur lifetime-in dhe konfigurimin origjinal.
+            builder.ConfigureServices(services =>
+            {
+                var descriptor = services.Last(service =>
+                    service.ServiceType == typeof(Microsoft.EntityFrameworkCore.DbContextOptions<Idata.Platform.Persistence.PlatformDbContext>));
+                services.Remove(descriptor);
+                services.Add(Microsoft.Extensions.DependencyInjection.ServiceDescriptor.Describe(
+                    descriptor.ServiceType,
+                    provider =>
+                    {
+                        var original = (Microsoft.EntityFrameworkCore.DbContextOptions<Idata.Platform.Persistence.PlatformDbContext>)
+                            descriptor.ImplementationFactory!(provider);
+                        return new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<Idata.Platform.Persistence.PlatformDbContext>(original)
+                            .AddInterceptors(new SyntheticPersistenceFaultInterceptor(fault))
+                            .Options;
+                    },
+                    descriptor.Lifetime));
+            });
         }
 
         if (Settings.ExtraEphemeralSigningKeyOutsideConfiguration)

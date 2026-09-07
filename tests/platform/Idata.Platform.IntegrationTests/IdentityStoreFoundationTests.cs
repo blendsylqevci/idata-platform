@@ -379,7 +379,9 @@ public sealed class IdentityStoreFoundationTests
 
         // B.2b (zëvendësim i KONTROLLUAR i pin-it "zero endpoint" të B.1): route table-i
         // fiton EKZAKTËSISHT sipërfaqen e autorizuar të interaksionit — asgjë tjetër
-        // identity/OIDC (zero account/logout/userinfo/token endpoint i kodit tonë).
+        // identity/OIDC (zero account/logout/token endpoint i kodit tonë).
+        // B.2c (zëvendësim i KONTROLLUAR, i dytë): + `connect/userinfo` — thin controller-i
+        // MVC i UserInfo (passthrough i OpenIddict, jashtë OpenAPI); asgjë tjetër.
         var identityRoutes = patterns
             .Where(pattern =>
                 pattern.Contains("connect", StringComparison.OrdinalIgnoreCase)
@@ -390,6 +392,6 @@ public sealed class IdentityStoreFoundationTests
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToArray();
-        Assert.Equal(["connect/authorize", "identity/login"], identityRoutes);
+        Assert.Equal(["connect/authorize", "connect/userinfo", "identity/login"], identityRoutes);
     }
 }
