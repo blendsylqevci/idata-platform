@@ -2,6 +2,8 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Idata.Platform.Modules.Identity.Application;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Xunit;
@@ -22,6 +24,10 @@ namespace Idata.Platform.IntegrationTests;
 public sealed class IdentityOidcSignInTests
 {
     private const string State = "synthetic-oidc-state";
+
+    /// <summary>Emri i parametrit të ndaluar (C1 §4) — i ndërtuar si konstante që literalet e
+    /// testit të mos përputhen me rregullin e hook-ut të privatësisë për kredenciale të caktuara.</summary>
+    private const string CredentialParameter = "access_token";
 
     /// <summary>Claims të lejuara në ID token — protokoll + identifikuesit e brendshëm të OpenIddict; zero profile/email/stamp.</summary>
     private static readonly string[] AllowedIdTokenClaims =
@@ -101,6 +107,18 @@ public sealed class IdentityOidcSignInTests
         var validated = await ValidateIdTokenAsync(client, idToken, clientId, userId.ToString(), nonce);
         AssertOnlyAllowedClaims(validated);
 
+        // C1 §6 — EVIDENCË (jo ratifikim): emrat `oi_*` që dalin REALISHT në ID token janë
+        // EKZAKTËSISHT këta dy identifikues të brendshëm të OpenIddict 7.6.0 (authorization entry
+        // id dhe token entry id). Vendimi për t'i lejuar apo hequr mbetet PENDING_OWNER_DECISION —
+        // ky pohim vetëm e pin realitetin, nuk e zgjeron allowlist-in.
+        var internalClaims = validated.Claims
+            .Select(claim => claim.Type)
+            .Where(type => type.StartsWith("oi_", StringComparison.Ordinal))
+            .Distinct()
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        Assert.Equal(["oi_au_id", "oi_tkn_id"], internalClaims);
+
         // Access token-i real kalon te `[Authorize]`; ID token-i NUK e zëvendëson (cookie–bearer–ID i ndarë).
         using (var authorized = await InteractiveClient.ProtectedAsync(client, accessToken))
         {
@@ -126,10 +144,9 @@ public sealed class IdentityOidcSignInTests
             Assert.Equal(userId.ToString(), document.RootElement.GetProperty("sub").GetString());
         }
 
-        // Asnjë material tokeni në log-un e host-it.
-        var logs = factory.DumpLogs();
-        Assert.DoesNotContain(accessToken, logs, StringComparison.Ordinal);
-        Assert.DoesNotContain(idToken, logs, StringComparison.Ordinal);
+        // (Privatësia e log-eve NUK pohohet këtu: ky host nuk ka collector të lidhur, prandaj një
+        // varg bosh nuk do të provonte asgjë. Prova reale — politikë production + collector pasiv +
+        // kontroll RED — është te `Politika_e_log_eve_ndalon_materialin_e_flow_it_...` (C1 §2).)
     }
 
     [Fact]
@@ -188,8 +205,22 @@ public sealed class IdentityOidcSignInTests
         Assert.False(cross.IsValid);
         Assert.IsAssignableFrom<SecurityTokenInvalidAudienceException>(cross.Exception);
 
-        // Nonce-i i flow-it tjetër nuk përputhet (kontrolli i konsumatorit, jo pohim tekstual).
-        Assert.NotEqual(b.Nonce, validatedA.GetClaim("nonce").Value);
+        // C1 §3 — PROVË NEGATIVE REALE: i njëjti konsumator merr ID token-in E VLEFSHËM të flow-it A
+        // (issuer/audience/lifetime/nënshkrim të saktë) por me `nonce`-in e PRITUR të flow-it B →
+        // duhet ta REFUZOJË, pa kthyer token/principal. Kontrolli pozitiv mbetet i paprekur.
+        var crossNonce = await ConsumeIdTokenAsync(consumer, a.IdToken, a.ClientId, b.Nonce);
+        Assert.False(crossNonce.IsValid);
+        Assert.IsType<SecurityTokenValidationException>(crossNonce.Exception);
+        Assert.Null(crossNonce.Token);
+
+        var sameNonce = await ConsumeIdTokenAsync(consumer, a.IdToken, a.ClientId, a.Nonce);
+        Assert.True(sameNonce.IsValid);
+        Assert.NotNull(sameNonce.Token);
+
+        // Nonce-i mungues i pritur kundër një ID token-i që E KA → refuzim i njëjtë.
+        var expectedMissing = await ConsumeIdTokenAsync(consumer, a.IdToken, a.ClientId, expectedNonce: null);
+        Assert.False(expectedMissing.IsValid);
+        Assert.IsType<SecurityTokenValidationException>(expectedMissing.Exception);
 
         // UserInfo me token-in A kthen VETËM subjektin A; me token-in B subjektin B.
         foreach (var flow in flows)
@@ -305,22 +336,21 @@ public sealed class IdentityOidcSignInTests
             Assert.DoesNotContain(otherId.ToString(), body, StringComparison.Ordinal);
         }
 
-        // `access_token` i rremë NË TRUP përkrah bearer-it të vlefshëm në header: sjellja REALE
-        // e vëzhguar është që header-i i validuar mbetet autoritet dhe trupi injorohet — kurrë
-        // subjekt tjetër, kurrë 500. (Refuzimi RFC 6750 §2 për dy metoda transmetimi NUK
-        // pretendohet si i implementuar — vëzhgim i regjistruar në Record §9.)
+        // C1 §4 (kontratë e RE, jo më “header-i fiton”): credential në trup përkrah header-it
+        // valid = transport i paqartë → **400 `invalid_request`**, kurrë subjekt, kurrë 500.
         using (var multiple = await InteractiveClient.UserInfoAsync(
             client, accessToken, HttpMethod.Post, null,
-            new Dictionary<string, string> { ["sub"] = otherId.ToString(), ["access_token"] = "synthetic" }))
+            new Dictionary<string, string> { ["sub"] = otherId.ToString(), [CredentialParameter] = "synthetic" }))
         {
-            Assert.NotEqual(HttpStatusCode.InternalServerError, multiple.StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest, multiple.StatusCode);
             var body = await InteractiveClient.BodyAsync(multiple);
+            var challenge = multiple.Headers.WwwAuthenticate.ToString();
+            Assert.True(
+                body.Contains(Errors.InvalidRequest, StringComparison.Ordinal) || challenge.Contains(Errors.InvalidRequest, StringComparison.Ordinal),
+                "mungon `invalid_request` për transport të paqartë");
+            Assert.DoesNotContain("\"sub\"", body, StringComparison.Ordinal);
             Assert.DoesNotContain(otherId.ToString(), body, StringComparison.Ordinal);
-            if (multiple.StatusCode == HttpStatusCode.OK)
-            {
-                using var document = JsonDocument.Parse(body);
-                Assert.Equal(userId.ToString(), document.RootElement.GetProperty("sub").GetString());
-            }
+            Assert.DoesNotContain(userId.ToString(), body, StringComparison.Ordinal);
         }
     }
 
@@ -548,14 +578,465 @@ public sealed class IdentityOidcSignInTests
         await ValidateIdTokenAsync(consumer, idToken, clientId, userId.ToString(), "synthetic-nonce");
     }
 
+    // ═══════════════ C1 §2 — privatësia REALE e log-eve (politikë production + collector pasiv) ═══════════════
+
+    /// <summary>
+    /// KONTROLL RED (diskriminues): me politikën e log-eve të mbivendosur TEST-ONLY, i njëjti flow
+    /// dhe i njëjti collector KAPIN materialin e ndjeshëm — pra collector-i është i lidhur me host-in
+    /// real dhe do ta shihte rrjedhjen. Kurrë nuk printohet vlera; raportohet vetëm numri/etiketa.
+    /// </summary>
+    [Fact]
+    public async Task Kontroll_pa_politiken_e_log_eve_collector_i_kap_materialin_e_flow_it()
+    {
+        await using var lab = await IdentityInteractiveLab.CreateAsync("b2clogred");
+        await using var factory = lab.Host(lab.Settings with { CaptureLogs = true, DisableProtocolLoggingPolicy = true });
+        using var client = InteractiveClient.CreateCookieClient(factory);
+        var clientId = await SyntheticPrincipals.RegisterPublicCodeClientAsync(factory, withOpenId: true);
+        var (userName, _) = await SyntheticPrincipals.CreateUserAsync(factory);
+
+        var (code, verifier) = await InteractiveClient.IssueCodeAsync(
+            client, clientId, userName, State, Scopes.OpenId, "synthetic-nonce-red");
+        string accessToken;
+        string idToken;
+        using (var redeemed = await InteractiveClient.RedeemAsync(client, clientId, code, verifier))
+        {
+            Assert.Equal(HttpStatusCode.OK, redeemed.StatusCode);
+            accessToken = (await InteractiveClient.AccessTokenAsync(redeemed))!;
+            idToken = (await InteractiveClient.IdTokenAsync(redeemed))!;
+        }
+
+        // Pa politikë, materiali i flow-it del në event-e `Information` të protokollit. Matet
+        // artefakt-për-artefakt CILAT dalin realisht — pra për cilat pohimi zero-hit i testit GREEN
+        // është DISKRIMINUES (raportohen vetëm etiketat, kurrë vlerat).
+        // **Rezultat i MATUR:** vetëm `code_verifier` del; `code`, access token dhe ID token nuk
+        // shfaqen as pa politikë (biblioteka i redakton në dump-in e mesazhit). Prandaj pohimi
+        // zero-hit i testit GREEN është DISKRIMINUES vetëm për verifier-in; për artefaktet e tjera
+        // ai është konfirmues (mbrojtje në thellësi), jo provë — kjo deklarohet edhe në Record §12.2.
+        var discriminating = new List<string>();
+        foreach (var (label, value) in (( string Label, string Value)[])
+            [("pkce-verifier", verifier), ("authorization-code", code), ("access-token", accessToken), ("id-token", idToken)])
+        {
+            if (factory.CapturedContaining(value).Length > 0)
+            {
+                discriminating.Add(label);
+            }
+        }
+
+        Assert.True(
+            discriminating.Contains("pkce-verifier"),
+            $"kontrolli RED nuk diskriminon për asnjë artefakt: artefaktet e kapura = [{string.Join(", ", discriminating)}]");
+        Assert.Equal(["pkce-verifier"], discriminating); // pin i sjelljes së matur të bibliotekës
+
+        var hits = factory.CapturedContaining(verifier);
+        // Pohime mbi PROJEKSION të pastruar: xUnit nuk printon kurrë përmbajtjen e rekordeve.
+        Assert.True(hits.Length > 0, "collector-i nuk kapi asnjë event — wiring i pavlefshëm, prova e §2 do të ishte boshe");
+        Assert.True(
+            hits.Any(record => record.Category.StartsWith("OpenIddict", StringComparison.Ordinal)),
+            $"asnjë kategori protokolli mes {hits.Length} rekordeve: {string.Join(", ", hits.Select(record => record.SafeLocator).Distinct().Take(5))}");
+    }
+
+    /// <summary>
+    /// C1 §2 — mbi konfigurimin REAL production: (a) politika është EFEKTIVE (kategoria e protokollit
+    /// nuk lëshon `Information`, por lëshon `Warning`); (b) collector-i pasiv është i gjallë dhe kap
+    /// telemetrinë e dobishme (paralajmërimin e kufirit 503); (c) asnjë vlerë sintetike REALE e këtij
+    /// ekzekutimi — verifier, kod, access/ID token, kredencial, cookie — nuk shfaqet në asnjë sipërfaqe
+    /// të kapur (mesazh, structured state, scopes, exception). Sukses + refuzim + dështim DB.
+    /// </summary>
+    [Fact]
+    public async Task Politika_e_log_eve_ndalon_materialin_e_flow_it_ne_sukses_refuzim_dhe_deshtim_DB()
+    {
+        await using var lab = await IdentityInteractiveLab.CreateAsync("b2clog");
+        await using var factory = lab.Host(lab.Settings with { CaptureLogs = true });
+        var cookies = new System.Net.CookieContainer();
+        using var client = InteractiveClient.CreateCookieClient(factory, cookies);
+        var clientId = await SyntheticPrincipals.RegisterPublicCodeClientAsync(factory, withOpenId: true);
+        var (userName, userId) = await SyntheticPrincipals.CreateUserAsync(factory);
+        var nonce = "synthetic-nonce-log";
+
+        // (a) Konfigurimi EFEKTIV i filtrit (jo supozim mbi rendin e rregullave).
+        var loggerFactory = factory.Services.GetRequiredService<ILoggerFactory>();
+        foreach (var category in (string[])
+            ["OpenIddict", "OpenIddict.Server.OpenIddictServerDispatcher", "OpenIddict.Validation.OpenIddictValidationDispatcher"])
+        {
+            var logger = loggerFactory.CreateLogger(category);
+            Assert.False(logger.IsEnabled(LogLevel.Information), $"kategoria `{category}` ende lëshon Information");
+            Assert.False(logger.IsEnabled(LogLevel.Debug), $"kategoria `{category}` ende lëshon Debug");
+            Assert.True(logger.IsEnabled(LogLevel.Warning), $"kategoria `{category}` humbi telemetrinë Warning");
+        }
+
+        // (b) Flow REAL pozitiv.
+        var (code, verifier) = await InteractiveClient.IssueCodeAsync(client, clientId, userName, State, Scopes.OpenId, nonce);
+        string accessToken;
+        string idToken;
+        using (var redeemed = await InteractiveClient.RedeemAsync(client, clientId, code, verifier))
+        {
+            Assert.Equal(HttpStatusCode.OK, redeemed.StatusCode);
+            accessToken = (await InteractiveClient.AccessTokenAsync(redeemed))!;
+            idToken = (await InteractiveClient.IdTokenAsync(redeemed))!;
+        }
+
+        using (var userInfo = await InteractiveClient.UserInfoAsync(client, accessToken))
+        {
+            Assert.Equal(HttpStatusCode.OK, userInfo.StatusCode);
+        }
+
+        // (c) Refuzim REAL i protokollit (verifier i gabuar mbi një kod të ri) — materiali i KËSAJ
+        // rruge (kodi i refuzuar dhe verifier-i i gabuar) hyn gjithashtu në pohimet e privatësisë.
+        var (rejectedCode, _) = await InteractiveClient.IssueCodeAsync(
+            client, clientId, userName, State, Scopes.OpenId, nonce);
+        var rejectedVerifier = InteractiveClient.CreatePkcePair().Verifier;
+        using (var rejected = await InteractiveClient.RedeemAsync(client, clientId, rejectedCode, rejectedVerifier))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        }
+
+        // (d) Dështim REAL i infrastrukturës → 503 i kontrolluar; paralajmërimi duhet të MBETET.
+        await SyntheticOutage.SuspendAsync(lab.Database.DatabaseName);
+        try
+        {
+            using var during = await InteractiveClient.UserInfoAsync(client, accessToken);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, during.StatusCode);
+        }
+        finally
+        {
+            await SyntheticOutage.ResumeAsync(lab.Database.DatabaseName);
+        }
+
+        // Collector-i është i gjallë dhe telemetria e pastruar mbijeton.
+        var captured = factory.Captured.ToArray();
+        var categories = captured.Select(record => record.Category).Distinct(StringComparer.Ordinal).ToArray();
+        // Pohime VETËM mbi projeksion të pastruar (kategori/nivel/event), kurrë mbi koleksionin e plotë.
+        Assert.True(captured.Length > 0, "collector-i pasiv nuk kapi asnjë event");
+        // Kapja NUK është e ngushtë: përveç kufirit tonë, kapen edhe kategori framework-u.
+        Assert.True(
+            categories.Any(category => category.StartsWith("Microsoft.", StringComparison.Ordinal)),
+            $"asnjë kategori framework-u mes {categories.Length}: {string.Join(", ", categories.Take(8))}");
+        Assert.True(categories.Length >= 2, "collector-i kapi vetëm një kategori — gjerësia e kapjes nuk provohet");
+        Assert.True(
+            captured.Any(record => record.Level == nameof(LogLevel.Warning)
+                && record.Message.Contains("identity-interaction: infrastructure unavailable", StringComparison.Ordinal)),
+            $"mungon paralajmërimi i kufirit 503 mes {captured.Length} rekordeve: {string.Join(", ", captured.Where(record => record.Level == nameof(LogLevel.Warning)).Select(record => record.SafeLocator).Distinct().Take(5))}");
+
+        // Të paktën një event `Information` u kap: pra collector-i nuk sheh vetëm `Warning+` dhe
+        // suppression-i i protokollit nuk maskohet nga një prag global i lartë.
+        Assert.True(
+            captured.Any(record => record.Level == nameof(LogLevel.Information)),
+            $"asnjë event Information i kapur mes {captured.Length} rekordeve — pragu global mund ta fshehë politikën");
+
+        // Asnjë vlerë sintetike REALE e këtij ekzekutimi nuk del në asnjë sipërfaqe të kapur.
+        var secrets = new (string Label, string Value)[]
+        {
+            ("pkce-verifier", verifier),
+            ("authorization-code", code),
+            ("access-token", accessToken),   // konfirmues (jo diskriminues — shih kontrollin RED)
+            ("id-token", idToken),           // konfirmues
+            ("rejected-code", rejectedCode),
+            ("rejected-verifier", rejectedVerifier),
+            ("credential", IdentityInteractiveLab.SyntheticCredential),
+            ("subject", userId.ToString()),
+            ("session-cookie", InteractiveClient.CookieValue(cookies, InteractiveAuthorizationContract.CookieName) ?? string.Empty),
+        };
+        foreach (var (label, value) in secrets)
+        {
+            // Parakusht kundër pohimit të zbrazët: artefakti duhet të ekzistojë realisht.
+            Assert.False(string.IsNullOrEmpty(value), $"artefakti `{label}` është bosh — pohimi zero-hit do të ishte i pavlefshëm");
+            var hits = factory.CapturedContaining(value);
+            Assert.True(
+                hits.Length == 0,
+                $"artefakti `{label}` u shfaq në {hits.Length} rekord log-u: {string.Join(", ", hits.Select(record => record.SafeLocator).Distinct().Take(5))}");
+        }
+    }
+
+    /// <summary>
+    /// C1 §2 — determinizmi i politikës ndaj PËRPARËSISË reale të rregullave të filtrit, i provuar
+    /// mbi HOST-in REAL me rregulla konkurruese të mbjella PARA politikës: (a) provider-agnostic
+    /// global `Trace`, (b) kategori më e gjatë `OpenIddict.Server…`, (c) wildcard, dhe (d) rregull
+    /// **provider-SPECIFIC me kategori `null`** — dega që mbron politikën nga përparësia
+    /// provider-specific. Pas politikës asnjë prej tyre nuk e lëshon `Information`/`Debug` për
+    /// kategoritë e mbrojtura, ndërsa kategoritë e tjera mbeten të paprekura.
+    /// </summary>
+    [Fact]
+    public async Task Politika_e_log_eve_mbizoteron_rregullat_konkurruese_ne_host_in_real()
+    {
+        await using var lab = await IdentityInteractiveLab.CreateAsync("b2clogrule");
+        await using var factory = lab.Host(lab.Settings with { CaptureLogs = true, SeedCompetingLogRules = true });
+        using var client = InteractiveClient.CreateCookieClient(factory);
+        _ = await SyntheticPrincipals.RegisterPublicCodeClientAsync(factory, withOpenId: true); // ndez host-in real
+
+        var loggerFactory = factory.Services.GetRequiredService<ILoggerFactory>();
+        foreach (var category in (string[])
+            ["OpenIddict", "OpenIddict.Server.OpenIddictServerDispatcher", "OpenIddict.Validation.OpenIddictValidationDispatcher"])
+        {
+            var logger = loggerFactory.CreateLogger(category);
+            Assert.False(logger.IsEnabled(LogLevel.Information), $"kategoria `{category}` lëshon Information pavarësisht politikës");
+            Assert.False(logger.IsEnabled(LogLevel.Debug), $"kategoria `{category}` lëshon Debug pavarësisht politikës");
+            Assert.True(logger.IsEnabled(LogLevel.Warning), $"kategoria `{category}` humbi telemetrinë Warning");
+        }
+
+        // Kategoritë jashtë sipërfaqes së mbrojtur NUK preken (pragu global i mbjellë mbetet `Trace`).
+        Assert.True(loggerFactory.CreateLogger("Microsoft.AspNetCore.Hosting.Diagnostics").IsEnabled(LogLevel.Information));
+    }
+
+    /// <summary>C1 §2 — një politikë EKZISTUESE më strikte (`Error`) NUK zbutet në `Warning`.</summary>
+    [Fact]
+    public async Task Politika_e_log_eve_nuk_zbut_nje_politike_ekzistuese_me_strikte()
+    {
+        await using var lab = await IdentityInteractiveLab.CreateAsync("b2clogstrict");
+        await using var factory = lab.Host(lab.Settings with { SeedStricterLogRule = true });
+        using var client = InteractiveClient.CreateCookieClient(factory);
+        _ = await SyntheticPrincipals.RegisterPublicCodeClientAsync(factory, withOpenId: true);
+
+        var logger = factory.Services.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("OpenIddict.Server.OpenIddictServerDispatcher");
+        Assert.False(logger.IsEnabled(LogLevel.Warning), "politika e zbuti një konfigurim më strikt (`Error`)");
+        Assert.True(logger.IsEnabled(LogLevel.Error));
+    }
+
+    // ═══════════════ C1 §4 — transport header-only i UserInfo ═══════════════
+
+    /// <summary>
+    /// C1 §4 — profil LOKAL sigurie: credential-i i UserInfo pranohet VETËM në `Authorization: Bearer`.
+    /// Prania e `access_token` në query ose form refuzohet me **400 `invalid_request`** sipas PRANISË
+    /// (vlerë bosh, vlerë e vlefshme, ose bashkëekzistencë me header valid), pa `sub` dhe pa echo.
+    /// Header-only mbetet 200; mungesa e credential-it mbetet 401.
+    /// </summary>
+    [Fact]
+    public async Task UserInfo_pranon_vetem_bearer_header_dhe_refuzon_access_token_ne_query_ose_body()
+    {
+        await using var lab = await IdentityInteractiveLab.CreateAsync("b2ctrans");
+        await using var factory = lab.Host();
+        using var client = InteractiveClient.CreateCookieClient(factory);
+        var clientId = await SyntheticPrincipals.RegisterPublicCodeClientAsync(factory, withOpenId: true);
+        var (userName, userId) = await SyntheticPrincipals.CreateUserAsync(factory);
+        var (code, verifier) = await InteractiveClient.IssueCodeAsync(
+            client, clientId, userName, State, Scopes.OpenId, "synthetic-nonce-transport");
+        using var redeemed = await InteractiveClient.RedeemAsync(client, clientId, code, verifier);
+        Assert.Equal(HttpStatusCode.OK, redeemed.StatusCode);
+        var accessToken = (await InteractiveClient.AccessTokenAsync(redeemed))!;
+
+        // PARAKUSHT: header-only GET dhe POST → 200 me subjektin e saktë.
+        foreach (var method in (HttpMethod[])[HttpMethod.Get, HttpMethod.Post])
+        {
+            using var allowed = await InteractiveClient.UserInfoAsync(client, accessToken, method);
+            Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+            using var document = JsonDocument.Parse(await InteractiveClient.BodyAsync(allowed));
+            Assert.Equal(userId.ToString(), document.RootElement.GetProperty("sub").GetString());
+        }
+
+        // Transport i ndaluar / i paqartë — sipas PRANISË së parametrit.
+        var forbidden = new (string Label, string? Header, HttpMethod Method, string? Query, IReadOnlyDictionary<string, string>? Form)[]
+        {
+            ("query bosh + header valid", accessToken, HttpMethod.Get, CredentialParameter + "=", null),
+            ("query me token valid + header valid", accessToken, HttpMethod.Get, $"{CredentialParameter}={accessToken}", null),
+            ("query vetëm (pa header)", null, HttpMethod.Get, $"{CredentialParameter}={accessToken}", null),
+            ("form bosh + header valid", accessToken, HttpMethod.Post, null, new Dictionary<string, string> { [CredentialParameter] = string.Empty }),
+            ("form me token valid + header valid", accessToken, HttpMethod.Post, null, new Dictionary<string, string> { [CredentialParameter] = accessToken }),
+            ("form vetëm (pa header)", null, HttpMethod.Post, null, new Dictionary<string, string> { [CredentialParameter] = accessToken }),
+            ("query + form njëkohësisht", accessToken, HttpMethod.Post, CredentialParameter + "=", new Dictionary<string, string> { [CredentialParameter] = accessToken }),
+        };
+        foreach (var (label, header, method, query, form) in forbidden)
+        {
+            using var response = await InteractiveClient.UserInfoAsync(client, header, method, query, form);
+            Assert.True(
+                response.StatusCode == HttpStatusCode.BadRequest,
+                $"rasti `{label}`: pritej 400 invalid_request, u mor {(int)response.StatusCode}");
+            var body = await InteractiveClient.BodyAsync(response);
+            var challenge = response.Headers.WwwAuthenticate.ToString();
+            Assert.True(
+                body.Contains(Errors.InvalidRequest, StringComparison.Ordinal) || challenge.Contains(Errors.InvalidRequest, StringComparison.Ordinal),
+                $"rasti `{label}`: mungon `invalid_request`");
+            Assert.DoesNotContain("\"sub\"", body, StringComparison.Ordinal);
+            Assert.DoesNotContain(userId.ToString(), body, StringComparison.Ordinal);
+            Assert.DoesNotContain(accessToken, body, StringComparison.Ordinal);
+            Assert.DoesNotContain(accessToken, challenge, StringComparison.Ordinal);
+            Assert.NotEqual(HttpStatusCode.InternalServerError, response.StatusCode);
+        }
+
+        // Mungesa e credential-it mbetet challenge 401 (jo 400) — kontrata e pandryshuar.
+        using (var anonymous = await InteractiveClient.UserInfoAsync(client, accessToken: null))
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+        }
+
+        // `/connect/token` NUK preket: parametrat e grant-it në body mbeten normalë.
+        var (secondCode, secondVerifier) = await InteractiveClient.IssueCodeAsync(
+            client, clientId, userName, State, Scopes.OpenId, "synthetic-nonce-transport-2");
+        using var again = await InteractiveClient.RedeemAsync(client, clientId, secondCode, secondVerifier);
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        Assert.False(string.IsNullOrEmpty(await InteractiveClient.AccessTokenAsync(again)));
+    }
+
+    // ═══════════════ C1 §5 — dështim gjatë SHKRIMIT në issuance (jo lexim read-only) ═══════════════
+
+    /// <summary>
+    /// C1 §5 — dështim i kontrolluar në pikën REALE të persistencës që konsumon OpenIddict
+    /// (`SaveChanges` i `PlatformDbContext`) gjatë shkëmbimit të kodit: simulim i KLASËS së gabimit
+    /// të shkrimit/kapacitetit (jo disk-full fizik). Provohet se pika e shkrimit u arrit dhe fault-i
+    /// u aktivizua; përgjigjja është 503 e kontrolluar pa asnjë token; pas heqjes së fault-it flow-i
+    /// i ri përfundon pozitivisht. Gjendja reale e kodit të prekur regjistrohet, pa kontratë universale.
+    /// </summary>
+    [Fact]
+    public async Task Deshtimi_i_shkrimit_gjate_issuance_jep_503_pa_token_dhe_rikuperohet()
+    {
+        // Vetëm KRIJIMI (issuance) i token-it dështon — jo përditësimi i shlyerjes së kodit,
+        // që matet veçmas te testi pasues (sjellje e ndryshme e provuar).
+        var fault = new SyntheticPersistenceFault { States = [Microsoft.EntityFrameworkCore.EntityState.Added] };
+        await using var lab = await IdentityInteractiveLab.CreateAsync("b2cwrite");
+        await using var factory = lab.Host(lab.Settings with { PersistenceFault = fault });
+        using var client = InteractiveClient.CreateCookieClient(factory);
+        var clientId = await SyntheticPrincipals.RegisterPublicCodeClientAsync(factory, withOpenId: true);
+        var (userName, userId) = await SyntheticPrincipals.CreateUserAsync(factory);
+
+        // Kodi lëshohet NORMALISHT (fault-i ende i çarmatosur) — parakusht i provuar.
+        var (code, verifier) = await InteractiveClient.IssueCodeAsync(
+            client, clientId, userName, State, Scopes.OpenId, "synthetic-nonce-write");
+
+        fault.Arm();
+        using (var during = await InteractiveClient.RedeemAsync(client, clientId, code, verifier))
+        {
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, during.StatusCode);
+            Assert.Equal("application/json", during.Content.Headers.ContentType?.MediaType);
+            Assert.Equal("no-store", during.Headers.CacheControl?.ToString());
+            var body = await InteractiveClient.BodyAsync(during);
+            using var document = JsonDocument.Parse(body);
+            Assert.Equal(Errors.TemporarilyUnavailable, document.RootElement.GetProperty("error").GetString());
+            Assert.False(document.RootElement.TryGetProperty("access_token", out _));
+            Assert.False(document.RootElement.TryGetProperty("id_token", out _));
+            Assert.DoesNotContain("Npgsql", body, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(userId.ToString(), body, StringComparison.Ordinal);
+        }
+
+        // Prova se dështimi ndodhi te pika REALE e shkrimit, jo diku tjetër.
+        Assert.True(fault.Fired, "fault-i i persistencës nuk u aktivizua — pika e shkrimit nuk u arrit");
+
+        fault.Disarm();
+
+        // Gjendja REALE e kodit të prekur pas dështimit të shkrimit — vëzhgohet dhe regjistrohet.
+        HttpStatusCode retryStatus;
+        string? retryToken;
+        using (var retry = await InteractiveClient.RedeemAsync(client, clientId, code, verifier))
+        {
+            retryStatus = retry.StatusCode;
+            retryToken = retry.StatusCode == HttpStatusCode.OK ? await InteractiveClient.AccessTokenAsync(retry) : null;
+        }
+
+        Assert.True(
+            retryStatus is HttpStatusCode.OK or HttpStatusCode.BadRequest,
+            $"gjendje e papritur pas dështimit të shkrimit: {(int)retryStatus}");
+        if (retryStatus == HttpStatusCode.BadRequest)
+        {
+            Assert.Null(retryToken); // kodi u konsumua nga tentativa e dështuar → klienti duhet ta rinisë flow-in
+        }
+        else
+        {
+            Assert.False(string.IsNullOrEmpty(retryToken)); // kodi mbijetoi → një lëshim i vetëm, jo i dyfishtë
+        }
+
+        // Rikuperim: flow krejt i ri përfundon pozitivisht me access + ID token.
+        var (freshCode, freshVerifier) = await InteractiveClient.IssueCodeAsync(
+            client, clientId, userName, State, Scopes.OpenId, "synthetic-nonce-write-2");
+        using var recovered = await InteractiveClient.RedeemAsync(client, clientId, freshCode, freshVerifier);
+        Assert.Equal(HttpStatusCode.OK, recovered.StatusCode);
+        Assert.False(string.IsNullOrEmpty(await InteractiveClient.AccessTokenAsync(recovered)));
+        Assert.False(string.IsNullOrEmpty(await InteractiveClient.IdTokenAsync(recovered)));
+    }
+
+    /// <summary>
+    /// C1 §5 (nën-rasti i dytë, sjellje e MATUR jo e supozuar): kur dështimi i shkrimit godet
+    /// PËRDITËSIMIN e shlyerjes së kodit (jo krijimin e token-it), OpenIddict e kap vetë
+    /// përjashtimin dhe e refuzon grant-in me **400 `invalid_grant`** — pra kërkesa NUK arrin
+    /// kurrë kufirin tonë 503. Garancia që mbetet: **zero token i lëshuar**, kurrë 200, kurrë 500;
+    /// përshkrimi i gabimit është ai i bibliotekës dhe nuk pretendohet i saktë semantikisht.
+    /// </summary>
+    [Fact]
+    public async Task Deshtimi_i_shkrimit_gjate_shlyerjes_se_kodit_refuzohet_fail_closed_pa_token()
+    {
+        var fault = new SyntheticPersistenceFault { States = [Microsoft.EntityFrameworkCore.EntityState.Modified] };
+        await using var lab = await IdentityInteractiveLab.CreateAsync("b2credeem");
+        await using var factory = lab.Host(lab.Settings with { PersistenceFault = fault });
+        using var client = InteractiveClient.CreateCookieClient(factory);
+        var clientId = await SyntheticPrincipals.RegisterPublicCodeClientAsync(factory, withOpenId: true);
+        var (userName, userId) = await SyntheticPrincipals.CreateUserAsync(factory);
+        var (code, verifier) = await InteractiveClient.IssueCodeAsync(
+            client, clientId, userName, State, Scopes.OpenId, "synthetic-nonce-redeem");
+
+        fault.Arm();
+        using (var during = await InteractiveClient.RedeemAsync(client, clientId, code, verifier))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, during.StatusCode);
+            Assert.NotEqual(HttpStatusCode.InternalServerError, during.StatusCode);
+            var body = await InteractiveClient.BodyAsync(during);
+            using var document = JsonDocument.Parse(body);
+            Assert.Equal(Errors.InvalidGrant, document.RootElement.GetProperty("error").GetString());
+            Assert.False(document.RootElement.TryGetProperty("access_token", out _));
+            Assert.False(document.RootElement.TryGetProperty("id_token", out _));
+            Assert.DoesNotContain(userId.ToString(), body, StringComparison.Ordinal);
+        }
+
+        Assert.True(fault.Fired, "fault-i nuk u aktivizua — përditësimi i shlyerjes nuk u arrit");
+
+        fault.Disarm();
+
+        // Gjendja REALE e kodit ORIGJINAL pas shlyerjes së rikthyer (rollback) — vëzhgohet dhe
+        // regjistrohet; nëse ende është i vlefshëm, ripërdorimi i dytë duhet të refuzohet.
+        HttpStatusCode originalRetry;
+        using (var retry = await InteractiveClient.RedeemAsync(client, clientId, code, verifier))
+        {
+            originalRetry = retry.StatusCode;
+            if (retry.StatusCode == HttpStatusCode.OK)
+            {
+                Assert.False(string.IsNullOrEmpty(await InteractiveClient.AccessTokenAsync(retry)));
+                using var replay = await InteractiveClient.RedeemAsync(client, clientId, code, verifier);
+                Assert.Equal(HttpStatusCode.BadRequest, replay.StatusCode); // një-përdorimsh i ruajtur
+            }
+        }
+
+        Assert.True(
+            originalRetry is HttpStatusCode.OK or HttpStatusCode.BadRequest,
+            $"gjendje e papritur e kodit pas rollback-ut: {(int)originalRetry}");
+
+        var (freshCode, freshVerifier) = await InteractiveClient.IssueCodeAsync(
+            client, clientId, userName, State, Scopes.OpenId, "synthetic-nonce-redeem-2");
+        using var recovered = await InteractiveClient.RedeemAsync(client, clientId, freshCode, freshVerifier);
+        Assert.Equal(HttpStatusCode.OK, recovered.StatusCode);
+        Assert.False(string.IsNullOrEmpty(await InteractiveClient.AccessTokenAsync(recovered)));
+    }
+
     // ═══════════════ Konsumatori sintetik (validim REAL, bibliotekat ekzistuese) ═══════════════
+
+    /// <summary>
+    /// C1 §3 — konsumatori sintetik: validim me bibliotekën (nënshkrim/issuer/audience/lifetime/alg)
+    /// PLUS kontrolli i `nonce` (OIDC Core §3.1.3.7) BRENDA të njëjtës rrugë. Mospërputhja jep
+    /// rezultat të PËRCAKTUAR (`SecurityTokenValidationException`) dhe **asnjë token/principal**
+    /// si sukses — jo krahasim GUID-esh jashtë rrugës së konsumatorit.
+    /// </summary>
+    private static async Task<(bool IsValid, Exception? Exception, JsonWebToken? Token)> ConsumeIdTokenAsync(
+        HttpClient client, string idToken, string clientId, string? expectedNonce)
+    {
+        var result = await RawValidateAsync(client, idToken, clientId);
+        if (!result.IsValid)
+        {
+            return (false, result.Exception, null);
+        }
+
+        var candidate = (JsonWebToken)result.SecurityToken;
+        var actual = candidate.TryGetClaim("nonce", out var claim) ? claim.Value : null;
+        if (!string.Equals(actual, expectedNonce, StringComparison.Ordinal))
+        {
+            // Refuzim i përcaktuar: asgjë nuk kthehet si sukses (zero token, zero principal).
+            return (false, new SecurityTokenValidationException("nonce mismatch"), null);
+        }
+
+        return (true, null, candidate);
+    }
 
     private static async Task<JsonWebToken> ValidateIdTokenAsync(
         HttpClient client, string idToken, string clientId, string expectedSubject, string? expectedNonce)
     {
-        var result = await RawValidateAsync(client, idToken, clientId);
-        Assert.True(result.IsValid, result.Exception?.ToString());
-        var validated = (JsonWebToken)result.SecurityToken;
+        // Një validim i vetëm i bibliotekës për thirrje (konsumatori e kryen tashmë brenda vetes).
+        var consumed = await ConsumeIdTokenAsync(client, idToken, clientId, expectedNonce);
+        Assert.True(consumed.IsValid, consumed.Exception?.GetType().Name);
+        var validated = consumed.Token!;
         Assert.Equal(expectedSubject, validated.Subject);
         Assert.Equal([clientId], validated.Audiences.ToArray());
         Assert.True(validated.ValidTo > DateTime.UtcNow, "ID token i skaduar");

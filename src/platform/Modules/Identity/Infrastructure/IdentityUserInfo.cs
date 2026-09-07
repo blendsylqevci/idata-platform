@@ -10,6 +10,40 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 namespace Idata.Platform.Modules.Identity.Infrastructure;
 
 /// <summary>
+/// Kufi i NGUSHTË i transportit të credential-it te UserInfo (B.2c — correction C1).
+///
+/// **Profil LOKAL sigurie** (nuk pretendohet ndalim universal i OIDC): për këtë authority
+/// credential-i i UserInfo pranohet VETËM në header-in `Authorization: Bearer`. Prania e
+/// parametrit `access_token` në query-string ose në form body refuzohet me `invalid_request`
+/// — **sipas PRANISË, jo sipas vlerës**: vlerë bosh, e dyfishtë ose bashkëekzistencë me një
+/// header valid refuzohen njësoj (kredencial i përsëritur / transport i paqartë nuk zgjidhet
+/// me “header-i fiton”). Kontrolli lexon KANALET ORIGJINALE të kërkesës HTTP (query dhe form),
+/// jo mesazhin e normalizuar ku header-i mund ta ketë mbishkruar trupin.
+///
+/// **Rendi:** regjistrohet në fazën `ValidateUserInfoRequest` PARA
+/// <c>OpenIddictServerHandlers.UserInfo.ValidateAccessTokenParameter</c> (dhe rrjedhimisht para
+/// autentikimit), me `SetOrder` të derivuar nga descriptor-i REAL i bibliotekës — jo numër magjik.
+/// Vlen VETËM për UserInfo: te `/connect/token` parametrat e grant-it në body janë normalë.
+///
+/// **Lidhja me politikën e log-eve:** refuzimi NUK e zhbën një rresht log-u të shkruar më herët
+/// nga hosting/request diagnostics ose nga një reverse proxy i jashtëm për një kredencial në URL —
+/// ai mbetet kufi i deklaruar (shih <see cref="IdentityProtocolLoggingPolicy"/>); pikërisht prandaj
+/// transporti kufizohet te header-i.
+/// </summary>
+internal static class UserInfoTransportGuard
+{
+    /// <summary>Emri i parametrit të ndaluar në query/body për UserInfo.</summary>
+    internal const string ForbiddenParameter = "access_token";
+
+    /// <summary>Kanali i vetëm i lejuar (informativ për përshkrimin e gabimit).</summary>
+    internal const string AllowedTransport = "Authorization: Bearer";
+
+    /// <summary>Klasifikim PUR (i testueshëm pa HTTP): a ka kredencial jashtë header-it?</summary>
+    internal static bool HasForbiddenTransport(bool queryHasParameter, bool formHasParameter)
+        => queryHasParameter || formHasParameter;
+}
+
+/// <summary>
 /// Adapter-i i portit <see cref="IUserInfoSubjectResolver"/> (F1 Increment B.2c) —
 /// owner: Identity.Infrastructure. Principal-i vjen VETËM nga skema e SERVER-it
 /// OpenIddict (autentikimi i access token-it i kryer nga pipeline-i real para

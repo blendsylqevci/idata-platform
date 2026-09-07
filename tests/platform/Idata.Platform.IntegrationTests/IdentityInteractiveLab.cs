@@ -159,6 +159,21 @@ internal static class InteractiveClient
         return QueryHelpers.AddQueryString("/" + InteractiveAuthorizationContract.AuthorizationPath, query);
     }
 
+    /// <summary>C1 §2: vlera REALE e një cookie-je nga container-i i testit (për pohime privatësie), ose null.</summary>
+    internal static string? CookieValue(System.Net.CookieContainer container, string name)
+    {
+        ArgumentNullException.ThrowIfNull(container);
+        foreach (System.Net.Cookie cookie in container.GetCookies(new Uri("https://localhost/")))
+        {
+            if (string.Equals(cookie.Name, name, StringComparison.Ordinal))
+            {
+                return cookie.Value;
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>Fushat hidden të një formulari të renderuar (të dekoduara nga HTML).</summary>
     internal static Dictionary<string, string> HiddenFields(string html)
     {

@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using Idata.Platform.Modules.Identity.Application;
+using Microsoft.AspNetCore;
 using OpenIddict.Abstractions;
 using OpenIddict.Server;
 using OpenIddict.Validation;
@@ -72,6 +73,11 @@ public static class IdentityAuthorityServiceCollectionExtensions
 
         services.TryAddSingleton(TimeProvider.System);
 
+        // B.2c C1: politika e KUFIZUAR e log-eve të protokollit (SUPPRESSION e event-eve nën
+        // `Warning` për kategoritë e bibliotekës) — regjistrohet PARA wiring-ut, imponohet si
+        // `PostConfigure` mbi konfigurimin efektiv. Telemetria `Warning+` mbetet e paprekur.
+        services.AddIdentityProtocolLoggingPolicy();
+
         services.AddOpenIddict()
             .AddServer(options =>
             {
@@ -95,6 +101,32 @@ public static class IdentityAuthorityServiceCollectionExtensions
                     // B.2c: passthrough i UserInfo VETËM te ky owner — OpenIddict validon
                     // access token-in (bearer) PARA se kërkesa të arrijë thin controller-in.
                     .EnableUserInfoEndpointPassthrough();
+
+                // B.2c C1: transport header-only për UserInfo — prania e `access_token` në
+                // query/form refuzohet me `invalid_request` PARA validimit të parametrit dhe
+                // para autentikimit (rendi derivohet nga descriptor-i REAL i bibliotekës).
+                options.AddEventHandler<OpenIddictServerEvents.ValidateUserInfoRequestContext>(descriptor =>
+                    descriptor.UseInlineHandler(context =>
+                    {
+                        var request = context.Transaction.GetHttpRequest();
+                        if (request is null)
+                        {
+                            return default; // transport jo-HTTP: asnjë kanal query/form për t'u lexuar.
+                        }
+
+                        var inQuery = request.Query.ContainsKey(UserInfoTransportGuard.ForbiddenParameter);
+                        var inForm = request.HasFormContentType
+                            && request.Form.ContainsKey(UserInfoTransportGuard.ForbiddenParameter);
+                        if (UserInfoTransportGuard.HasForbiddenTransport(inQuery, inForm))
+                        {
+                            context.Reject(
+                                error: OpenIddictConstants.Errors.InvalidRequest,
+                                description: "The access token must be sent using the authorization header.");
+                        }
+
+                        return default;
+                    })
+                    .SetOrder(OpenIddictServerHandlers.UserInfo.ValidateAccessTokenParameter.Descriptor.Order - 1));
 
                 // PKCE me `S256` i DETYRUESHËM: metoda `plain` hiqet nga seti i
                 // serverit — kërkesat me `plain` (ose pa metodë) refuzohen.
