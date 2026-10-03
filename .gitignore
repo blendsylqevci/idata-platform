@@ -73,6 +73,14 @@ docs/archive/prodata/
 
 # Skriptet e provenance mund të shkruajnë të dhëna reale këtu — kurrë në git
 outputs/
+# Artefakte lokale në rrënjën e repo-s (output-e skriptesh, skedarë të përkohshëm) — kurrë në git.
+# Vetëm në rrënjë (prefiksi `/`), jo direktoritë me të njëjtin emër më thellë. Modeli `/tmp`
+# shkruhet pa slash në fund (efekt i njëjtë për direktorinë, injoron edhe një skedar `tmp` në
+# rrënjë), sepse linter-i HISTORY-PRIV e lexon formën me slash si rrugë absolute lokale.
+# Injorimi nuk është garanci konfidencialiteti: çdo gjë e stage-uar me `git add -f`
+# inspektohet gjithsesi nga guard-i i privacy-t.
+/output/
+/tmp
 
 # Claude Code / tooling artifacts — jashtë git
 .claude/
