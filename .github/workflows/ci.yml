@@ -43,6 +43,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
+      # Guard-i i privacy-t (pre-commit): suita e regresionit mbi repo SINTETIKE
+      # nën mktemp — vetëm bash + git, zero fixtures reale, zero sekrete. Hap i
+      # detyrueshëm, pa asnjë toleranci dështimi: regresion i guard-it = CI RED.
+      - name: Privacy guard regression (synthetic repos, bash + git)
+        run: bash scripts/test_precommit_confidential_guard.sh
+
       - name: Setup Node 24
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
