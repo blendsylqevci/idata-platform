@@ -67,6 +67,15 @@ export interface components {
             permissions: string[];
             identityStatus: string;
         };
+        AccessControlProblemDetails: {
+            type?: null | string;
+            title?: null | string;
+            /** Format: int32 */
+            status?: null | number | string;
+            detail?: null | string;
+            instance?: null | string;
+            errorCode: string;
+        };
         MembershipRoleResponse: {
             /** Format: uuid */
             membershipId: string;
@@ -87,14 +96,6 @@ export interface components {
             apiVersion: string;
             database: string;
             capabilities: components["schemas"]["PlatformCapabilitiesResponse"];
-        };
-        ProblemDetails: {
-            type?: null | string;
-            title?: null | string;
-            /** Format: int32 */
-            status?: null | number | string;
-            detail?: null | string;
-            instance?: null | string;
         };
         UpdateMembershipRoleRequest: {
             /** Format: uuid */
@@ -155,7 +156,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["AccessControlProblemDetails"];
                 };
             };
             /** @description Service Unavailable */
@@ -164,7 +165,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["AccessControlProblemDetails"];
                 };
             };
         };
@@ -201,7 +202,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["AccessControlProblemDetails"];
                 };
             };
             /** @description Forbidden */
@@ -210,7 +211,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["AccessControlProblemDetails"];
                 };
             };
             /** @description Not Found */
@@ -219,7 +220,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["AccessControlProblemDetails"];
                 };
             };
             /** @description Conflict */
@@ -228,7 +229,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["AccessControlProblemDetails"];
                 };
             };
             /** @description Service Unavailable */
@@ -237,7 +238,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                    "application/problem+json": components["schemas"]["AccessControlProblemDetails"];
                 };
             };
         };
