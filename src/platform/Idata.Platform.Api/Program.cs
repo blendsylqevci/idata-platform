@@ -16,6 +16,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi("platform-v1", options =>
 {
     options.AddOperationTransformer<Idata.Platform.Api.IdempotencyKeyRequiredTransformer>();
+    options.AddSchemaTransformer<Idata.Platform.Api.UpdateMembershipRoleRequestContractTransformer>();
     options.AddDocumentTransformer<Idata.Platform.Api.CanonicalContractOrderTransformer>();
 });
 

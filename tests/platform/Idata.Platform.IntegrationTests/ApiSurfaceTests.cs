@@ -97,6 +97,23 @@ public sealed class ApiSurfaceTests
             .ToArray();
         Assert.Equal(["expectedVersion", "roleId"], requiredProps);
 
+        // Forma publike e fushave mbetet E PANDRYSHUAR dhe pa null: roleId = uuid;
+        // expectedVersion = int64 si numër OSE varg numerik (web JSON defaults).
+        var requestProperties = requestSchema.GetProperty("properties");
+        Assert.Equal(
+            ["expectedVersion", "roleId"],
+            requestProperties.EnumerateObject().Select(property => property.Name).Order().ToArray());
+        var roleIdSchema = requestProperties.GetProperty("roleId");
+        Assert.Equal(JsonValueKind.String, roleIdSchema.GetProperty("type").ValueKind);
+        Assert.Equal("string", roleIdSchema.GetProperty("type").GetString());
+        Assert.Equal("uuid", roleIdSchema.GetProperty("format").GetString());
+        var expectedVersionSchema = requestProperties.GetProperty("expectedVersion");
+        Assert.Equal(
+            ["integer", "string"],
+            expectedVersionSchema.GetProperty("type").EnumerateArray().Select(item => item.GetString() ?? string.Empty).ToArray());
+        Assert.Equal("int64", expectedVersionSchema.GetProperty("format").GetString());
+        Assert.Equal("^-?(?:0|[1-9]\\d*)$", expectedVersionSchema.GetProperty("pattern").GetString());
+
         // Kontratat e përgjigjeve 400/403/404/409/503 të dokumentuara.
         var responseCodes = membershipPath.GetProperty("responses").EnumerateObject()
             .Select(property => property.Name)
@@ -119,6 +136,27 @@ public sealed class ApiSurfaceTests
             .Order()
             .ToArray();
         Assert.Equal(["200", "403", "503"], contextCodes);
+
+        // Çdo përgjigje problem e AccessControl e deklaron `errorCode` (string,
+        // i detyrueshëm) — kontrata stabile që runtime-i e emeton tashmë.
+        (JsonElement Operation, string[] Codes)[] problemResponses =
+        [
+            (membershipPath, ["400", "403", "404", "409", "503"]),
+            (contextPath, ["403", "503"]),
+        ];
+        foreach (var (operation, codes) in problemResponses)
+        {
+            foreach (var code in codes)
+            {
+                var problemSchema = Resolve(document, operation.GetProperty("responses").GetProperty(code)
+                    .GetProperty("content").GetProperty("application/problem+json").GetProperty("schema"));
+                var errorCode = problemSchema.GetProperty("properties").GetProperty("errorCode");
+                Assert.Equal("string", errorCode.GetProperty("type").GetString());
+                Assert.Contains(
+                    "errorCode",
+                    problemSchema.GetProperty("required").EnumerateArray().Select(item => item.GetString()));
+            }
+        }
     }
 
     /// <summary>Ndjek `$ref` te components/schemas; kthen schema-n inline ndryshe.</summary>
